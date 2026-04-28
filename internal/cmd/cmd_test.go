@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -251,5 +252,71 @@ func TestDeleteNotFound(t *testing.T) {
 	}
 	if !strings.Contains(errStr, "task not found") {
 		t.Fatalf("expected task not found, got: %s", errStr)
+	}
+}
+
+func TestPruneDefault(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	for i := 0; i < 25; i++ {
+		_, _, _ = runMB("add", "tail", "--title", fmt.Sprintf("Task %d", i))
+	}
+	for i := 0; i < 25; i++ {
+		_, _, _ = runMB("done")
+	}
+
+	out, _, code := runMB("prune")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if strings.TrimSpace(out) != "5" {
+		t.Fatalf("expected 5 removed, got %s", out)
+	}
+
+	out, _, code = runMB("list", "--done")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 20 {
+		t.Fatalf("expected 20 done tasks, got %d", len(lines))
+	}
+}
+
+func TestPruneZero(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, _, _ = runMB("add", "tail", "--title", "A")
+	_, _, _ = runMB("done")
+
+	out, _, code := runMB("prune", "0")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if strings.TrimSpace(out) != "1" {
+		t.Fatalf("expected 1 removed, got %s", out)
+	}
+
+	out, _, code = runMB("list", "--done")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Fatalf("expected empty done list, got %s", out)
+	}
+}
+
+func TestPruneEmpty(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, code := runMB("prune")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if strings.TrimSpace(out) != "0" {
+		t.Fatalf("expected 0 removed, got %s", out)
 	}
 }
