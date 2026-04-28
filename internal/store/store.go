@@ -89,7 +89,7 @@ func ResolveFile(f string) string {
 func Load(path string) (*File, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("%w: read file %s: %v", ErrStore, path, err)
+		return nil, fmt.Errorf("%w: read file %s: %w", ErrStore, path, err)
 	}
 	var file File
 	if err := json.Unmarshal(b, &file); err != nil {
