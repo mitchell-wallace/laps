@@ -9,6 +9,7 @@ import (
 var offCmd = &cobra.Command{
 	Use:   "off",
 	Short: "Remove mb instructions from AGENTS.md, CLAUDE.md, and GEMINI.md",
+	Long:  `Remove the <mb-instructions> block from AGENTS.md, CLAUDE.md, and GEMINI.md. Leaves the rest of each file untouched.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		path, _, beadsDir := getStorePath()
 		exitCode := 0

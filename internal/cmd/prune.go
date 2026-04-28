@@ -12,6 +12,10 @@ import (
 var pruneCmd = &cobra.Command{
 	Use:   "prune [N]",
 	Short: "Remove old done tasks, keeping the N most recent",
+	Long: `Remove old done tasks, keeping the N most recent. Default N is 20.
+
+Use prune 0 to remove all done tasks. Todo tasks are never touched.
+Prints the number of tasks removed.`,
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		n := 20

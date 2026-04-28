@@ -9,6 +9,10 @@ import (
 var onCmd = &cobra.Command{
 	Use:   "on",
 	Short: "Add mb instructions to AGENTS.md (and CLAUDE.md/GEMINI.md if they exist)",
+	Long: `Add the <mb-instructions> block to AGENTS.md, creating it if absent.
+
+Also updates CLAUDE.md and GEMINI.md if they already exist.
+Idempotent — safe to run multiple times.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		path, _, beadsDir := getStorePath()
 		exitCode := 0

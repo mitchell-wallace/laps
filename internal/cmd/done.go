@@ -11,6 +11,9 @@ import (
 var doneCmd = &cobra.Command{
 	Use:   "done",
 	Short: "Complete the head task",
+	Long: `Complete the head task. Sets it to done and prints the task id.
+
+If there is no head task, exits non-zero with "no head task".`,
 	Run: func(cmd *cobra.Command, args []string) {
 		path, _, beadsDir := getStorePath()
 		checkDefault(beadsDir)

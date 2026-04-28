@@ -17,6 +17,11 @@ var (
 var listCmd = &cobra.Command{
 	Use:   "list [--all | --done]",
 	Short: "List tasks",
+	Long: `List tasks as a markdown numbered list.
+
+Default shows todo tasks only, head first.
+  --all    Include done tasks after todo items (struck through).
+  --done   Show only completed tasks, most recent first.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		path, _, beadsDir := getStorePath()
 		checkDefault(beadsDir)

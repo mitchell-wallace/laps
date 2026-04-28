@@ -8,6 +8,7 @@ import (
 var deleteCmd = &cobra.Command{
 	Use:   "delete <id>",
 	Short: "Delete a task",
+	Long:  `Delete a task by id, regardless of whether it is todo or done.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		id := args[0]

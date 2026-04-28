@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": [
+    {
+      "title": "Commit on done",
+      "description": "Auto-commit when a task is completed.",
+      "command": "done",
+      "when": "after",
+      "run": "git add -A && git commit -m \"done: $title ($id)\"",
+      "passback": false
+    }
+  ]
+}

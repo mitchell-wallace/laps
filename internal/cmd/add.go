@@ -19,7 +19,19 @@ var (
 var addCmd = &cobra.Command{
 	Use:   "add <head|tail|after> [id]",
 	Short: "Add a task to the queue",
-	Args:  cobra.MinimumNArgs(0),
+	Long: `Add a task to the queue.
+
+Positions:
+  head          Insert at the front of the queue.
+  tail          Append to the end of the queue.
+  after <id>    Insert immediately after the specified task id.
+
+Input modes (mutually exclusive):
+  --title "..." [--description "..."]   Provide title and optional description.
+  --json '{"title":"...","description":"..."}'   Provide task as JSON.
+
+Prints the new task's id on success.`,
+	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		path, _, beadsDir := getStorePath()
 		checkDefault(beadsDir)

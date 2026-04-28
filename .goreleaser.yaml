@@ -1,0 +1,45 @@
+project_name: microbeads
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: mb
+    main: ./cmd/mb
+    binary: mb
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{ .Version }}_
+      {{ .Os }}_
+      {{ .Arch }}
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"

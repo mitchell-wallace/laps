@@ -10,7 +10,10 @@ import (
 var getCmd = &cobra.Command{
 	Use:   "get [head|<id>]",
 	Short: "Get a task by id or head",
-	Args:  cobra.MaximumNArgs(1),
+	Long: `Get a task by id, or read the head task if no argument is given.
+
+Output is title, blank line, description — nothing else.`,
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		target := "head"
 		if len(args) > 0 {
