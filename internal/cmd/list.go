@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -20,53 +21,59 @@ var listCmd = &cobra.Command{
 		checkDefault(beadsDir)
 		file := loadFile(path)
 
+		exitCode := 0
+		var output string
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, nil, &output, &exitCode)()
+		runBeforeHooks(cmd.Name(), beadsDir, path, nil)
+
+		var lines []string
 		if listDone {
-			var done []struct {
-				idx int
-			}
+			var done []int
 			for i, t := range file.Tasks {
 				if t.IsDone {
-					done = append(done, struct{ idx int }{i})
+					done = append(done, i)
 				}
 			}
 			sort.Slice(done, func(i, j int) bool {
-				ai := file.Tasks[done[i].idx].CompletedAt
-				aj := file.Tasks[done[j].idx].CompletedAt
+				ai := file.Tasks[done[i]].CompletedAt
+				aj := file.Tasks[done[j]].CompletedAt
 				if ai == nil || aj == nil {
 					return false
 				}
 				return ai.After(*aj)
 			})
 			for i, d := range done {
-				t := file.Tasks[d.idx]
-				fmt.Printf("%d. ~~%s — %s~~\n", i+1, t.ID, t.Title)
+				t := file.Tasks[d]
+				lines = append(lines, fmt.Sprintf("%d. ~~%s — %s~~", i+1, t.ID, t.Title))
 			}
-			return
-		}
-
-		var todos []int
-		var dones []int
-		for i, t := range file.Tasks {
-			if t.IsDone {
-				dones = append(dones, i)
-			} else {
-				todos = append(todos, i)
+		} else {
+			var todos []int
+			var dones []int
+			for i, t := range file.Tasks {
+				if t.IsDone {
+					dones = append(dones, i)
+				} else {
+					todos = append(todos, i)
+				}
 			}
-		}
-
-		num := 1
-		for _, idx := range todos {
-			t := file.Tasks[idx]
-			fmt.Printf("%d. %s — %s\n", num, t.ID, t.Title)
-			num++
-		}
-
-		if listAll {
-			for _, idx := range dones {
+			num := 1
+			for _, idx := range todos {
 				t := file.Tasks[idx]
-				fmt.Printf("%d. ~~%s — %s~~\n", num, t.ID, t.Title)
+				lines = append(lines, fmt.Sprintf("%d. %s — %s", num, t.ID, t.Title))
 				num++
 			}
+			if listAll {
+				for _, idx := range dones {
+					t := file.Tasks[idx]
+					lines = append(lines, fmt.Sprintf("%d. ~~%s — %s~~", num, t.ID, t.Title))
+					num++
+				}
+			}
+		}
+
+		output = strings.Join(lines, "\n")
+		if output != "" {
+			fmt.Println(output)
 		}
 	},
 }

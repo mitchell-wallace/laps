@@ -320,3 +320,52 @@ func TestPruneEmpty(t *testing.T) {
 		t.Fatalf("expected 0 removed, got %s", out)
 	}
 }
+
+func TestHookBeforeAbort(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	hooks := `{"version":1,"hooks":[{"title":"abort","command":"get","when":"before","run":"exit 1","passback":false}]}`
+	os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644)
+
+	_, errStr, code := runMB("get")
+	if code != 4 {
+		t.Fatalf("expected code 4, got %d", code)
+	}
+	if !strings.Contains(errStr, "hook") {
+		t.Fatalf("expected hook error, got: %s", errStr)
+	}
+}
+
+func TestHookAfterRunsOnFailure(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	hooks := `{"version":1,"hooks":[{"title":"after","command":"get","when":"after","run":"echo after","passback":true}]}`
+	os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644)
+
+	out, _, code := runMB("get")
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	if !strings.Contains(out, "after") {
+		t.Fatalf("expected after hook output, got: %s", out)
+	}
+}
+
+func TestHookPassback(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "A")
+	hooks := `{"version":1,"hooks":[{"title":"pass","command":"done","when":"after","run":"echo passback","passback":true}]}`
+	os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644)
+
+	out, _, code := runMB("done")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "passback") {
+		t.Fatalf("expected passback in output, got: %s", out)
+	}
+}

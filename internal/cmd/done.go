@@ -16,19 +16,29 @@ var doneCmd = &cobra.Command{
 		checkDefault(beadsDir)
 		file := loadFile(path)
 
-		for i, t := range file.Tasks {
-			if !t.IsDone {
+		exitCode := 0
+		var output string
+		var task *store.Task
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, task, &output, &exitCode)()
+		runBeforeHooks(cmd.Name(), beadsDir, path, nil)
+
+		for i := range file.Tasks {
+			if !file.Tasks[i].IsDone {
 				now := time.Now().UTC()
 				file.Tasks[i].IsDone = true
 				file.Tasks[i].CompletedAt = &now
 				file.Tasks[i].UpdatedAt = now
+				task = &file.Tasks[i]
 				if err := store.Save(path, file); err != nil {
+					exitCode = 2
 					exit(2, "done: %v", err)
 				}
-				fmt.Println(t.ID)
+				output = task.ID
+				fmt.Println(task.ID)
 				return
 			}
 		}
+		exitCode = 3
 		exit(3, "no head task")
 	},
 }

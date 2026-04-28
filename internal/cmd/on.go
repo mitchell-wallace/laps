@@ -9,7 +9,14 @@ var onCmd = &cobra.Command{
 	Use:   "on",
 	Short: "Add mb instructions to AGENTS.md (and CLAUDE.md/GEMINI.md if they exist)",
 	Run: func(cmd *cobra.Command, args []string) {
+		path, _, beadsDir := getStorePath()
+		exitCode := 0
+		var output string
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, nil, &output, &exitCode)()
+		runBeforeHooks(cmd.Name(), beadsDir, path, nil)
+
 		if err := instructions.Enable(); err != nil {
+			exitCode = 2
 			exit(2, "on: %v", err)
 		}
 	},

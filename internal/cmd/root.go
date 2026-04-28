@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mitchell-wallace/microbeads/internal/hooks"
 	"github.com/mitchell-wallace/microbeads/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -49,6 +50,41 @@ func Execute(v string) error {
 			panic(r)
 		}
 	}()
+
+	// Hook-only command handling
+	if cmdName := firstNonFlagArg(os.Args[1:]); cmdName != "" && !isKnownCommand(cmdName) {
+		_, beadsDir, err := store.DiscoverRepoRoot()
+		if err != nil {
+			exit(2, "%v", err)
+		}
+		hf, err := hooks.Load(beadsDir)
+		if err != nil {
+			exit(2, "%v", err)
+		}
+		path := filepath.Join(beadsDir, store.ResolveFile(fileFlag))
+		vars := map[string]string{
+			"command":   cmdName,
+			"file":      path,
+			"exit_code": "",
+			"output":    "",
+		}
+		passback, err := hooks.Dispatch(hf, cmdName, "before", vars)
+		if err != nil {
+			exit(4, "hook: %v", err)
+		}
+		if passback != "" {
+			fmt.Print(passback)
+		}
+		passback, err = hooks.Dispatch(hf, cmdName, "after", vars)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "mb: after hook: %v\n", err)
+		}
+		if passback != "" {
+			fmt.Print(passback)
+		}
+		return nil
+	}
+
 	return rootCmd.Execute()
 }
 

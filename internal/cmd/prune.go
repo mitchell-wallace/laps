@@ -27,6 +27,11 @@ var pruneCmd = &cobra.Command{
 		checkDefault(beadsDir)
 		file := loadFile(path)
 
+		exitCode := 0
+		var output string
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, nil, &output, &exitCode)()
+		runBeforeHooks(cmd.Name(), beadsDir, path, nil)
+
 		var done []int
 		var todo []store.Task
 		for i, t := range file.Tasks {
@@ -52,22 +57,16 @@ var pruneCmd = &cobra.Command{
 		}
 
 		removed := len(done) - len(keepDone)
-
-		// Rebuild tasks preserving todo order, then append kept done in original order
-		// Actually, spec says prune retains N most recent done by completedAt descending.
-		// The remaining tasks should be: todos in original order, then kept done.
-		// But we want to keep the done tasks in their original array positions? No,
-		// spec says "retains the N most recently completed done tasks".
-		// Let's keep todos in place, and for done, keep only the N most recent.
-		// The simplest: todo tasks in original order, then kept done sorted by completedAt desc.
 		var result []store.Task
 		result = append(result, todo...)
 		result = append(result, keepDone...)
 		file.Tasks = result
 
 		if err := store.Save(path, file); err != nil {
+			exitCode = 2
 			exit(2, "prune: %v", err)
 		}
+		output = fmt.Sprintf("%d", removed)
 		fmt.Println(removed)
 	},
 }
