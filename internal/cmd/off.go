@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/mitchell-wallace/microbeads/internal/instructions"
+	"github.com/mitchell-wallace/microbeads/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -12,7 +13,8 @@ var offCmd = &cobra.Command{
 		path, _, beadsDir := getStorePath()
 		exitCode := 0
 		var output string
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, nil, &output, &exitCode)()
+		var task *store.Task
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode)()
 		runBeforeHooks(cmd.Name(), beadsDir, path, nil)
 
 		if err := instructions.Disable(); err != nil {

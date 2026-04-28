@@ -29,7 +29,8 @@ var pruneCmd = &cobra.Command{
 
 		exitCode := 0
 		var output string
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, nil, &output, &exitCode)()
+		var task *store.Task
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode)()
 		runBeforeHooks(cmd.Name(), beadsDir, path, nil)
 
 		var done []int

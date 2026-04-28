@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mitchell-wallace/microbeads/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +24,8 @@ var listCmd = &cobra.Command{
 
 		exitCode := 0
 		var output string
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, nil, &output, &exitCode)()
+		var task *store.Task
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode)()
 		runBeforeHooks(cmd.Name(), beadsDir, path, nil)
 
 		var lines []string

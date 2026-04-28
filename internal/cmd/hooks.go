@@ -24,13 +24,17 @@ func runBeforeHooks(cmdName string, beadsDir string, path string, task *store.Ta
 	}
 }
 
-func runAfterHooksDeferred(cmdName string, beadsDir string, path string, task *store.Task, output *string, exitCode *int) func() {
+func runAfterHooksDeferred(cmdName string, beadsDir string, path string, task **store.Task, output *string, exitCode *int) func() {
 	return func() {
 		hf, err := hooks.Load(beadsDir)
 		if err != nil || hf == nil {
 			return
 		}
-		vars := buildHookVars(task, path, cmdName, fmt.Sprintf("%d", *exitCode), *output)
+		var t *store.Task
+		if task != nil {
+			t = *task
+		}
+		vars := buildHookVars(t, path, cmdName, fmt.Sprintf("%d", *exitCode), *output)
 		passback, err := hooks.Dispatch(hf, cmdName, "after", vars)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "mb: after hook: %v\n", err)
@@ -68,8 +72,16 @@ func isKnownCommand(name string) bool {
 }
 
 func firstNonFlagArg(args []string) string {
+	skipNext := false
 	for _, a := range args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
 		if strings.HasPrefix(a, "-") {
+			if a == "-f" || a == "--file" {
+				skipNext = true
+			}
 			continue
 		}
 		return a
