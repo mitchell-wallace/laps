@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/pflag"
 )
 
 func setupTempRepo(t *testing.T) (beadsDir string, cleanup func()) {
@@ -38,7 +40,17 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	listDone = false
 	addTitle = ""
 	addDescription = ""
+	addAssignee = ""
 	addJSON = ""
+	for _, f := range []*pflag.FlagSet{
+		rootCmd.PersistentFlags(),
+		addCmd.Flags(),
+		listCmd.Flags(),
+	} {
+		f.VisitAll(func(flag *pflag.Flag) {
+			flag.Changed = false
+		})
+	}
 
 	func() {
 		defer func() {
@@ -134,6 +146,70 @@ func TestAddMutualExclusion(t *testing.T) {
 	}
 }
 
+func TestAddWithAssignee(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, errStr, code := runMB("add", "head", "--title", "Assigned task", "--assignee", "  alice  ")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	id := strings.TrimSpace(out)
+
+	data, err := os.ReadFile(filepath.Join(beadsDir, "mb.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"assignee": "alice"`) {
+		t.Fatalf("expected trimmed assignee in store for %s, got: %s", id, data)
+	}
+}
+
+func TestAddJSONWithAssignee(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, errStr, code := runMB("add", "head", "--json", `{"title":"JSON task","assignee":"bob"}`)
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	id := strings.TrimSpace(out)
+
+	out, _, code = runMB("list")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, id+" — JSON task (assignee: bob)") {
+		t.Fatalf("expected assignee in list output, got: %s", out)
+	}
+}
+
+func TestAddJSONRejectsOtherInputFlags(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("add", "head", "--json", `{"title":"JSON task"}`, "--assignee", "alice")
+	if code != 1 {
+		t.Fatalf("expected code 1, got %d", code)
+	}
+	if !strings.Contains(errStr, "mutually exclusive") {
+		t.Fatalf("expected mutual exclusion error, got: %s", errStr)
+	}
+}
+
+func TestAddRequiresJSONTitle(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("add", "head", "--json", `{"assignee":"alice"}`)
+	if code != 1 {
+		t.Fatalf("expected code 1, got %d", code)
+	}
+	if !strings.Contains(errStr, "title is required") {
+		t.Fatalf("expected title required error, got: %s", errStr)
+	}
+}
+
 func TestGetHead(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
@@ -148,6 +224,34 @@ func TestGetHead(t *testing.T) {
 	}
 	if !strings.Contains(out, "Details") {
 		t.Fatalf("expected Details in output, got: %s", out)
+	}
+}
+
+func TestGetOutputUnchangedWithoutAssignee(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Task One", "--description", "Details")
+	out, errStr, code := runMB("get")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if out != "Task One\n\nDetails\n" {
+		t.Fatalf("expected legacy get output, got: %q", out)
+	}
+}
+
+func TestGetOutputIncludesAssignee(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Task One", "--description", "Details", "--assignee", "alice")
+	out, errStr, code := runMB("get")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if out != "Task One\nAssignee: alice\n\nDetails\n" {
+		t.Fatalf("expected assignee in get output, got: %q", out)
 	}
 }
 
@@ -192,6 +296,38 @@ func TestListDefault(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 lines, got %d", len(lines))
+	}
+}
+
+func TestListOutputUnchangedWithoutAssignee(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "tail", "--title", "A")
+	id := strings.TrimSpace(out)
+	out, _, code := runMB("list")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	want := fmt.Sprintf("1. %s — A\n", id)
+	if out != want {
+		t.Fatalf("expected legacy list output %q, got %q", want, out)
+	}
+}
+
+func TestListOutputIncludesAssignee(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "tail", "--title", "A", "--assignee", "alice")
+	id := strings.TrimSpace(out)
+	out, _, code := runMB("list")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	want := fmt.Sprintf("1. %s — A (assignee: alice)\n", id)
+	if out != want {
+		t.Fatalf("expected assignee in list output %q, got %q", want, out)
 	}
 }
 
@@ -367,5 +503,22 @@ func TestHookPassback(t *testing.T) {
 	}
 	if !strings.Contains(out, "passback") {
 		t.Fatalf("expected passback in output, got: %s", out)
+	}
+}
+
+func TestHookAssigneeVariable(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "A", "--assignee", "alice")
+	hooks := `{"version":1,"hooks":[{"title":"assignee","command":"get","when":"after","run":"echo $assignee","passback":true}]}`
+	os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644)
+
+	out, _, code := runMB("get")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "alice") {
+		t.Fatalf("expected assignee variable in hook output, got: %s", out)
 	}
 }

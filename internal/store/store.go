@@ -26,6 +26,7 @@ type Task struct {
 	ID          string     `json:"id"`
 	Title       string     `json:"title"`
 	Description string     `json:"description"`
+	Assignee    string     `json:"assignee,omitempty"`
 	IsDone      bool       `json:"isDone"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`

@@ -13,6 +13,7 @@ import (
 var (
 	addTitle       string
 	addDescription string
+	addAssignee    string
 	addJSON        string
 )
 
@@ -27,8 +28,8 @@ Positions:
   after <id>    Insert immediately after the specified task id.
 
 Input modes (mutually exclusive):
-  --title "..." [--description "..."]   Provide title and optional description.
-  --json '{"title":"...","description":"..."}'   Provide task as JSON.
+  --title "..." [--description "..."] [--assignee "..."]   Provide task fields.
+  --json '{"title":"...","description":"...","assignee":"..."}'   Provide task as JSON.
 
 Prints the new task's id on success.`,
 	Args: cobra.MinimumNArgs(0),
@@ -62,20 +63,22 @@ Prints the new task's id on success.`,
 			afterID = args[1]
 		}
 
-		if addTitle == "" && addJSON == "" {
+		flagMode := cmd.Flags().Changed("title") || cmd.Flags().Changed("description") || cmd.Flags().Changed("assignee")
+		if !flagMode && addJSON == "" {
 			exitCode = 1
 			exit(1, "add: --title or --json is required")
 		}
-		if addTitle != "" && addJSON != "" {
+		if flagMode && addJSON != "" {
 			exitCode = 1
-			exit(1, "add: --title and --json are mutually exclusive")
+			exit(1, "add: --json is mutually exclusive with --title, --description, and --assignee")
 		}
 
-		var title, description string
+		var title, description, assignee string
 		if addJSON != "" {
 			var payload struct {
 				Title       string `json:"title"`
 				Description string `json:"description"`
+				Assignee    string `json:"assignee"`
 			}
 			if err := json.Unmarshal([]byte(addJSON), &payload); err != nil {
 				exitCode = 1
@@ -83,9 +86,16 @@ Prints the new task's id on success.`,
 			}
 			title = payload.Title
 			description = payload.Description
+			assignee = strings.TrimSpace(payload.Assignee)
 		} else {
 			title = addTitle
 			description = strings.ReplaceAll(addDescription, "\\n", "\n")
+			assignee = strings.TrimSpace(addAssignee)
+		}
+
+		if strings.TrimSpace(title) == "" {
+			exitCode = 1
+			exit(1, "add: title is required")
 		}
 
 		_, repoRoot, _ := getStorePath()
@@ -106,6 +116,7 @@ Prints the new task's id on success.`,
 			ID:          id,
 			Title:       title,
 			Description: description,
+			Assignee:    assignee,
 			IsDone:      false,
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -144,6 +155,7 @@ Prints the new task's id on success.`,
 func init() {
 	addCmd.Flags().StringVar(&addTitle, "title", "", "task title")
 	addCmd.Flags().StringVar(&addDescription, "description", "", "task description")
+	addCmd.Flags().StringVar(&addAssignee, "assignee", "", "task assignee")
 	addCmd.Flags().StringVar(&addJSON, "json", "", "task as json object")
 	rootCmd.AddCommand(addCmd)
 }

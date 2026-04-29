@@ -47,18 +47,20 @@ func runAfterHooksDeferred(cmdName string, beadsDir string, path string, task **
 
 func buildHookVars(task *store.Task, file, command, exitCode, output string) map[string]string {
 	vars := map[string]string{
-		"command":   command,
-		"file":      file,
-		"exit_code": exitCode,
-		"output":    output,
-		"id":        "",
-		"title":     "",
+		"command":     command,
+		"file":        file,
+		"exit_code":   exitCode,
+		"output":      output,
+		"id":          "",
+		"title":       "",
 		"description": "",
+		"assignee":    "",
 	}
 	if task != nil {
 		vars["id"] = task.ID
 		vars["title"] = task.Title
 		vars["description"] = task.Description
+		vars["assignee"] = task.Assignee
 	}
 	return vars
 }

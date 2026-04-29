@@ -28,6 +28,7 @@ Microbeads is **not** a place to track messy human-side feature ideas. It is a p
   "id": "micr-a3f2",
   "title": "Add list command",
   "description": "Multi-line\ndescription supported.",
+  "assignee": "alice",
   "isDone": false,
   "createdAt": "2026-04-28T10:15:00Z",
   "updatedAt": "2026-04-28T10:15:00Z",
@@ -59,7 +60,9 @@ Hash function: SHA-256, lowercase hex. Cheap and deterministic.
 
 All commands accept `-f <name>` to target a non-default file.
 
-### `mb add <head|tail|after> [id] (--title T [--description D] | --json '{...}')`
+`assignee` is optional. When omitted or blank, it is not written to the file and is not shown in command output.
+
+### `mb add <head|tail|after> [id] (--title T [--description D] [--assignee A] | --json '{...}')`
 
 - Position is **required**. With no position, print:
 
@@ -67,15 +70,15 @@ All commands accept `-f <name>` to target a non-default file.
 
 - `head` and `tail` take no id; `after` requires `<id>` immediately following.
 - Input is either:
-  - `--title T [--description D]` — description optional; supports `\n` and real newlines.
-  - `--json '{"title": "...", "description": "..."}'` — a flat object with just those two keys.
+  - `--title T [--description D] [--assignee A]` — description and assignee optional; description supports `\n` and real newlines.
+  - `--json '{"title": "...", "description": "...", "assignee": "..."}'` — a flat object. `description` and `assignee` are optional.
 - The two input modes are mutually exclusive. Mixing them is an error.
 - Prints the new task's id on success.
 
 ### `mb get [head|<id>]`
 
 - Default target is `head`.
-- Output: title, blank line, description. Nothing else — no id, no timestamps. The agent has the id from `list` or from the call that created it.
+- Output: title, optional `Assignee: ...`, blank line, description. No id or timestamps. The agent has the id from `list` or from the call that created it.
 - If the store is empty (no todo tasks for `head`), print `no head task` and exit non-zero so hooks/scripts can branch on it.
 
 ### `mb list [--all | --done]`
@@ -83,7 +86,7 @@ All commands accept `-f <name>` to target a non-default file.
 - Default: todo tasks only, head first, as a markdown numbered list:
 
       1. micr-a3f2 — Add list command
-      2. micr-9b1c — Wire up hooks dispatcher
+      2. micr-9b1c — Wire up hooks dispatcher (assignee: alice)
 
 - `--all` includes done tasks (done shown after todo, struck through with `~~...~~`).
 - `--done` shows only done tasks, most recently completed first.
@@ -157,7 +160,7 @@ File: `.beads/mb-hooks.json`. Optional. Schema:
 
 Standard shell-style `$var` substitution (also `${var}`):
 
-- `$id`, `$title`, `$description` — the task in question. For `done`, the just-completed head. For `add`, the newly created task. For `get`, the fetched task. For commands without a single relevant task (`list`, `prune`, `on`, `off`, hook-only commands), these are empty strings.
+- `$id`, `$title`, `$description`, `$assignee` — the task in question. For `done`, the just-completed head. For `add`, the newly created task. For `get`, the fetched task. For commands without a single relevant task (`list`, `prune`, `on`, `off`, hook-only commands), these are empty strings.
 - `$command` — the mb command name (`done`, `add`, ...).
 - `$exit_code` — the mb command's exit code (`after` hooks only; empty for `before`).
 - `$output` — the mb command's stdout (`after` hooks only).

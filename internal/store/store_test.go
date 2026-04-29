@@ -146,12 +146,13 @@ func TestLoadSave(t *testing.T) {
 		Version: 1,
 		Tasks: []Task{
 			{
-				ID:        "test-1234",
-				Title:     "Test",
+				ID:          "test-1234",
+				Title:       "Test",
 				Description: "A description",
-				IsDone:    false,
-				CreatedAt: created,
-				UpdatedAt: created,
+				Assignee:    "alice",
+				IsDone:      false,
+				CreatedAt:   created,
+				UpdatedAt:   created,
 			},
 		},
 	}
@@ -172,6 +173,9 @@ func TestLoadSave(t *testing.T) {
 	}
 	if loaded.Tasks[0].ID != "test-1234" {
 		t.Errorf("ID = %q, want test-1234", loaded.Tasks[0].ID)
+	}
+	if loaded.Tasks[0].Assignee != "alice" {
+		t.Errorf("Assignee = %q, want alice", loaded.Tasks[0].Assignee)
 	}
 	if !loaded.Tasks[0].CreatedAt.Equal(created) {
 		t.Errorf("CreatedAt = %v, want %v", loaded.Tasks[0].CreatedAt, created)

@@ -36,14 +36,15 @@ Add a task to the queue.
 Flags:
 - `--title <string>` — task title (required unless using `--json`).
 - `--description <string>` — task description. Supports `\n` for newlines.
-- `--json <object>` — provide task as `{"title": "...", "description": "..."}`. Mutually exclusive with `--title`.
+- `--assignee <string>` — optional task assignee.
+- `--json <object>` — provide task as `{"title": "...", "description": "...", "assignee": "..."}`. Mutually exclusive with the field flags.
 
 Prints the new task's id on success.
 
 ### `mb get [head|<id>]`
 Get a task by id, or read the head task if no argument is given.
 
-Output is title, blank line, description — nothing else.
+Output is title, optional assignee, blank line, description.
 
 ### `mb list [--all | --done]`
 List tasks as a markdown numbered list.
@@ -93,6 +94,7 @@ Microbeads can run custom shell commands before or after any mb command via `.be
 Use `$var` or `${var}` in `run`:
 
 - `$id`, `$title`, `$description` — the relevant task (empty for commands like `list`, `prune`).
+- `$assignee` — the relevant task's assignee, or empty when none is set.
 - `$command` — the mb command name.
 - `$exit_code` — mb's exit code (`after` hooks only).
 - `$output` — mb's stdout (`after` hooks only).

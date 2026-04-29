@@ -49,10 +49,8 @@ Output is title, blank line, description — nothing else.`,
 		for i := range file.Tasks {
 			if file.Tasks[i].ID == taskID {
 				task = &file.Tasks[i]
-				output = fmt.Sprintf("%s\n\n%s", task.Title, task.Description)
-				fmt.Println(task.Title)
-				fmt.Println()
-				fmt.Println(task.Description)
+				output = formatTaskDetails(task)
+				fmt.Println(output)
 				return
 			}
 		}
@@ -63,4 +61,11 @@ Output is title, blank line, description — nothing else.`,
 
 func init() {
 	rootCmd.AddCommand(getCmd)
+}
+
+func formatTaskDetails(task *store.Task) string {
+	if task.Assignee == "" {
+		return fmt.Sprintf("%s\n\n%s", task.Title, task.Description)
+	}
+	return fmt.Sprintf("%s\nAssignee: %s\n\n%s", task.Title, task.Assignee, task.Description)
 }
