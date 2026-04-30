@@ -113,8 +113,12 @@ func checkDefault(beadsDir string) {
 func loadFile(path string) *store.File {
 	data, err := store.Load(path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return &store.File{Version: 1}
+		if errors.Is(err, store.ErrEmptyFile) {
+			f := &store.File{Version: 1, Tasks: []store.Task{}}
+			if err := store.Save(path, f); err != nil {
+				exit(2, "initialize file: %v", err)
+			}
+			return f
 		}
 		exit(2, "%v", err)
 	}

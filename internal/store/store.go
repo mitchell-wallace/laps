@@ -19,6 +19,9 @@ var ErrStore = errors.New("store error")
 // candidate task files exist.
 var ErrEmptyState = errors.New("empty state")
 
+// ErrEmptyFile indicates the file does not exist or is empty.
+var ErrEmptyFile = errors.New("empty file")
+
 const defaultFileName = "mb.json"
 
 // Task represents a single task record.
@@ -90,8 +93,16 @@ func ResolveFile(f string) string {
 func Load(path string) (*File, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrEmptyFile
+		}
 		return nil, fmt.Errorf("%w: read file %s: %w", ErrStore, path, err)
 	}
+
+	if len(strings.TrimSpace(string(b))) == 0 {
+		return nil, ErrEmptyFile
+	}
+
 	var file File
 	if err := json.Unmarshal(b, &file); err != nil {
 		return nil, fmt.Errorf("%w: parse JSON in %s: %v", ErrStore, path, err)
