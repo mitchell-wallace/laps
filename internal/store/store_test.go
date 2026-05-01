@@ -287,12 +287,8 @@ func TestCheckDefaultStore_EmptyWithCandidates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := CheckDefaultStore(beadsDir)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !errors.Is(err, ErrEmptyState) {
-		t.Errorf("expected ErrEmptyState, got %v", err)
+	if err := CheckDefaultStore(beadsDir); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -341,6 +337,61 @@ func TestLoad_AcceptsValidEmptyFile(t *testing.T) {
 	}
 	if len(file.Tasks) != 0 {
 		t.Errorf("len(Tasks) = %d, want 0", len(file.Tasks))
+	}
+}
+
+func TestLoad_EmptyBraces(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mb.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if !errors.Is(err, ErrEmptyFile) {
+		t.Fatalf("expected ErrEmptyFile, got: %v", err)
+	}
+}
+
+func TestLoad_RejectExtraTopLevelField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mb.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"tasks":[],"extra":"foo"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for extra top-level field")
+	}
+	if !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("expected unknown field error, got: %v", err)
+	}
+}
+
+func TestLoad_RejectExtraTaskField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mb.json")
+	data := `{"version":1,"tasks":[{"id":"x","title":"y","isDone":false,"createdAt":"2026-04-28T10:15:00Z","updatedAt":"2026-04-28T10:15:00Z","extra":"foo"}]}`
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for extra task field")
+	}
+	if !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("expected unknown field error, got: %v", err)
+	}
+}
+
+func TestLoad_RejectInvalidTaskStructure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mb.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"tasks":"not-an-array"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for invalid task structure")
 	}
 }
 

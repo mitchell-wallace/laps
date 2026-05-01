@@ -541,8 +541,29 @@ func TestAddRejectsNonMbJSON(t *testing.T) {
 	if code != 2 {
 		t.Fatalf("expected code 2, got %d, stderr: %s", code, errStr)
 	}
-	if !strings.Contains(errStr, "missing version") {
-		t.Fatalf("expected missing version error, got: %s", errStr)
+	if !strings.Contains(errStr, "not a valid mb task file") {
+		t.Fatalf("expected invalid mb task file error, got: %s", errStr)
+	}
+}
+
+func TestAddWorksWhenEmptyMbJSONExistsWithOtherJSON(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	if err := os.WriteFile(filepath.Join(beadsDir, "mb.json"), []byte(`{"version":1,"tasks":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(beadsDir, "other.json"), []byte(`{"version":1,"tasks":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errStr, code := runMB("add", "head", "--title", "Task with empty existing mb")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	id := strings.TrimSpace(out)
+	if id == "" {
+		t.Fatal("expected id output")
 	}
 }
 

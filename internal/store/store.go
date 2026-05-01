@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -90,6 +91,8 @@ func ResolveFile(f string) string {
 }
 
 // Load reads and unmarshals a task file.
+// It validates that the file contains only the expected fields and structure.
+// Files containing only {} or whitespace are treated as empty.
 func Load(path string) (*File, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -99,18 +102,21 @@ func Load(path string) (*File, error) {
 		return nil, fmt.Errorf("%w: read file %s: %w", ErrStore, path, err)
 	}
 
-	if len(strings.TrimSpace(string(b))) == 0 {
+	content := strings.TrimSpace(string(b))
+	if len(content) == 0 || content == "{}" {
 		return nil, ErrEmptyFile
 	}
 
-	// Validate that existing files look like mb task files before overwriting.
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
 	var raw struct {
-		Version *int           `json:"version"`
-		Tasks   json.RawMessage `json:"tasks"`
+		Version *int   `json:"version"`
+		Tasks   []Task `json:"tasks"`
 	}
-	if err := json.Unmarshal(b, &raw); err != nil {
-		return nil, fmt.Errorf("%w: parse JSON in %s: %v", ErrStore, path, err)
+	if err := dec.Decode(&raw); err != nil {
+		return nil, fmt.Errorf("%w: file %s exists but is not a valid mb task file: %v", ErrStore, path, err)
 	}
+
 	if raw.Version == nil {
 		return nil, fmt.Errorf("%w: file %s exists but is not a valid mb task file (missing version)", ErrStore, path)
 	}
@@ -118,17 +124,17 @@ func Load(path string) (*File, error) {
 		return nil, fmt.Errorf("%w: file %s exists but is not a valid mb task file (missing tasks)", ErrStore, path)
 	}
 
-	var file File
-	if err := json.Unmarshal(b, &file); err != nil {
-		return nil, fmt.Errorf("%w: parse JSON in %s: %v", ErrStore, path, err)
-	}
-	return &file, nil
+	return &File{Version: *raw.Version, Tasks: raw.Tasks}, nil
 }
 
 // Save marshals and writes a task file, creating parent directories if needed.
 func Save(path string, data *File) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("%w: create directory for %s: %v", ErrStore, path, err)
+	}
+	// Normalise nil slices so we write [] instead of null.
+	if data.Tasks == nil {
+		data.Tasks = []Task{}
 	}
 	b, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
@@ -141,60 +147,15 @@ func Save(path string, data *File) error {
 	return nil
 }
 
-// listCandidates returns the names of other *.json task files in beadsDir.
-func listCandidates(beadsDir string) ([]string, error) {
-	entries, err := os.ReadDir(beadsDir)
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if !strings.HasSuffix(name, ".json") {
-			continue
-		}
-		if name == defaultFileName || name == "mb-hooks.json" || name == "config.json" {
-			continue
-		}
-		out = append(out, name)
-	}
-	return out, nil
-}
-
-// CheckDefaultStore verifies that mb.json contains at least one task.
-// If mb.json exists but has no tasks and other candidate task files exist, it
-// returns ErrEmptyState with a hint message. A missing mb.json is allowed so
-// that the default store can be initialised even when other .json files are
-// present in the .beads directory.
+// CheckDefaultStore verifies that mb.json is a valid mb task file if it exists.
+// A missing or empty mb.json is allowed (it will be initialised on demand).
 func CheckDefaultStore(beadsDir string) error {
 	path := filepath.Join(beadsDir, defaultFileName)
-	data, err := os.ReadFile(path)
-	var tasks []Task
-	if err == nil {
-		var file File
-		if uerr := json.Unmarshal(data, &file); uerr == nil {
-			tasks = file.Tasks
-		}
-	}
-
-	if len(tasks) > 0 {
+	_, err := Load(path)
+	if err == nil || errors.Is(err, ErrEmptyFile) {
 		return nil
 	}
-
-	// Allow mb.json to be created even if other candidate files exist.
-	if err != nil {
-		return nil
-	}
-
-	candidates, _ := listCandidates(beadsDir)
-	if len(candidates) == 0 {
-		return nil
-	}
-
-	return fmt.Errorf("%w: default store mb.json has no tasks; other task files: %s (use -f)", ErrEmptyState, strings.Join(candidates, ", "))
+	return err
 }
 
 // GenerateID creates a task ID according to the spec.
