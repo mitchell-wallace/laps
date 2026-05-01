@@ -103,6 +103,21 @@ func Load(path string) (*File, error) {
 		return nil, ErrEmptyFile
 	}
 
+	// Validate that existing files look like mb task files before overwriting.
+	var raw struct {
+		Version *int           `json:"version"`
+		Tasks   json.RawMessage `json:"tasks"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return nil, fmt.Errorf("%w: parse JSON in %s: %v", ErrStore, path, err)
+	}
+	if raw.Version == nil {
+		return nil, fmt.Errorf("%w: file %s exists but is not a valid mb task file (missing version)", ErrStore, path)
+	}
+	if raw.Tasks == nil {
+		return nil, fmt.Errorf("%w: file %s exists but is not a valid mb task file (missing tasks)", ErrStore, path)
+	}
+
 	var file File
 	if err := json.Unmarshal(b, &file); err != nil {
 		return nil, fmt.Errorf("%w: parse JSON in %s: %v", ErrStore, path, err)
@@ -149,9 +164,11 @@ func listCandidates(beadsDir string) ([]string, error) {
 	return out, nil
 }
 
-// CheckDefaultStore verifies that mb.json exists and contains at least one task.
-// If mb.json is missing or empty and other candidate task files exist, it
-// returns ErrEmptyState with a hint message.
+// CheckDefaultStore verifies that mb.json contains at least one task.
+// If mb.json exists but has no tasks and other candidate task files exist, it
+// returns ErrEmptyState with a hint message. A missing mb.json is allowed so
+// that the default store can be initialised even when other .json files are
+// present in the .beads directory.
 func CheckDefaultStore(beadsDir string) error {
 	path := filepath.Join(beadsDir, defaultFileName)
 	data, err := os.ReadFile(path)
@@ -167,14 +184,16 @@ func CheckDefaultStore(beadsDir string) error {
 		return nil
 	}
 
+	// Allow mb.json to be created even if other candidate files exist.
+	if err != nil {
+		return nil
+	}
+
 	candidates, _ := listCandidates(beadsDir)
 	if len(candidates) == 0 {
 		return nil
 	}
 
-	if err != nil {
-		return fmt.Errorf("%w: default store mb.json not found; other task files: %s (use -f)", ErrEmptyState, strings.Join(candidates, ", "))
-	}
 	return fmt.Errorf("%w: default store mb.json has no tasks; other task files: %s (use -f)", ErrEmptyState, strings.Join(candidates, ", "))
 }
 

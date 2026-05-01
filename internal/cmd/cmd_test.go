@@ -506,6 +506,46 @@ func TestHookPassback(t *testing.T) {
 	}
 }
 
+func TestAddCreatesMbJSONDespiteOtherJSON(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	if err := os.WriteFile(filepath.Join(beadsDir, "other.json"), []byte(`{"version":1,"tasks":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errStr, code := runMB("add", "head", "--title", "First task")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	id := strings.TrimSpace(out)
+	if id == "" {
+		t.Fatal("expected id output")
+	}
+
+	if _, err := os.Stat(filepath.Join(beadsDir, "mb.json")); err != nil {
+		t.Fatalf("mb.json was not created: %v", err)
+	}
+}
+
+func TestAddRejectsNonMbJSON(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	otherPath := filepath.Join(".beads", "other.json")
+	if err := os.WriteFile(otherPath, []byte(`{"foo":"bar"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errStr, code := runMB("add", "head", "--title", "X", "-f", "other")
+	if code != 2 {
+		t.Fatalf("expected code 2, got %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "missing version") {
+		t.Fatalf("expected missing version error, got: %s", errStr)
+	}
+}
+
 func TestHookAssigneeVariable(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()

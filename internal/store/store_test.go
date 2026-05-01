@@ -269,15 +269,8 @@ func TestCheckDefaultStore_MissingWithCandidates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := CheckDefaultStore(beadsDir)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !errors.Is(err, ErrEmptyState) {
-		t.Errorf("expected ErrEmptyState, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "other.json") {
-		t.Errorf("error should mention other.json: %v", err)
+	if err := CheckDefaultStore(beadsDir); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -300,6 +293,54 @@ func TestCheckDefaultStore_EmptyWithCandidates(t *testing.T) {
 	}
 	if !errors.Is(err, ErrEmptyState) {
 		t.Errorf("expected ErrEmptyState, got %v", err)
+	}
+}
+
+func TestLoad_RejectMissingVersion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "other.json")
+	if err := os.WriteFile(path, []byte(`{"tasks":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for missing version")
+	}
+	if !strings.Contains(err.Error(), "missing version") {
+		t.Fatalf("expected missing version error, got: %v", err)
+	}
+}
+
+func TestLoad_RejectMissingTasks(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "other.json")
+	if err := os.WriteFile(path, []byte(`{"version":1}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for missing tasks")
+	}
+	if !strings.Contains(err.Error(), "missing tasks") {
+		t.Fatalf("expected missing tasks error, got: %v", err)
+	}
+}
+
+func TestLoad_AcceptsValidEmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mb.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"tasks":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	file, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if file.Version != 1 {
+		t.Errorf("Version = %d, want 1", file.Version)
+	}
+	if len(file.Tasks) != 0 {
+		t.Errorf("len(Tasks) = %d, want 0", len(file.Tasks))
 	}
 }
 
