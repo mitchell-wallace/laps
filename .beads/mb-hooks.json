@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "hooks": [
+    {
+      "title": "Test on done",
+      "description": "Simple test hook.",
+      "command": "done",
+      "when": "after",
+      "run": "echo $@",
+      "passback": true
+    },
+    {
+      "title": "Test custom",
+      "description": "Simple test script hook.",
+      "command": "custom",
+      "when": "after",
+      "run": ".beads/scripts/test.sh",
+      "passback": true
+    },
+    {
+      "title": "Test args",
+      "description": "Simple test script hook.",
+      "command": "args",
+      "when": "after",
+      "run": "echo $@",
+      "passback": true
+    }
+  ]
+}
