@@ -15,8 +15,8 @@ var offCmd = &cobra.Command{
 		exitCode := 0
 		var output string
 		var task *store.Task
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, nil)
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
+		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
 
 		if err := instructions.Disable(); err != nil {
 			exitCode = 2

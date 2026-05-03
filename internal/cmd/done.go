@@ -22,8 +22,8 @@ If there is no head task, exits non-zero with "no head task".`,
 		exitCode := 0
 		var output string
 		var task *store.Task
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, nil)
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
+		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
 
 		for i := range file.Tasks {
 			if !file.Tasks[i].IsDone {

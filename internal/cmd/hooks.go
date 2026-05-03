@@ -9,7 +9,7 @@ import (
 	"github.com/mitchell-wallace/microbeads/internal/store"
 )
 
-func runBeforeHooks(cmdName string, beadsDir string, path string, task *store.Task) {
+func runBeforeHooks(cmdName string, beadsDir string, path string, task *store.Task, args []string) {
 	hf, err := hooks.Load(beadsDir)
 	if err != nil {
 		exit(2, "hooks: %v", err)
@@ -17,14 +17,14 @@ func runBeforeHooks(cmdName string, beadsDir string, path string, task *store.Ta
 	if hf == nil {
 		return
 	}
-	vars := buildHookVars(task, path, cmdName, "", "")
+	vars := buildHookVars(task, path, cmdName, "", "", args)
 	_, err = hooks.Dispatch(hf, cmdName, "before", vars)
 	if err != nil {
 		exit(4, "hook: %v", err)
 	}
 }
 
-func runAfterHooksDeferred(cmdName string, beadsDir string, path string, task **store.Task, output *string, exitCode *int) func() {
+func runAfterHooksDeferred(cmdName string, beadsDir string, path string, task **store.Task, output *string, exitCode *int, args []string) func() {
 	return func() {
 		hf, err := hooks.Load(beadsDir)
 		if err != nil || hf == nil {
@@ -34,7 +34,7 @@ func runAfterHooksDeferred(cmdName string, beadsDir string, path string, task **
 		if task != nil {
 			t = *task
 		}
-		vars := buildHookVars(t, path, cmdName, fmt.Sprintf("%d", *exitCode), *output)
+		vars := buildHookVars(t, path, cmdName, fmt.Sprintf("%d", *exitCode), *output, args)
 		passback, err := hooks.Dispatch(hf, cmdName, "after", vars)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "mb: after hook: %v\n", err)
@@ -45,7 +45,7 @@ func runAfterHooksDeferred(cmdName string, beadsDir string, path string, task **
 	}
 }
 
-func buildHookVars(task *store.Task, file, command, exitCode, output string) map[string]string {
+func buildHookVars(task *store.Task, file, command, exitCode, output string, args []string) map[string]string {
 	vars := map[string]string{
 		"command":     command,
 		"file":        file,
@@ -55,6 +55,10 @@ func buildHookVars(task *store.Task, file, command, exitCode, output string) map
 		"title":       "",
 		"description": "",
 		"assignee":    "",
+		"args":        shellQuoteArgs(args),
+	}
+	for i, arg := range args {
+		vars[fmt.Sprintf("%d", i+1)] = arg
 	}
 	if task != nil {
 		vars["id"] = task.ID
@@ -65,6 +69,20 @@ func buildHookVars(task *store.Task, file, command, exitCode, output string) map
 	return vars
 }
 
+func shellQuoteArgs(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	var quoted []string
+	for _, arg := range args {
+		if strings.ContainsAny(arg, " \t\n\"'\\$|&;<>()`") {
+			arg = "'" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
+		}
+		quoted = append(quoted, arg)
+	}
+	return strings.Join(quoted, " ")
+}
+
 func isKnownCommand(name string) bool {
 	switch name {
 	case "add", "get", "list", "done", "delete", "prune", "on", "off", "help", "--version":
@@ -73,7 +91,7 @@ func isKnownCommand(name string) bool {
 	return false
 }
 
-func firstNonFlagArg(args []string) string {
+func splitArgs(args []string) (cmd string, posArgs []string) {
 	skipNext := false
 	for _, a := range args {
 		if skipNext {
@@ -86,7 +104,11 @@ func firstNonFlagArg(args []string) string {
 			}
 			continue
 		}
-		return a
+		if cmd == "" {
+			cmd = a
+		} else {
+			posArgs = append(posArgs, a)
+		}
 	}
-	return ""
+	return cmd, posArgs
 }

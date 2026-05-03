@@ -52,7 +52,8 @@ func Execute(v string) error {
 	}()
 
 	// Hook-only command handling
-	if cmdName := firstNonFlagArg(os.Args[1:]); cmdName != "" && !isKnownCommand(cmdName) {
+	cmdName, hookArgs := splitArgs(os.Args[1:])
+	if cmdName != "" && !isKnownCommand(cmdName) {
 		_, beadsDir, err := store.DiscoverRepoRoot()
 		if err != nil {
 			exit(2, "%v", err)
@@ -67,6 +68,10 @@ func Execute(v string) error {
 			"file":      path,
 			"exit_code": "",
 			"output":    "",
+			"args":      shellQuoteArgs(hookArgs),
+		}
+		for i, arg := range hookArgs {
+			vars[fmt.Sprintf("%d", i+1)] = arg
 		}
 		passback, err := hooks.Dispatch(hf, cmdName, "before", vars)
 		if err != nil {

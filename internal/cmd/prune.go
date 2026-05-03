@@ -16,7 +16,7 @@ var pruneCmd = &cobra.Command{
 
 Use prune 0 to remove all done tasks. Todo tasks are never touched.
 Prints the number of tasks removed.`,
-	Args:  cobra.MaximumNArgs(1),
+	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		n := 20
 		if len(args) > 0 {
@@ -34,8 +34,8 @@ Prints the number of tasks removed.`,
 		exitCode := 0
 		var output string
 		var task *store.Task
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, nil)
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
+		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
 
 		var done []int
 		var todo []store.Task

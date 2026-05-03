@@ -13,7 +13,7 @@ var getCmd = &cobra.Command{
 	Long: `Get a task by id, or read the head task if no argument is given.
 
 Output is title, blank line, description — nothing else.`,
-	Args: cobra.MaximumNArgs(1),
+	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		target := "head"
 		if len(args) > 0 {
@@ -27,8 +27,8 @@ Output is title, blank line, description — nothing else.`,
 		exitCode := 0
 		var output string
 		var task *store.Task
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, nil)
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
+		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
 
 		var taskID string
 		if target == "head" {

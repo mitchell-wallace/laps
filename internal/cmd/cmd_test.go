@@ -583,3 +583,78 @@ func TestHookAssigneeVariable(t *testing.T) {
 		t.Fatalf("expected assignee variable in hook output, got: %s", out)
 	}
 }
+
+func TestHookArgsPassthrough(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "A")
+	id := strings.TrimSpace(out)
+	hooks := `{"version":1,"hooks":[{"title":"args","command":"get","when":"after","run":"echo $args $1 $2 $3","passback":true}]}`
+	os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644)
+
+	out, _, code := runMB("get", id, "extra1", "extra2")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	want := id + " extra1 extra2 " + id + " extra1 extra2"
+	if !strings.Contains(out, want) {
+		t.Fatalf("expected args in hook output, got: %s", out)
+	}
+}
+
+func TestGetAcceptsExtraArgs(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "A")
+	id := strings.TrimSpace(out)
+	out, errStr, code := runMB("get", id, "extra")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "A") {
+		t.Fatalf("expected task in output, got: %s", out)
+	}
+}
+
+func TestDeleteAcceptsExtraArgs(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "A")
+	id := strings.TrimSpace(out)
+	_, errStr, code := runMB("delete", id, "extra")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+}
+
+func TestDeleteRequiresId(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("delete")
+	if code != 1 {
+		t.Fatalf("expected code 1, got %d", code)
+	}
+	if !strings.Contains(errStr, "task id required") {
+		t.Fatalf("expected task id required error, got: %s", errStr)
+	}
+}
+
+func TestPruneAcceptsExtraArgs(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, _, _ = runMB("add", "tail", "--title", "A")
+	_, _, _ = runMB("done")
+
+	out, errStr, code := runMB("prune", "0", "extra")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if strings.TrimSpace(out) != "1" {
+		t.Fatalf("expected 1 removed, got %s", out)
+	}
+}

@@ -9,8 +9,11 @@ var deleteCmd = &cobra.Command{
 	Use:   "delete <id>",
 	Short: "Delete a task",
 	Long:  `Delete a task by id, regardless of whether it is todo or done.`,
-	Args:  cobra.ExactArgs(1),
+	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) < 1 {
+			exit(1, "delete: task id required")
+		}
 		id := args[0]
 		path, _, beadsDir := getStorePath()
 		checkDefault(beadsDir)
@@ -19,8 +22,8 @@ var deleteCmd = &cobra.Command{
 		exitCode := 0
 		var output string
 		var task *store.Task
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, nil)
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
+		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
 
 		found := false
 		var tasks []store.Task
