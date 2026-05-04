@@ -1,3 +1,5 @@
+spec - the more formal document for v0.1.0
+---
 # Microbeads (`mb`) — Spec
 
 ## Intent

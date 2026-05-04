@@ -1,3 +1,5 @@
+Concept - the initial concept for v0.1.0
+---
  Microbeads
 • Minimal beads-inspired task tracker
 • microbeads is not for tracking your messy feature ideas. It's for encoding 
