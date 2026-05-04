@@ -26,7 +26,7 @@ if (-not $Tag) {
 }
 
 $Version = $Tag -replace '^v',''
-$Asset = "microbeads_${Version}_windows_${Arch}.zip"
+$Asset = "laps_${Version}_windows_${Arch}.zip"
 $DownloadUrl = "https://github.com/$Repo/releases/download/$Tag/$Asset"
 $TempFile = Join-Path $env:TEMP $Asset
 

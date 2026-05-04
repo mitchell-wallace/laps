@@ -30,7 +30,7 @@ if [ -z "$TAG" ]; then
 fi
 
 VERSION="${TAG#v}"
-ASSET="microbeads_${VERSION}_${OS}_${ARCH}.tar.gz"
+ASSET="laps_${VERSION}_${OS}_${ARCH}.tar.gz"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
 
 echo "Downloading ${ASSET}..."

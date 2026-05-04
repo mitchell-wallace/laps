@@ -1,15 +1,15 @@
 version: 2
 
-project_name: microbeads
+project_name: laps
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: mb
-    main: ./cmd/mb
-    binary: mb
+  - id: laps
+    main: ./cmd/laps
+    binary: laps
     ldflags:
       - -s -w -X main.version={{.Version}}
     goos:
