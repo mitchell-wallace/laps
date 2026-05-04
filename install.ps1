@@ -2,8 +2,8 @@
 
 $ErrorActionPreference = "Stop"
 
-$Repo = "mitchell-wallace/microbeads"
-$InstallDir = Join-Path $env:LOCALAPPDATA "Programs\mb"
+$Repo = "mitchell-wallace/laps"
+$InstallDir = Join-Path $env:LOCALAPPDATA "Programs\laps"
 
 # Determine architecture
 $Arch = switch ($env:PROCESSOR_ARCHITECTURE) {
@@ -40,7 +40,7 @@ New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 Expand-Archive -Path $TempFile -DestinationPath $InstallDir -Force
 Remove-Item -Path $TempFile -Force
 
-Write-Host "Installed mb.exe to $InstallDir"
+Write-Host "Installed laps.exe to $InstallDir"
 
 # Update user PATH
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -52,4 +52,4 @@ if ($UserPath -notlike "*$InstallDir*") {
     Write-Host "$InstallDir already in user PATH"
 }
 
-Write-Host "Installation complete. Restart your terminal to use mb."
+Write-Host "Installation complete. Restart your terminal to use laps."

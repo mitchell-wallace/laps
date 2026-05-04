@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mitchell-wallace/microbeads/internal/hooks"
-	"github.com/mitchell-wallace/microbeads/internal/store"
+	"github.com/mitchell-wallace/laps/internal/hooks"
+	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -15,13 +15,13 @@ var version string
 var fileFlag string
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&fileFlag, "file", "f", "", "task file name (without .beads/ path)")
+	rootCmd.PersistentFlags().StringVarP(&fileFlag, "file", "f", "", "task file name (without .laps/ path)")
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "mb",
-	Short: "Microbeads — a minimal task tracker for AI coding agents",
-	Long: `Microbeads (mb) is a minimal, single-binary task tracker for AI coding agents.
+	Use:   "laps",
+	Short: "Laps — a minimal task tracker for AI coding agents",
+	Long: `Laps (laps) is a minimal, single-binary task tracker for AI coding agents.
 Tasks are a flat ordered queue with two states (todo / done). The agent's contract
 is simple: read the head, do the work, mark it done.`,
 	SilenceUsage: true,
@@ -34,7 +34,7 @@ type exitError struct {
 func (e *exitError) Error() string { return fmt.Sprintf("exit %d", e.code) }
 
 func exit(code int, format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "mb: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "laps: "+format+"\n", args...)
 	panic(&exitError{code: code})
 }
 
@@ -82,7 +82,7 @@ func Execute(v string) error {
 		}
 		passback, err = hooks.Dispatch(hf, cmdName, "after", vars)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "mb: after hook: %v\n", err)
+			fmt.Fprintf(os.Stderr, "laps: after hook: %v\n", err)
 		}
 		if passback != "" {
 			fmt.Print(passback)

@@ -29,7 +29,7 @@ type File struct {
 
 // Load reads the hooks file from beadsDir. Returns an empty File if the file does not exist.
 func Load(beadsDir string) (*File, error) {
-	path := filepath.Join(beadsDir, "mb-hooks.json")
+	path := filepath.Join(beadsDir, "laps-hooks.json")
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-REPO="mitchell-wallace/microbeads"
+REPO="mitchell-wallace/laps"
 INSTALL_DIR="$HOME/.local/bin"
 
 # Detect OS
@@ -40,11 +40,11 @@ curl -fsSL "$DOWNLOAD_URL" -o "/tmp/${ASSET}"
 mkdir -p "$INSTALL_DIR"
 
 # Extract binary
-tar -xzf "/tmp/${ASSET}" -C "$INSTALL_DIR" mb
-chmod +x "$INSTALL_DIR/mb"
+tar -xzf "/tmp/${ASSET}" -C "$INSTALL_DIR" laps
+chmod +x "$INSTALL_DIR/laps"
 rm -f "/tmp/${ASSET}"
 
-echo "Installed mb to ${INSTALL_DIR}/mb"
+echo "Installed laps to ${INSTALL_DIR}/laps"
 
 # Update PATH in shell configs if missing
 add_to_path() {

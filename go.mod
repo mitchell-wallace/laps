@@ -1,4 +1,4 @@
-module github.com/mitchell-wallace/microbeads
+module github.com/mitchell-wallace/laps
 
 go 1.26.1
 

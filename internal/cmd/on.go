@@ -1,15 +1,15 @@
 package cmd
 
 import (
-	"github.com/mitchell-wallace/microbeads/internal/instructions"
-	"github.com/mitchell-wallace/microbeads/internal/store"
+	"github.com/mitchell-wallace/laps/internal/instructions"
+	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
 
 var onCmd = &cobra.Command{
 	Use:   "on",
-	Short: "Add mb instructions to AGENTS.md (and CLAUDE.md/GEMINI.md if they exist)",
-	Long: `Add the <mb-instructions> block to AGENTS.md, creating it if absent.
+	Short: "Add laps instructions to AGENTS.md (and CLAUDE.md/GEMINI.md if they exist)",
+	Long: `Add the <laps-instructions> block to AGENTS.md, creating it if absent.
 
 Also updates CLAUDE.md and GEMINI.md if they already exist.
 Idempotent — safe to run multiple times.`,

@@ -14,7 +14,7 @@ The most natural extension. Rally already lives here — just lean in fully.
 |------|---------|----------|----------|
 | Sandbox manager | dune | **track** | The surface/venue — you lay down a track before anyone runs |
 | Orchestrator | rally | rally (keep) | The athletic meet/event |
-| Task tracker | microbeads | **laps** (`lp`) | Circuits completed around the track |
+| Task tracker | laps | **laps** (`lp`) | Circuits completed around the track |
 
 **Rally primitives — no changes needed:**
 - runners → athletes doing the work
@@ -60,7 +60,7 @@ Rally IS a motorsport term. Lean into that — specifically endurance racing (Le
 |------|---------|----------|----------|
 | Sandbox manager | dune | **garage** (`gr`) | Where you build/maintain the vehicle (environment) |
 | Orchestrator | rally | rally (keep) | The race event — rally is literally motorsport |
-| Task tracker | microbeads | **laps** (`lp`) | Circuits of the course |
+| Task tracker | laps | **laps** (`lp`) | Circuits of the course |
 
 **Bonus:** The **Dakar Rally** is literally a rally through sand dunes. So `dune` already accidentally fits this theme if you squint — dune is the terrain, rally is the race through it.
 
@@ -107,7 +107,7 @@ Rally as a "rally point" — a place where the group gathers before heading out.
 |------|---------|----------|----------|
 | Sandbox manager | dune | **camp** | Base camp — where you prepare and stage |
 | Orchestrator | rally | rally (keep) | Rally point — gathering and coordination |
-| Task tracker | microbeads | **blazes** (`bz`) or **cairns** (`cn`) | Trail markers left to guide the path |
+| Task tracker | laps | **blazes** (`bz`) or **cairns** (`cn`) | Trail markers left to guide the path |
 
 **Blazes** are paint marks on trees that mark a trail. **Cairns** are stacked-stone markers. Both are small, sequential, and guide progress through wilderness.
 
@@ -197,4 +197,4 @@ Intentionally heterogeneous. Each tool gets its best standalone name.
 **The key question is:** Do you value the "aha" of a unified metaphor enough to rename `dune` → `track`? If yes → Track & Field + laps. If no → keep dune + tacks.
 
 > [!TIP]
-> You don't have to decide on the sandbox rename now. You could rename microbeads → **laps** today (strong standalone AND thematically coherent) and decide on dune → track later. Laps works in both scenarios.
+> You don't have to decide on the sandbox rename now. You could rename laps → **laps** today (strong standalone AND thematically coherent) and decide on dune → track later. Laps works in both scenarios.

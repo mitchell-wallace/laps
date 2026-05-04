@@ -17,7 +17,7 @@ func setupTempRepo(t *testing.T) (beadsDir string, cleanup func()) {
 	if err := os.MkdirAll(gitDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	beadsDir = filepath.Join(root, ".beads")
+	beadsDir = filepath.Join(root, ".laps")
 	if err := os.MkdirAll(beadsDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 
 func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	oldArgs := os.Args
-	os.Args = append([]string{"mb"}, args...)
+	os.Args = append([]string{"laps"}, args...)
 	defer func() { os.Args = oldArgs }()
 
 	oldOut := os.Stdout
@@ -207,7 +207,7 @@ func TestAddWithAssignee(t *testing.T) {
 	}
 	id := strings.TrimSpace(out)
 
-	data, err := os.ReadFile(filepath.Join(beadsDir, "mb.json"))
+	data, err := os.ReadFile(filepath.Join(beadsDir, "laps.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -513,7 +513,7 @@ func TestHookBeforeAbort(t *testing.T) {
 	defer cleanup()
 
 	hooks := `{"version":1,"hooks":[{"title":"abort","command":"get","when":"before","run":"exit 1","passback":false}]}`
-	os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644)
+	os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644)
 
 	_, errStr, code := runMB("get")
 	if code != 4 {
@@ -529,7 +529,7 @@ func TestHookAfterRunsOnFailure(t *testing.T) {
 	defer cleanup()
 
 	hooks := `{"version":1,"hooks":[{"title":"after","command":"get","when":"after","run":"echo after","passback":true}]}`
-	os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644)
+	os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644)
 
 	out, _, code := runMB("get")
 	if code != 3 {
@@ -546,7 +546,7 @@ func TestHookPassback(t *testing.T) {
 
 	runMB("add", "head", "--title", "A")
 	hooks := `{"version":1,"hooks":[{"title":"pass","command":"done","when":"after","run":"echo passback","passback":true}]}`
-	os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644)
+	os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644)
 
 	out, _, code := runMB("done")
 	if code != 0 {
@@ -574,8 +574,8 @@ func TestAddCreatesMbJSONDespiteOtherJSON(t *testing.T) {
 		t.Fatal("expected id output")
 	}
 
-	if _, err := os.Stat(filepath.Join(beadsDir, "mb.json")); err != nil {
-		t.Fatalf("mb.json was not created: %v", err)
+	if _, err := os.Stat(filepath.Join(beadsDir, "laps.json")); err != nil {
+		t.Fatalf("laps.json was not created: %v", err)
 	}
 }
 
@@ -583,7 +583,7 @@ func TestAddRejectsNonMbJSON(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
 
-	otherPath := filepath.Join(".beads", "other.json")
+	otherPath := filepath.Join(".laps", "other.json")
 	if err := os.WriteFile(otherPath, []byte(`{"foo":"bar"}`), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -592,8 +592,8 @@ func TestAddRejectsNonMbJSON(t *testing.T) {
 	if code != 2 {
 		t.Fatalf("expected code 2, got %d, stderr: %s", code, errStr)
 	}
-	if !strings.Contains(errStr, "not a valid mb task file") {
-		t.Fatalf("expected invalid mb task file error, got: %s", errStr)
+	if !strings.Contains(errStr, "not a valid laps task file") {
+		t.Fatalf("expected invalid laps task file error, got: %s", errStr)
 	}
 }
 
@@ -601,14 +601,14 @@ func TestAddWorksWhenEmptyMbJSONExistsWithOtherJSON(t *testing.T) {
 	beadsDir, cleanup := setupTempRepo(t)
 	defer cleanup()
 
-	if err := os.WriteFile(filepath.Join(beadsDir, "mb.json"), []byte(`{"version":1,"tasks":[]}`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(beadsDir, "laps.json"), []byte(`{"version":1,"tasks":[]}`), 0644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(beadsDir, "other.json"), []byte(`{"version":1,"tasks":[]}`), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	out, errStr, code := runMB("add", "head", "--title", "Task with empty existing mb")
+	out, errStr, code := runMB("add", "head", "--title", "Task with empty existing laps")
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
 	}
@@ -624,7 +624,7 @@ func TestHookAssigneeVariable(t *testing.T) {
 
 	runMB("add", "head", "--title", "A", "--assignee", "alice")
 	hooks := `{"version":1,"hooks":[{"title":"assignee","command":"get","when":"after","run":"echo $assignee","passback":true}]}`
-	os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644)
+	os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644)
 
 	out, _, code := runMB("get")
 	if code != 0 {
@@ -642,7 +642,7 @@ func TestHookArgsPassthrough(t *testing.T) {
 	out, _, _ := runMB("add", "head", "--title", "A")
 	id := strings.TrimSpace(out)
 	hooks := `{"version":1,"hooks":[{"title":"args","command":"get","when":"after","run":"echo $args $1 $2 $3","passback":true}]}`
-	os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644)
+	os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644)
 
 	out, _, code := runMB("get", id, "extra1", "extra2")
 	if code != 0 {
@@ -659,7 +659,7 @@ func TestHookOnlyCommandArgsPassthrough(t *testing.T) {
 	defer cleanup()
 
 	hooks := `{"version":1,"hooks":[{"title":"args","command":"worktree","when":"before","run":"echo $command $args $1 $2","passback":true}]}`
-	if err := os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -743,8 +743,8 @@ func TestUpdateRunsHooksInRepo(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
 
-	hooks := `{"version":1,"hooks":[{"title":"before-update","command":"update","when":"before","run":"printf before > .beads/update-hook.txt"},{"title":"after-update","command":"update","when":"after","run":"printf after >> .beads/update-hook.txt"}]}`
-	if err := os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644); err != nil {
+	hooks := `{"version":1,"hooks":[{"title":"before-update","command":"update","when":"before","run":"printf before > .laps/update-hook.txt"},{"title":"after-update","command":"update","when":"after","run":"printf after >> .laps/update-hook.txt"}]}`
+	if err := os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -757,7 +757,7 @@ func TestUpdateRunsHooksInRepo(t *testing.T) {
 		t.Fatalf("expected dev output, got: %s", out)
 	}
 
-	data, err := os.ReadFile(filepath.Join(".beads", "update-hook.txt"))
+	data, err := os.ReadFile(filepath.Join(".laps", "update-hook.txt"))
 	if err != nil {
 		t.Fatalf("expected update hook output file: %v", err)
 	}
@@ -778,7 +778,7 @@ func TestUpdateYesInstallsWithoutPrompt(t *testing.T) {
 	}()
 
 	fetchLatestVersionFunc = func() (string, error) {
-		return "0.3.2", nil
+		return "0.4.1", nil
 	}
 
 	installed := false
@@ -787,7 +787,7 @@ func TestUpdateYesInstallsWithoutPrompt(t *testing.T) {
 		return nil
 	}
 
-	version = "0.3.1"
+	version = "0.4.0"
 	out, errStr, code := runMB("update", "--yes")
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
@@ -798,7 +798,7 @@ func TestUpdateYesInstallsWithoutPrompt(t *testing.T) {
 	if strings.Contains(out, "Update to latest version?") {
 		t.Fatalf("expected no prompt with --yes, got: %s", out)
 	}
-	if !strings.Contains(out, "Latest version:  0.3.2") {
+	if !strings.Contains(out, "Latest version:  0.4.1") {
 		t.Fatalf("expected latest version in output, got: %s", out)
 	}
 }

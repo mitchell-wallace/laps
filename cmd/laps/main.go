@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mitchell-wallace/microbeads/internal/cmd"
+	"github.com/mitchell-wallace/laps/internal/cmd"
 )
 
 var version = "dev"

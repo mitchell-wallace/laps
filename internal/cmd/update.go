@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const githubAPI = "https://api.github.com/repos/mitchell-wallace/microbeads/releases/latest"
+const githubAPI = "https://api.github.com/repos/mitchell-wallace/laps/releases/latest"
 
 var (
 	updateYes              bool
@@ -26,7 +26,7 @@ var (
 var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Check for a newer version and optionally update",
-	Long: `Check the GitHub releases page for a newer version of mb.
+	Long: `Check the GitHub releases page for a newer version of laps.
 
 Prints the current and latest versions. If a newer version is available,
 prompts for confirmation before running the install script unless --yes is set.`,
@@ -126,9 +126,9 @@ func installLatestVersion() error {
 	var installCmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		installCmd = exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://raw.githubusercontent.com/mitchell-wallace/microbeads/main/install.ps1 | iex")
+		installCmd = exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://raw.githubusercontent.com/mitchell-wallace/laps/main/install.ps1 | iex")
 	default:
-		installCmd = exec.Command("sh", "-c", "curl -fsSL https://raw.githubusercontent.com/mitchell-wallace/microbeads/main/install.sh | bash")
+		installCmd = exec.Command("sh", "-c", "curl -fsSL https://raw.githubusercontent.com/mitchell-wallace/laps/main/install.sh | bash")
 	}
 	installCmd.Stdout = os.Stdout
 	installCmd.Stderr = os.Stderr

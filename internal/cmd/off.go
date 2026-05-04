@@ -1,15 +1,15 @@
 package cmd
 
 import (
-	"github.com/mitchell-wallace/microbeads/internal/instructions"
-	"github.com/mitchell-wallace/microbeads/internal/store"
+	"github.com/mitchell-wallace/laps/internal/instructions"
+	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
 
 var offCmd = &cobra.Command{
 	Use:   "off",
-	Short: "Remove mb instructions from AGENTS.md, CLAUDE.md, and GEMINI.md",
-	Long:  `Remove the <mb-instructions> block from AGENTS.md, CLAUDE.md, and GEMINI.md. Leaves the rest of each file untouched.`,
+	Short: "Remove laps instructions from AGENTS.md, CLAUDE.md, and GEMINI.md",
+	Long:  `Remove the <laps-instructions> block from AGENTS.md, CLAUDE.md, and GEMINI.md. Leaves the rest of each file untouched.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		path, _, beadsDir := getStorePath()
 		exitCode := 0

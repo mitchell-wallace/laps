@@ -23,7 +23,7 @@ var ErrEmptyState = errors.New("empty state")
 // ErrEmptyFile indicates the file does not exist or is empty.
 var ErrEmptyFile = errors.New("empty file")
 
-const defaultFileName = "mb.json"
+const defaultFileName = "laps.json"
 
 // Task represents a single task record.
 type Task struct {
@@ -44,8 +44,8 @@ type File struct {
 }
 
 // DiscoverRepoRoot walks up from the current working directory looking for a
-// .beads/ directory. If a .git directory is encountered first, the walk stops
-// and .beads/ is created next to .git. If neither is found up to the
+// .laps/ directory. If a .git directory is encountered first, the walk stops
+// and .laps/ is created next to .git. If neither is found up to the
 // filesystem root, an error is returned.
 func DiscoverRepoRoot() (repoRoot string, beadsDir string, err error) {
 	dir, err := os.Getwd()
@@ -54,7 +54,7 @@ func DiscoverRepoRoot() (repoRoot string, beadsDir string, err error) {
 	}
 
 	for {
-		beadsPath := filepath.Join(dir, ".beads")
+		beadsPath := filepath.Join(dir, ".laps")
 		if info, err := os.Stat(beadsPath); err == nil && info.IsDir() {
 			return dir, beadsPath, nil
 		}
@@ -62,7 +62,7 @@ func DiscoverRepoRoot() (repoRoot string, beadsDir string, err error) {
 		gitPath := filepath.Join(dir, ".git")
 		if _, err := os.Stat(gitPath); err == nil {
 			if mkErr := os.MkdirAll(beadsPath, 0755); mkErr != nil {
-				return "", "", fmt.Errorf("%w: create .beads directory: %v", ErrStore, mkErr)
+				return "", "", fmt.Errorf("%w: create .laps directory: %v", ErrStore, mkErr)
 			}
 			return dir, beadsPath, nil
 		}
@@ -74,11 +74,11 @@ func DiscoverRepoRoot() (repoRoot string, beadsDir string, err error) {
 		dir = parent
 	}
 
-	return "", "", fmt.Errorf("%w: no .git or .beads directory found in any ancestor", ErrStore)
+	return "", "", fmt.Errorf("%w: no .git or .laps directory found in any ancestor", ErrStore)
 }
 
 // ResolveFile normalises a user-provided task file name.
-// An empty string resolves to the default "mb.json". The .json suffix is
+// An empty string resolves to the default "laps.json". The .json suffix is
 // appended only when not already present.
 func ResolveFile(f string) string {
 	if f == "" {
@@ -114,14 +114,14 @@ func Load(path string) (*File, error) {
 		Tasks   []Task `json:"tasks"`
 	}
 	if err := dec.Decode(&raw); err != nil {
-		return nil, fmt.Errorf("%w: file %s exists but is not a valid mb task file: %v", ErrStore, path, err)
+		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file: %v", ErrStore, path, err)
 	}
 
 	if raw.Version == nil {
-		return nil, fmt.Errorf("%w: file %s exists but is not a valid mb task file (missing version)", ErrStore, path)
+		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file (missing version)", ErrStore, path)
 	}
 	if raw.Tasks == nil {
-		return nil, fmt.Errorf("%w: file %s exists but is not a valid mb task file (missing tasks)", ErrStore, path)
+		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file (missing tasks)", ErrStore, path)
 	}
 
 	return &File{Version: *raw.Version, Tasks: raw.Tasks}, nil
@@ -147,8 +147,8 @@ func Save(path string, data *File) error {
 	return nil
 }
 
-// CheckDefaultStore verifies that mb.json is a valid mb task file if it exists.
-// A missing or empty mb.json is allowed (it will be initialised on demand).
+// CheckDefaultStore verifies that laps.json is a valid laps task file if it exists.
+// A missing or empty laps.json is allowed (it will be initialised on demand).
 func CheckDefaultStore(beadsDir string) error {
 	path := filepath.Join(beadsDir, defaultFileName)
 	_, err := Load(path)

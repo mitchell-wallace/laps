@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mitchell-wallace/microbeads/internal/store"
+	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
 

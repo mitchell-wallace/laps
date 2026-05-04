@@ -1,4 +1,4 @@
-# Microbeads
+# Laps
 
 A minimal, single-binary task tracker for AI coding agents.
 
@@ -6,27 +6,27 @@ A minimal, single-binary task tracker for AI coding agents.
 
 ```bash
 # Install (Linux/macOS)
-curl -sSL https://raw.githubusercontent.com/mitchell-wallace/microbeads/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/mitchell-wallace/laps/main/install.sh | bash
 
 # Enable agent instructions
-mb on
+laps on
 
 # Add your first task
-mb add head --title "Implement login endpoint"
+laps add head --title "Implement login endpoint"
 
 # Read the next task (head)
-mb get
+laps get
 
 # Mark it done when finished
-mb done
+laps done
 
 # See what's in the queue
-mb list
+laps list
 ```
 
 ## Command Reference
 
-### `mb add <head|tail|after> [id]`
+### `laps add <head|tail|after> [id]`
 Add a task to the queue.
 
 - `head` — insert at the front of the queue.
@@ -41,49 +41,49 @@ Flags:
 
 Prints the new task's id on success.
 
-### `mb get [head|<id>]`
+### `laps get [head|<id>]`
 Get a task by id, or read the head task if no argument is given.
 
 Output is title, optional assignee, blank line, description.
 
-### `mb list [--all | --done]`
+### `laps list [--all | --done]`
 List tasks as a markdown numbered list.
 
 - Default: todo tasks only, head first.
 - `--all` — include done tasks after todo items (struck through).
 - `--done` — show only completed tasks, most recent first.
 
-### `mb done`
+### `laps done`
 Complete the head task. Sets it to done and prints the task id.
 
 If there is no head task, exits non-zero with `no head task`.
 
-### `mb delete <id>`
+### `laps delete <id>`
 Delete a task by id, regardless of whether it is todo or done.
 
-### `mb prune [N]`
+### `laps prune [N]`
 Remove old done tasks, keeping the `N` most recent. Default `N` is 20.
-`mb prune 0` removes all done tasks. Todo tasks are never touched.
+`laps prune 0` removes all done tasks. Todo tasks are never touched.
 
 Prints the number of tasks removed.
 
-### `mb on`
-Add the `<mb-instructions>` block to `AGENTS.md` (creating it if absent).
+### `laps on`
+Add the `<laps-instructions>` block to `AGENTS.md` (creating it if absent).
 Also updates `CLAUDE.md` and `GEMINI.md` if they already exist. Idempotent.
 
-### `mb off`
-Remove the `<mb-instructions>` block from `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md`.
+### `laps off`
+Remove the `<laps-instructions>` block from `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md`.
 
-### `mb update`
-Check the Microbeads GitHub repository for a newer version.
+### `laps update`
+Check the Laps GitHub repository for a newer version.
 
 Prints the current and latest versions. If a newer release exists, prompts for
 Y/n confirmation before downloading and installing it via the official install
-script. Use `mb update --yes` to install non-interactively.
+script. Use `laps update --yes` to install non-interactively.
 
 ## Hooks
 
-Microbeads can run custom shell commands before or after any mb command via `.beads/mb-hooks.json`.
+Laps can run custom shell commands before or after any laps command via `.laps/laps-hooks.json`.
 
 ### Hook fields
 
@@ -91,10 +91,10 @@ Microbeads can run custom shell commands before or after any mb command via `.be
 |-------|-------------|
 | `title` | Human-readable name for the hook. |
 | `description` | What the hook does. |
-| `command` | The mb command that triggers this hook (e.g. `done`, `add`). Can also be a custom name for hook-only commands. |
+| `command` | The laps command that triggers this hook (e.g. `done`, `add`). Can also be a custom name for hook-only commands. |
 | `when` | `before` or `after`. |
 | `run` | Shell command to execute. |
-| `passback` | If `true`, the hook's stdout is printed after mb's output. |
+| `passback` | If `true`, the hook's stdout is printed after laps's output. |
 
 ### Variables
 
@@ -102,20 +102,20 @@ Use `$var` or `${var}` in `run`:
 
 - `$id`, `$title`, `$description` — the relevant task (empty for commands like `list`, `prune`).
 - `$assignee` — the relevant task's assignee, or empty when none is set.
-- `$command` — the mb command name.
-- `$exit_code` — mb's exit code (`after` hooks only).
-- `$output` — mb's stdout (`after` hooks only).
+- `$command` — the laps command name.
+- `$exit_code` — laps's exit code (`after` hooks only).
+- `$output` — laps's stdout (`after` hooks only).
 - `$file` — the resolved task file path.
 
 ### Hook-only commands
 
-If `command` does not match a built-in mb command (e.g. `worktree`), you can invoke it directly:
+If `command` does not match a built-in laps command (e.g. `worktree`), you can invoke it directly:
 
 ```bash
-mb worktree
+laps worktree
 ```
 
-mb will fire every matching `before` and `after` hook and nothing else.
+laps will fire every matching `before` and `after` hook and nothing else.
 
 ### Reserved command names
 
@@ -128,9 +128,9 @@ Other names that may conflict with future features in a task-tracking CLI includ
 
 > **Tip:** When in doubt, prefix your hook-only commands with a project-specific namespace (e.g. `myproject-deploy`) to avoid future collisions.
 
-### Example `.beads/mb-hooks.json`
+### Example `.laps/laps-hooks.json`
 
-See [`examples/mb-hooks.json`](examples/mb-hooks.json) for a working auto-commit example.
+See [`examples/laps-hooks.json`](examples/laps-hooks.json) for a working auto-commit example.
 
 ```json
 {

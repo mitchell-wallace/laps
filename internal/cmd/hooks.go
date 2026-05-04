@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mitchell-wallace/microbeads/internal/hooks"
-	"github.com/mitchell-wallace/microbeads/internal/store"
+	"github.com/mitchell-wallace/laps/internal/hooks"
+	"github.com/mitchell-wallace/laps/internal/store"
 )
 
 func runBeforeHooks(cmdName string, beadsDir string, path string, task *store.Task, args []string) {
@@ -39,7 +39,7 @@ func runAfterHooksDeferred(cmdName string, beadsDir string, path string, task **
 		vars := buildHookVars(t, path, cmdName, fmt.Sprintf("%d", *exitCode), *output, args)
 		passback, err := hooks.Dispatch(hf, cmdName, "after", vars)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "mb: after hook: %v\n", err)
+			fmt.Fprintf(os.Stderr, "laps: after hook: %v\n", err)
 		}
 		if passback != "" {
 			fmt.Print(passback)

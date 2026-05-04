@@ -11,7 +11,7 @@ import (
 
 func TestDiscoverRepoRoot_BeadsExists(t *testing.T) {
 	root := t.TempDir()
-	beadsDir := filepath.Join(root, ".beads")
+	beadsDir := filepath.Join(root, ".laps")
 	if err := os.MkdirAll(beadsDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -45,9 +45,9 @@ func TestDiscoverRepoRoot_CreateBeadsNextToGit(t *testing.T) {
 	}
 	t.Chdir(sub)
 
-	beadsDir := filepath.Join(root, ".beads")
+	beadsDir := filepath.Join(root, ".laps")
 	if _, err := os.Stat(beadsDir); !os.IsNotExist(err) {
-		t.Fatal(".beads should not exist before discovery")
+		t.Fatal(".laps should not exist before discovery")
 	}
 
 	gotRoot, gotBeads, err := DiscoverRepoRoot()
@@ -62,17 +62,17 @@ func TestDiscoverRepoRoot_CreateBeadsNextToGit(t *testing.T) {
 	}
 	info, err := os.Stat(beadsDir)
 	if err != nil {
-		t.Fatalf(".beads was not created: %v", err)
+		t.Fatalf(".laps was not created: %v", err)
 	}
 	if !info.IsDir() {
-		t.Fatal(".beads is not a directory")
+		t.Fatal(".laps is not a directory")
 	}
 }
 
 func TestDiscoverRepoRoot_NoGitNoBeads(t *testing.T) {
 	root := t.TempDir()
-	if hasAncestorMarker(root, ".git") || hasAncestorMarker(root, ".beads") {
-		t.Skip("temp dir ancestors contain .git or .beads; cannot assert no-repo discovery case")
+	if hasAncestorMarker(root, ".git") || hasAncestorMarker(root, ".laps") {
+		t.Skip("temp dir ancestors contain .git or .laps; cannot assert no-repo discovery case")
 	}
 	sub := filepath.Join(root, "a", "b")
 	if err := os.MkdirAll(sub, 0755); err != nil {
@@ -105,7 +105,7 @@ func hasAncestorMarker(dir, name string) bool {
 
 func TestDiscoverRepoRoot_StopAtGit(t *testing.T) {
 	parent := t.TempDir()
-	parentBeads := filepath.Join(parent, ".beads")
+	parentBeads := filepath.Join(parent, ".laps")
 	if err := os.MkdirAll(parentBeads, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestDiscoverRepoRoot_StopAtGit(t *testing.T) {
 	if gotRoot != child {
 		t.Errorf("repoRoot = %q, want %q", gotRoot, child)
 	}
-	expectedBeads := filepath.Join(child, ".beads")
+	expectedBeads := filepath.Join(child, ".laps")
 	if gotBeads != expectedBeads {
 		t.Errorf("beadsDir = %q, want %q", gotBeads, expectedBeads)
 	}
@@ -139,7 +139,7 @@ func TestResolveFile(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"", "mb.json"},
+		{"", "laps.json"},
 		{"tasks", "tasks.json"},
 		{"tasks.json", "tasks.json"},
 		{"my-tasks", "my-tasks.json"},
@@ -278,7 +278,7 @@ func TestGenerateID_CollisionExtension(t *testing.T) {
 
 func TestCheckDefaultStore_MissingWithCandidates(t *testing.T) {
 	dir := t.TempDir()
-	beadsDir := filepath.Join(dir, ".beads")
+	beadsDir := filepath.Join(dir, ".laps")
 	if err := os.MkdirAll(beadsDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -293,11 +293,11 @@ func TestCheckDefaultStore_MissingWithCandidates(t *testing.T) {
 
 func TestCheckDefaultStore_EmptyWithCandidates(t *testing.T) {
 	dir := t.TempDir()
-	beadsDir := filepath.Join(dir, ".beads")
+	beadsDir := filepath.Join(dir, ".laps")
 	if err := os.MkdirAll(beadsDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(beadsDir, "mb.json"), []byte(`{"version":1,"tasks":[]}`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(beadsDir, "laps.json"), []byte(`{"version":1,"tasks":[]}`), 0644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(beadsDir, "other.json"), []byte(`{"version":1,"tasks":[]}`), 0644); err != nil {
@@ -341,7 +341,7 @@ func TestLoad_RejectMissingTasks(t *testing.T) {
 
 func TestLoad_AcceptsValidEmptyFile(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "mb.json")
+	path := filepath.Join(dir, "laps.json")
 	if err := os.WriteFile(path, []byte(`{"version":1,"tasks":[]}`), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +359,7 @@ func TestLoad_AcceptsValidEmptyFile(t *testing.T) {
 
 func TestLoad_EmptyBraces(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "mb.json")
+	path := filepath.Join(dir, "laps.json")
 	if err := os.WriteFile(path, []byte(`{}`), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +371,7 @@ func TestLoad_EmptyBraces(t *testing.T) {
 
 func TestLoad_RejectExtraTopLevelField(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "mb.json")
+	path := filepath.Join(dir, "laps.json")
 	if err := os.WriteFile(path, []byte(`{"version":1,"tasks":[],"extra":"foo"}`), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -386,7 +386,7 @@ func TestLoad_RejectExtraTopLevelField(t *testing.T) {
 
 func TestLoad_RejectExtraTaskField(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "mb.json")
+	path := filepath.Join(dir, "laps.json")
 	data := `{"version":1,"tasks":[{"id":"x","title":"y","isDone":false,"createdAt":"2026-04-28T10:15:00Z","updatedAt":"2026-04-28T10:15:00Z","extra":"foo"}]}`
 	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
 		t.Fatal(err)
@@ -402,7 +402,7 @@ func TestLoad_RejectExtraTaskField(t *testing.T) {
 
 func TestLoad_RejectInvalidTaskStructure(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "mb.json")
+	path := filepath.Join(dir, "laps.json")
 	if err := os.WriteFile(path, []byte(`{"version":1,"tasks":"not-an-array"}`), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -414,12 +414,12 @@ func TestLoad_RejectInvalidTaskStructure(t *testing.T) {
 
 func TestCheckDefaultStore_OK(t *testing.T) {
 	dir := t.TempDir()
-	beadsDir := filepath.Join(dir, ".beads")
+	beadsDir := filepath.Join(dir, ".laps")
 	if err := os.MkdirAll(beadsDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 	data := `{"version":1,"tasks":[{"id":"x","title":"y","isDone":false,"createdAt":"2026-04-28T10:15:00Z","updatedAt":"2026-04-28T10:15:00Z"}]}`
-	if err := os.WriteFile(filepath.Join(beadsDir, "mb.json"), []byte(data), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(beadsDir, "laps.json"), []byte(data), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -430,7 +430,7 @@ func TestCheckDefaultStore_OK(t *testing.T) {
 
 func TestCheckDefaultStore_MissingNoCandidates(t *testing.T) {
 	dir := t.TempDir()
-	beadsDir := filepath.Join(dir, ".beads")
+	beadsDir := filepath.Join(dir, ".laps")
 	if err := os.MkdirAll(beadsDir, 0755); err != nil {
 		t.Fatal(err)
 	}

@@ -7,22 +7,22 @@ import (
 	"strings"
 )
 
-const blockStart = "<mb-instructions>"
-const blockEnd = "</mb-instructions>"
+const blockStart = "<laps-instructions>"
+const blockEnd = "</laps-instructions>"
 
-const blockContent = `<mb-instructions>
-This project uses microbeads (` + "`mb`" + `), a minimal task tracker.
-- ` + "`mb get head`" + ` — read the next task. Title and description only.
-- ` + "`mb list`" + ` — see the queue.
-- ` + "`mb done`" + ` — when you finish the head task. You MUST run this; do not skip.
-- ` + "`mb add head|tail|after <id> --title ...`" + ` — add a task. Use ` + "`head`" + ` if it must be done before the current head; otherwise ` + "`tail`" + `.
+const blockContent = `<laps-instructions>
+This project uses laps (` + "`laps`" + `), a minimal task tracker.
+- ` + "`laps get head`" + ` — read the next task. Title and description only.
+- ` + "`laps list`" + ` — see the queue.
+- ` + "`laps done`" + ` — when you finish the head task. You MUST run this; do not skip.
+- ` + "`laps add head|tail|after <id> --title ...`" + ` — add a task. Use ` + "`head`" + ` if it must be done before the current head; otherwise ` + "`tail`" + `.
 - If you hit a blocker that prevents finishing the head task this session, add the unblock work to ` + "`head`" + ` and stop.
-- Commit after each ` + "`mb done`" + ` unless the user said otherwise.
-</mb-instructions>`
+- Commit after each ` + "`laps done`" + ` unless the user said otherwise.
+</laps-instructions>`
 
 var targetFiles = []string{"AGENTS.md", "CLAUDE.md", "GEMINI.md"}
 
-// Enable writes the mb-instructions block to AGENTS.md (creating if absent),
+// Enable writes the laps-instructions block to AGENTS.md (creating if absent),
 // and to CLAUDE.md / GEMINI.md only if they already exist.
 func Enable() error {
 	for _, name := range targetFiles {
@@ -37,7 +37,7 @@ func Enable() error {
 	return nil
 }
 
-// Disable removes the mb-instructions block from any target file that contains it.
+// Disable removes the laps-instructions block from any target file that contains it.
 func Disable() error {
 	for _, name := range targetFiles {
 		if !fileExists(name) {
