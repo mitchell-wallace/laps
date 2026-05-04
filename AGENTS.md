@@ -24,4 +24,4 @@ Tests use Go’s built-in `testing` package. Place tests alongside the code they
 Recent history uses short, imperative commit subjects, often with Conventional Commit prefixes such as `feat:` and `fix:`. Keep commits scoped to one change, for example: `fix: initialize missing laps.json file automatically`. Pull requests should explain the user-visible behavior change, note any data-file or hook implications, link the relevant issue when applicable, and include terminal output or screenshots when CLI output changes materially.
 
 ## Configuration & Safety Notes
-Laps writes task data under `.laps/` in the repository root. Use `examples/laps-hooks.json` as the reference when adding hooks, and avoid destructive hook commands unless they are clearly documented and tested.
+Laps writes task data under `.laps/` in the repository root. Use `examples/hooks.json` as the reference when adding hooks, and avoid destructive hook commands unless they are clearly documented and tested.

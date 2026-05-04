@@ -23,7 +23,7 @@ func TestLoadMissing(t *testing.T) {
 func TestLoadValid(t *testing.T) {
 	dir := t.TempDir()
 	data := `{"version":1,"hooks":[{"title":"Test","command":"done","when":"after","run":"echo hi","passback":true}]}`
-	os.WriteFile(filepath.Join(dir, "laps-hooks.json"), []byte(data), 0644)
+	os.WriteFile(filepath.Join(dir, "hooks.json"), []byte(data), 0644)
 	f, err := Load(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

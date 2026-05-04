@@ -513,7 +513,7 @@ func TestHookBeforeAbort(t *testing.T) {
 	defer cleanup()
 
 	hooks := `{"version":1,"hooks":[{"title":"abort","command":"get","when":"before","run":"exit 1","passback":false}]}`
-	os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644)
+	os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644)
 
 	_, errStr, code := runMB("get")
 	if code != 4 {
@@ -529,7 +529,7 @@ func TestHookAfterRunsOnFailure(t *testing.T) {
 	defer cleanup()
 
 	hooks := `{"version":1,"hooks":[{"title":"after","command":"get","when":"after","run":"echo after","passback":true}]}`
-	os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644)
+	os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644)
 
 	out, _, code := runMB("get")
 	if code != 3 {
@@ -546,7 +546,7 @@ func TestHookPassback(t *testing.T) {
 
 	runMB("add", "head", "--title", "A")
 	hooks := `{"version":1,"hooks":[{"title":"pass","command":"done","when":"after","run":"echo passback","passback":true}]}`
-	os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644)
+	os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644)
 
 	out, _, code := runMB("done")
 	if code != 0 {
@@ -624,7 +624,7 @@ func TestHookAssigneeVariable(t *testing.T) {
 
 	runMB("add", "head", "--title", "A", "--assignee", "alice")
 	hooks := `{"version":1,"hooks":[{"title":"assignee","command":"get","when":"after","run":"echo $assignee","passback":true}]}`
-	os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644)
+	os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644)
 
 	out, _, code := runMB("get")
 	if code != 0 {
@@ -642,7 +642,7 @@ func TestHookArgsPassthrough(t *testing.T) {
 	out, _, _ := runMB("add", "head", "--title", "A")
 	id := strings.TrimSpace(out)
 	hooks := `{"version":1,"hooks":[{"title":"args","command":"get","when":"after","run":"echo $args $1 $2 $3","passback":true}]}`
-	os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644)
+	os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644)
 
 	out, _, code := runMB("get", id, "extra1", "extra2")
 	if code != 0 {
@@ -659,7 +659,7 @@ func TestHookOnlyCommandArgsPassthrough(t *testing.T) {
 	defer cleanup()
 
 	hooks := `{"version":1,"hooks":[{"title":"args","command":"worktree","when":"before","run":"echo $command $args $1 $2","passback":true}]}`
-	if err := os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -744,7 +744,7 @@ func TestUpdateRunsHooksInRepo(t *testing.T) {
 	defer cleanup()
 
 	hooks := `{"version":1,"hooks":[{"title":"before-update","command":"update","when":"before","run":"printf before > .laps/update-hook.txt"},{"title":"after-update","command":"update","when":"after","run":"printf after >> .laps/update-hook.txt"}]}`
-	if err := os.WriteFile(filepath.Join(".laps", "laps-hooks.json"), []byte(hooks), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -778,7 +778,7 @@ func TestUpdateYesInstallsWithoutPrompt(t *testing.T) {
 	}()
 
 	fetchLatestVersionFunc = func() (string, error) {
-		return "0.4.1", nil
+		return "0.4.2", nil
 	}
 
 	installed := false
@@ -787,7 +787,7 @@ func TestUpdateYesInstallsWithoutPrompt(t *testing.T) {
 		return nil
 	}
 
-	version = "0.4.0"
+	version = "0.4.1"
 	out, errStr, code := runMB("update", "--yes")
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
@@ -798,7 +798,7 @@ func TestUpdateYesInstallsWithoutPrompt(t *testing.T) {
 	if strings.Contains(out, "Update to latest version?") {
 		t.Fatalf("expected no prompt with --yes, got: %s", out)
 	}
-	if !strings.Contains(out, "Latest version:  0.4.1") {
+	if !strings.Contains(out, "Latest version:  0.4.2") {
 		t.Fatalf("expected latest version in output, got: %s", out)
 	}
 }

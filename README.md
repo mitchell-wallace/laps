@@ -83,7 +83,7 @@ script. Use `laps update --yes` to install non-interactively.
 
 ## Hooks
 
-Laps can run custom shell commands before or after any laps command via `.laps/laps-hooks.json`.
+Laps can run custom shell commands before or after any laps command via `.laps/hooks.json`.
 
 ### Hook fields
 
@@ -128,9 +128,9 @@ Other names that may conflict with future features in a task-tracking CLI includ
 
 > **Tip:** When in doubt, prefix your hook-only commands with a project-specific namespace (e.g. `myproject-deploy`) to avoid future collisions.
 
-### Example `.laps/laps-hooks.json`
+### Example `.laps/hooks.json`
 
-See [`examples/laps-hooks.json`](examples/laps-hooks.json) for a working auto-commit example.
+See [`examples/hooks.json`](examples/hooks.json) for a working auto-commit example.
 
 ```json
 {
