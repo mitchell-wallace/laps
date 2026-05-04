@@ -42,10 +42,12 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	addDescription = ""
 	addAssignee = ""
 	addJSON = ""
+	updateYes = false
 	for _, f := range []*pflag.FlagSet{
 		rootCmd.PersistentFlags(),
 		addCmd.Flags(),
 		listCmd.Flags(),
+		updateCmd.Flags(),
 	} {
 		f.VisitAll(func(flag *pflag.Flag) {
 			flag.Changed = false
@@ -76,6 +78,55 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	m, _ := rErr.Read(errBuf)
 
 	return string(outBuf[:n]), string(errBuf[:m]), code
+}
+
+func runMBExecute(args ...string) (stdout string, stderr string, err error) {
+	oldArgs := os.Args
+	os.Args = append([]string{"mb"}, args...)
+	defer func() { os.Args = oldArgs }()
+
+	oldOut := os.Stdout
+	oldErr := os.Stderr
+	rOut, wOut, _ := os.Pipe()
+	rErr, wErr, _ := os.Pipe()
+	os.Stdout = wOut
+	os.Stderr = wErr
+	defer func() {
+		os.Stdout = oldOut
+		os.Stderr = oldErr
+	}()
+
+	rootCmd.SetArgs(args)
+	fileFlag = ""
+	listAll = false
+	listDone = false
+	addTitle = ""
+	addDescription = ""
+	addAssignee = ""
+	addJSON = ""
+	updateYes = false
+	for _, f := range []*pflag.FlagSet{
+		rootCmd.PersistentFlags(),
+		addCmd.Flags(),
+		listCmd.Flags(),
+		updateCmd.Flags(),
+	} {
+		f.VisitAll(func(flag *pflag.Flag) {
+			flag.Changed = false
+		})
+	}
+
+	err = Execute("test")
+
+	wOut.Close()
+	wErr.Close()
+
+	outBuf := make([]byte, 4096)
+	n, _ := rOut.Read(outBuf)
+	errBuf := make([]byte, 4096)
+	m, _ := rErr.Read(errBuf)
+
+	return string(outBuf[:n]), string(errBuf[:m]), err
 }
 
 func TestAddHead(t *testing.T) {
@@ -603,6 +654,24 @@ func TestHookArgsPassthrough(t *testing.T) {
 	}
 }
 
+func TestHookOnlyCommandArgsPassthrough(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	hooks := `{"version":1,"hooks":[{"title":"args","command":"worktree","when":"before","run":"echo $command $args $1 $2","passback":true}]}`
+	if err := os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errStr, err := runMBExecute("worktree", "feature", "*")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v, stderr: %s", err, errStr)
+	}
+	if !strings.Contains(out, "worktree feature * feature *") {
+		t.Fatalf("expected literal hook-only args in output, got: %s", out)
+	}
+}
+
 func TestGetAcceptsExtraArgs(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
@@ -670,10 +739,82 @@ func TestUpdateDevVersion(t *testing.T) {
 	}
 }
 
+func TestUpdateRunsHooksInRepo(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	hooks := `{"version":1,"hooks":[{"title":"before-update","command":"update","when":"before","run":"printf before > .beads/update-hook.txt"},{"title":"after-update","command":"update","when":"after","run":"printf after >> .beads/update-hook.txt"}]}`
+	if err := os.WriteFile(filepath.Join(".beads", "mb-hooks.json"), []byte(hooks), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	version = "dev"
+	out, errStr, code := runMB("update")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "Current version: dev") {
+		t.Fatalf("expected dev output, got: %s", out)
+	}
+
+	data, err := os.ReadFile(filepath.Join(".beads", "update-hook.txt"))
+	if err != nil {
+		t.Fatalf("expected update hook output file: %v", err)
+	}
+	if string(data) != "beforeafter" {
+		t.Fatalf("expected update hooks to run, got %q", string(data))
+	}
+}
+
+func TestUpdateYesInstallsWithoutPrompt(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	oldFetch := fetchLatestVersionFunc
+	oldInstall := installLatestVersionFn
+	defer func() {
+		fetchLatestVersionFunc = oldFetch
+		installLatestVersionFn = oldInstall
+	}()
+
+	fetchLatestVersionFunc = func() (string, error) {
+		return "0.3.2", nil
+	}
+
+	installed := false
+	installLatestVersionFn = func() error {
+		installed = true
+		return nil
+	}
+
+	version = "0.3.1"
+	out, errStr, code := runMB("update", "--yes")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if !installed {
+		t.Fatal("expected install to run")
+	}
+	if strings.Contains(out, "Update to latest version?") {
+		t.Fatalf("expected no prompt with --yes, got: %s", out)
+	}
+	if !strings.Contains(out, "Latest version:  0.3.2") {
+		t.Fatalf("expected latest version in output, got: %s", out)
+	}
+}
+
+func TestShellQuoteArgs(t *testing.T) {
+	got := shellQuoteArgs([]string{"plain", "*", "", "two words", "quote's"})
+	want := "plain '*' '' 'two words' 'quote'\\''s'"
+	if got != want {
+		t.Fatalf("shellQuoteArgs() = %q, want %q", got, want)
+	}
+}
+
 func TestCompareVersions(t *testing.T) {
 	tests := []struct {
-		a, b   string
-		want   int
+		a, b    string
+		want    int
 		wantErr bool
 	}{
 		{"0.2.0", "0.3.0", -1, false},

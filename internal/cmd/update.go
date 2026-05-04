@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -16,59 +17,80 @@ import (
 
 const githubAPI = "https://api.github.com/repos/mitchell-wallace/microbeads/releases/latest"
 
+var (
+	updateYes              bool
+	fetchLatestVersionFunc = fetchLatestVersion
+	installLatestVersionFn = installLatestVersion
+)
+
 var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Check for a newer version and optionally update",
 	Long: `Check the GitHub releases page for a newer version of mb.
 
 Prints the current and latest versions. If a newer version is available,
-prompts for confirmation before running the install script.`,
+prompts for confirmation before running the install script unless --yes is set.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		exitCode := 0
+		var output string
+		if path, beadsDir, ok := getOptionalHookContext(); ok {
+			defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, nil, &output, &exitCode, args)()
+			runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
+		}
+
 		if version == "" || version == "dev" {
-			fmt.Println("Current version: dev (cannot check for updates)")
+			output = "Current version: dev (cannot check for updates)"
+			fmt.Println(output)
 			return
 		}
 
-		latest, err := fetchLatestVersion()
+		latest, err := fetchLatestVersionFunc()
 		if err != nil {
+			exitCode = 2
 			exit(2, "update: %v", err)
 		}
 
-		fmt.Printf("Current version: %s\n", version)
-		fmt.Printf("Latest version:  %s\n", latest)
+		output = fmt.Sprintf("Current version: %s\nLatest version:  %s", version, latest)
+		fmt.Printf("%s\n", output)
 
 		cmp, err := compareVersions(version, latest)
 		if err != nil {
+			exitCode = 2
 			exit(2, "update: %v", err)
 		}
 
 		if cmp >= 0 {
+			output += "\nYou are up to date."
 			fmt.Println("You are up to date.")
 			return
 		}
 
-		fmt.Print("Update to latest version? [Y/n] ")
-		reader := bufio.NewReader(os.Stdin)
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			exit(2, "update: read confirmation: %v", err)
-		}
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "" && response != "y" && response != "yes" {
-			fmt.Println("Update cancelled.")
-			return
+		if !updateYes {
+			fmt.Print("Update to latest version? [Y/n] ")
+			reader := bufio.NewReader(os.Stdin)
+			response, err := reader.ReadString('\n')
+			if err != nil {
+				exitCode = 2
+				exit(2, "update: read confirmation: %v", err)
+			}
+			response = strings.TrimSpace(strings.ToLower(response))
+			if response != "" && response != "y" && response != "yes" {
+				output += "\nUpdate cancelled."
+				fmt.Println("Update cancelled.")
+				return
+			}
 		}
 
-		installCmd := exec.Command("sh", "-c", "curl -fsSL https://raw.githubusercontent.com/mitchell-wallace/microbeads/main/install.sh | bash")
-		installCmd.Stdout = os.Stdout
-		installCmd.Stderr = os.Stderr
-		if err := installCmd.Run(); err != nil {
+		if err := installLatestVersionFn(); err != nil {
+			exitCode = 2
 			exit(2, "update: install failed: %v", err)
 		}
+		output += "\nUpdate installed."
 	},
 }
 
 func init() {
+	updateCmd.Flags().BoolVarP(&updateYes, "yes", "y", false, "install without prompting when an update is available")
 	rootCmd.AddCommand(updateCmd)
 }
 
@@ -98,6 +120,19 @@ func fetchLatestVersion() (string, error) {
 	}
 
 	return strings.TrimPrefix(payload.TagName, "v"), nil
+}
+
+func installLatestVersion() error {
+	var installCmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		installCmd = exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://raw.githubusercontent.com/mitchell-wallace/microbeads/main/install.ps1 | iex")
+	default:
+		installCmd = exec.Command("sh", "-c", "curl -fsSL https://raw.githubusercontent.com/mitchell-wallace/microbeads/main/install.sh | bash")
+	}
+	installCmd.Stdout = os.Stdout
+	installCmd.Stderr = os.Stderr
+	return installCmd.Run()
 }
 
 func compareVersions(a, b string) (int, error) {

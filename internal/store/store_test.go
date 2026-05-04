@@ -71,6 +71,9 @@ func TestDiscoverRepoRoot_CreateBeadsNextToGit(t *testing.T) {
 
 func TestDiscoverRepoRoot_NoGitNoBeads(t *testing.T) {
 	root := t.TempDir()
+	if hasAncestorMarker(root, ".git") || hasAncestorMarker(root, ".beads") {
+		t.Skip("temp dir ancestors contain .git or .beads; cannot assert no-repo discovery case")
+	}
 	sub := filepath.Join(root, "a", "b")
 	if err := os.MkdirAll(sub, 0755); err != nil {
 		t.Fatal(err)
@@ -83,6 +86,20 @@ func TestDiscoverRepoRoot_NoGitNoBeads(t *testing.T) {
 	}
 	if !errors.Is(err, ErrStore) {
 		t.Errorf("expected ErrStore, got %v", err)
+	}
+}
+
+func hasAncestorMarker(dir, name string) bool {
+	dir = filepath.Clean(dir)
+	for {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			return true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false
+		}
+		dir = parent
 	}
 }
 

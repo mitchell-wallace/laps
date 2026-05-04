@@ -79,7 +79,7 @@ Check the Microbeads GitHub repository for a newer version.
 
 Prints the current and latest versions. If a newer release exists, prompts for
 Y/n confirmation before downloading and installing it via the official install
-script.
+script. Use `mb update --yes` to install non-interactively.
 
 ## Hooks
 

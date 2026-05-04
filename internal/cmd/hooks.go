@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/mitchell-wallace/microbeads/internal/hooks"
@@ -69,18 +71,29 @@ func buildHookVars(task *store.Task, file, command, exitCode, output string, arg
 	return vars
 }
 
+var shellSafeArgRe = regexp.MustCompile(`^[A-Za-z0-9_./-]+$`)
+
 func shellQuoteArgs(args []string) string {
 	if len(args) == 0 {
 		return ""
 	}
 	var quoted []string
 	for _, arg := range args {
-		if strings.ContainsAny(arg, " \t\n\"'\\$|&;<>()`") {
+		if arg == "" || !shellSafeArgRe.MatchString(arg) {
 			arg = "'" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
 		}
 		quoted = append(quoted, arg)
 	}
 	return strings.Join(quoted, " ")
+}
+
+func getOptionalHookContext() (path string, beadsDir string, ok bool) {
+	_, beadsDir, err := store.DiscoverRepoRoot()
+	if err != nil {
+		return "", "", false
+	}
+	path = filepath.Join(beadsDir, store.ResolveFile(fileFlag))
+	return path, beadsDir, true
 }
 
 func isKnownCommand(name string) bool {
