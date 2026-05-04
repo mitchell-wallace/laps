@@ -136,6 +136,8 @@ func installLatestVersion() error {
 }
 
 func compareVersions(a, b string) (int, error) {
+	a = strings.TrimPrefix(a, "v")
+	b = strings.TrimPrefix(b, "v")
 	aParts := strings.Split(a, ".")
 	bParts := strings.Split(b, ".")
 	maxLen := len(aParts)

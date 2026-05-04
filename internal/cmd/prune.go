@@ -50,8 +50,14 @@ Prints the number of tasks removed.`,
 		sort.Slice(done, func(i, j int) bool {
 			ai := file.Tasks[done[i]].CompletedAt
 			aj := file.Tasks[done[j]].CompletedAt
-			if ai == nil || aj == nil {
+			if ai == nil && aj == nil {
 				return false
+			}
+			if ai == nil {
+				return false
+			}
+			if aj == nil {
+				return true
 			}
 			return ai.After(*aj)
 		})

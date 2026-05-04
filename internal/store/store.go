@@ -141,8 +141,14 @@ func Save(path string, data *File) error {
 		return fmt.Errorf("%w: marshal JSON: %v", ErrStore, err)
 	}
 	b = append(b, '\n')
-	if err := os.WriteFile(path, b, 0644); err != nil {
-		return fmt.Errorf("%w: write file %s: %v", ErrStore, path, err)
+	
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, b, 0644); err != nil {
+		return fmt.Errorf("%w: write temp file: %v", ErrStore, err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("%w: rename temp file to %s: %v", ErrStore, path, err)
 	}
 	return nil
 }
