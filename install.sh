@@ -1,8 +1,15 @@
-#!/bin/sh
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-REPO="mitchell-wallace/laps"
+TOOL_NAME="laps"
+REPO="mitchell-wallace/${TOOL_NAME}"
 INSTALL_DIR="$HOME/.local/bin"
+
+# Version resolution: positional arg > LAPS_VERSION env var > latest
+VERSION="${1:-${LAPS_VERSION:-}}"
+
+# Strip leading 'v' if present for consistency
+VERSION="${VERSION#v}"
 
 # Detect OS
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -20,19 +27,22 @@ case "$ARCH" in
     *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-# Fetch latest release tag
-LATEST_URL="https://api.github.com/repos/${REPO}/releases/latest"
-TAG=$(curl -fsSL "$LATEST_URL" | grep '"tag_name":' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
+# If no version specified, fetch latest release tag
+if [ -z "${VERSION}" ]; then
+    LATEST_URL="https://api.github.com/repos/${REPO}/releases/latest"
+    TAG=$(curl -fsSL "$LATEST_URL" | grep '"tag_name":' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
 
-if [ -z "$TAG" ]; then
-    echo "Failed to fetch latest release tag"
-    exit 1
+    if [ -z "$TAG" ]; then
+        echo "Failed to fetch latest release tag"
+        exit 1
+    fi
+
+    VERSION="${TAG#v}"
 fi
-
-VERSION="${TAG#v}"
 ASSET="laps_${VERSION}_${OS}_${ARCH}.tar.gz"
-DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
+DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${ASSET}"
 
+echo "Installing ${TOOL_NAME} v${VERSION}..."
 echo "Downloading ${ASSET}..."
 curl -fsSL "$DOWNLOAD_URL" -o "/tmp/${ASSET}"
 
