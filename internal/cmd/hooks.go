@@ -85,7 +85,7 @@ func shellQuoteArgs(args []string) string {
 
 func isKnownCommand(name string) bool {
 	switch name {
-	case "add", "get", "list", "done", "delete", "prune", "on", "off", "help", "--version":
+	case "add", "get", "list", "done", "delete", "prune", "on", "off", "update", "help", "--version":
 		return true
 	}
 	return false

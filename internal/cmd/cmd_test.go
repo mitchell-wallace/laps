@@ -658,3 +658,44 @@ func TestPruneAcceptsExtraArgs(t *testing.T) {
 		t.Fatalf("expected 1 removed, got %s", out)
 	}
 }
+
+func TestUpdateDevVersion(t *testing.T) {
+	version = "dev"
+	out, errStr, code := runMB("update")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "dev") {
+		t.Fatalf("expected dev message, got: %s", out)
+	}
+}
+
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		a, b   string
+		want   int
+		wantErr bool
+	}{
+		{"0.2.0", "0.3.0", -1, false},
+		{"0.3.0", "0.2.0", 1, false},
+		{"0.3.0", "0.3.0", 0, false},
+		{"0.2.1", "0.2.10", -1, false},
+		{"1.0.0", "0.9.9", 1, false},
+		{"dev", "0.3.0", 0, true},
+	}
+	for _, tt := range tests {
+		got, err := compareVersions(tt.a, tt.b)
+		if tt.wantErr {
+			if err == nil {
+				t.Fatalf("compareVersions(%q, %q) expected error", tt.a, tt.b)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("compareVersions(%q, %q) unexpected error: %v", tt.a, tt.b, err)
+		}
+		if got != tt.want {
+			t.Fatalf("compareVersions(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+		}
+	}
+}

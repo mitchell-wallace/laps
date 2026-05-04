@@ -74,6 +74,13 @@ Also updates `CLAUDE.md` and `GEMINI.md` if they already exist. Idempotent.
 ### `mb off`
 Remove the `<mb-instructions>` block from `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md`.
 
+### `mb update`
+Check the Microbeads GitHub repository for a newer version.
+
+Prints the current and latest versions. If a newer release exists, prompts for
+Y/n confirmation before downloading and installing it via the official install
+script.
+
 ## Hooks
 
 Microbeads can run custom shell commands before or after any mb command via `.beads/mb-hooks.json`.
