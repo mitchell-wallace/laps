@@ -110,6 +110,17 @@ mb worktree
 
 mb will fire every matching `before` and `after` hook and nothing else.
 
+### Reserved command names
+
+The following names are reserved for potential future built-in commands and should be avoided for hook-only commands:
+
+`init`, `tui`, `view`, `edit`, `sync`, `project`, `graph`, `tree`, `ready`, `blocked`
+
+Other names that may conflict with future features in a task-tracking CLI include:
+`start`, `stop`, `pause`, `resume`, `move`, `reorder`, `search`, `filter`, `tag`, `untag`, `assign`, `unassign`, `note`, `log`, `status`, `priority`, `label`, `archive`, `unarchive`, `import`, `export`, `backup`, `restore`, `template`, `config`, `setting`
+
+> **Tip:** When in doubt, prefix your hook-only commands with a project-specific namespace (e.g. `myproject-deploy`) to avoid future collisions.
+
 ### Example `.beads/mb-hooks.json`
 
 See [`examples/mb-hooks.json`](examples/mb-hooks.json) for a working auto-commit example.
