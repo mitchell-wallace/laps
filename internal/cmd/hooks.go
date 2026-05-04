@@ -111,13 +111,13 @@ func splitArgs(args []string) (cmd string, posArgs []string) {
 			skipNext = false
 			continue
 		}
-		if strings.HasPrefix(a, "-") {
-			if a == "-f" || a == "--file" {
-				skipNext = true
-			}
-			continue
-		}
 		if cmd == "" {
+			if strings.HasPrefix(a, "-") {
+				if a == "-f" || a == "--file" {
+					skipNext = true
+				}
+				continue
+			}
 			cmd = a
 		} else {
 			posArgs = append(posArgs, a)
