@@ -49,7 +49,11 @@ func Load(beadsDir string) (*File, error) {
 // and returns the combined stdout of all passback hooks.
 // If any hook exits non-zero, it returns an error immediately.
 // Hook stderr is always written to os.Stderr.
-func Dispatch(f *File, command, when string, vars map[string]string) (string, error) {
+//
+// dir is the working directory hooks execute in (the repository root). This
+// ensures hooks behave identically regardless of which subdirectory the laps
+// command was invoked from. An empty dir leaves the process default in place.
+func Dispatch(f *File, command, when string, vars map[string]string, dir string) (string, error) {
 	var passbackOut strings.Builder
 	for _, h := range f.Hooks {
 		if h.Command != command || h.When != when {
@@ -62,6 +66,7 @@ func Dispatch(f *File, command, when string, vars map[string]string) (string, er
 		} else {
 			cmd = exec.Command("/bin/sh", "-c", run)
 		}
+		cmd.Dir = dir
 		cmd.Stderr = os.Stderr
 		out, err := cmd.Output()
 		if err != nil {

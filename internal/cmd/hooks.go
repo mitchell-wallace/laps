@@ -20,7 +20,7 @@ func runBeforeHooks(cmdName string, beadsDir string, path string, task *store.Ta
 		return
 	}
 	vars := buildHookVars(task, path, cmdName, "", "", args)
-	_, err = hooks.Dispatch(hf, cmdName, "before", vars)
+	_, err = hooks.Dispatch(hf, cmdName, "before", vars, filepath.Dir(beadsDir))
 	if err != nil {
 		exit(4, "hook: %v", err)
 	}
@@ -37,7 +37,7 @@ func runAfterHooksDeferred(cmdName string, beadsDir string, path string, task **
 			t = *task
 		}
 		vars := buildHookVars(t, path, cmdName, fmt.Sprintf("%d", *exitCode), *output, args)
-		passback, err := hooks.Dispatch(hf, cmdName, "after", vars)
+		passback, err := hooks.Dispatch(hf, cmdName, "after", vars, filepath.Dir(beadsDir))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "laps: after hook: %v\n", err)
 		}

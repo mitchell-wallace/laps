@@ -672,6 +672,42 @@ func TestHookOnlyCommandArgsPassthrough(t *testing.T) {
 	}
 }
 
+// TestHookOnlyCommandFromSubdir is a regression test for running a hook-backed
+// command (e.g. laps wrapup / laps done) from a nested subdirectory rather than
+// the directory containing .laps/. Resolution must walk up to the ancestor
+// .laps/, and hooks must execute in the repo root so repo-relative paths work.
+func TestHookOnlyCommandFromSubdir(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	hooks := `{"version":1,"hooks":[{"title":"wrapup","command":"wrapup","when":"after","run":"printf wrapped > .laps/wrapup-hook.txt","passback":false}]}`
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(hooks), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// setupTempRepo chdir'd us into the repo root; descend into a nested subdir.
+	sub := filepath.Join(beadsDir, "..", "sub", "deeper")
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(sub); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errStr, err := runMBExecute("wrapup")
+	if err != nil {
+		t.Fatalf("expected nil error running wrapup from subdir, got %v, stderr: %s", err, errStr)
+	}
+
+	data, readErr := os.ReadFile(filepath.Join(beadsDir, "wrapup-hook.txt"))
+	if readErr != nil {
+		t.Fatalf("expected hook to resolve ancestor .laps/ and run in repo root: %v", readErr)
+	}
+	if string(data) != "wrapped" {
+		t.Fatalf("expected hook output 'wrapped', got %q", string(data))
+	}
+}
+
 func TestGetAcceptsExtraArgs(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()

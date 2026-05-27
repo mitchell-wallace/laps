@@ -54,7 +54,7 @@ func Execute(v string) error {
 	// Hook-only command handling
 	cmdName, hookArgs := splitArgs(os.Args[1:])
 	if cmdName != "" && !isKnownCommand(cmdName) {
-		_, beadsDir, err := store.DiscoverRepoRoot()
+		repoRoot, beadsDir, err := store.DiscoverRepoRoot()
 		if err != nil {
 			exit(2, "%v", err)
 		}
@@ -73,14 +73,14 @@ func Execute(v string) error {
 		for i, arg := range hookArgs {
 			vars[fmt.Sprintf("%d", i+1)] = arg
 		}
-		passback, err := hooks.Dispatch(hf, cmdName, "before", vars)
+		passback, err := hooks.Dispatch(hf, cmdName, "before", vars, repoRoot)
 		if err != nil {
 			exit(4, "hook: %v", err)
 		}
 		if passback != "" {
 			fmt.Print(passback)
 		}
-		passback, err = hooks.Dispatch(hf, cmdName, "after", vars)
+		passback, err = hooks.Dispatch(hf, cmdName, "after", vars, repoRoot)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "laps: after hook: %v\n", err)
 		}

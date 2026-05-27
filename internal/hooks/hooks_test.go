@@ -59,7 +59,7 @@ func TestDispatchPassback(t *testing.T) {
 			{Title: "Echo", Command: "test", When: "before", Run: "echo hello", Passback: true},
 		},
 	}
-	out, err := Dispatch(f, "test", "before", nil)
+	out, err := Dispatch(f, "test", "before", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestDispatchNoPassback(t *testing.T) {
 			{Title: "Echo", Command: "test", When: "before", Run: "echo hello", Passback: false},
 		},
 	}
-	out, err := Dispatch(f, "test", "before", nil)
+	out, err := Dispatch(f, "test", "before", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -91,9 +91,49 @@ func TestDispatchAbort(t *testing.T) {
 			{Title: "Fail", Command: "test", When: "before", Run: "exit 1", Passback: false},
 		},
 	}
-	_, err := Dispatch(f, "test", "before", nil)
+	_, err := Dispatch(f, "test", "before", nil, "")
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// TestDispatchRunsInDir verifies that hooks execute in the supplied directory
+// (the repo root) rather than the process working directory. This guards the
+// regression where running laps from a subdirectory caused relative-path hook
+// commands to fail.
+func TestDispatchRunsInDir(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repoRoot, "marker.txt"), []byte("here"), 0644); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	// Move the process into a nested subdirectory so the only way the hook can
+	// find marker.txt via a relative path is if it runs in repoRoot.
+	sub := filepath.Join(repoRoot, "sub", "deeper")
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatalf("mkdir sub: %v", err)
+	}
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(sub); err != nil {
+		t.Fatalf("chdir sub: %v", err)
+	}
+	t.Cleanup(func() { os.Chdir(orig) })
+
+	f := &File{
+		Version: 1,
+		Hooks: []Hook{
+			{Title: "Read marker", Command: "done", When: "after", Run: "cat ./marker.txt", Passback: true},
+		},
+	}
+	out, err := Dispatch(f, "done", "after", nil, repoRoot)
+	if err != nil {
+		t.Fatalf("dispatch from subdir failed: %v", err)
+	}
+	if !strings.Contains(out, "here") {
+		t.Errorf("expected hook to run in repoRoot and read marker, got %q", out)
 	}
 }
 
@@ -105,7 +145,7 @@ func TestDispatchOrdering(t *testing.T) {
 			{Title: "B", Command: "test", When: "before", Run: "echo -n B", Passback: true},
 		},
 	}
-	out, err := Dispatch(f, "test", "before", nil)
+	out, err := Dispatch(f, "test", "before", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
