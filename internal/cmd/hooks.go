@@ -104,7 +104,7 @@ func isKnownCommand(name string) bool {
 	return false
 }
 
-func splitArgs(args []string) (cmd string, posArgs []string) {
+func splitArgs(args []string) (cmd string, posArgs []string, fileValue string) {
 	skipNext := false
 	for _, a := range args {
 		if skipNext {
@@ -123,5 +123,5 @@ func splitArgs(args []string) (cmd string, posArgs []string) {
 			posArgs = append(posArgs, a)
 		}
 	}
-	return cmd, posArgs
+	return cmd, posArgs, fileValue
 }

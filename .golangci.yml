@@ -1,0 +1,100 @@
+version: "2"
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - gocritic
+    - gosec
+    - nilnil
+    - prealloc
+  settings:
+    gocritic:
+      enabled-checks:
+        - appendAssign
+        - argOrder
+        - assignOp
+        - badCall
+        - badCond
+        - boolExprSimplify
+        - builtinShadow
+        - captLocal
+        - caseOrder
+        - codegenComment
+        - commentedOutCode
+        - commentedOutImport
+        - defaultCaseOrder
+        - deprecatedComment
+        - dupArg
+        - dupBranchBody
+        - dupCase
+        - dupSubExpr
+        - elseif
+        - emptyFallthrough
+        - equalFold
+        - evalOrder
+        - exitAfterDefer
+        - externalErrorReassign
+        - filepathJoin
+        - flagDeref
+        - flagName
+        - hexLiteral
+        - hugeParam
+        - ifElseChain
+        - importShadow
+        - indexAlloc
+        - initClause
+        - mapKey
+        - newDeref
+        - newWithoutInit
+        - nilValReturn
+        - octalLiteral
+        - offBy1
+        - paramTypeCombine
+        - preferFilepathJoin
+        - preferFprint
+        - preferStringWriter
+        - preferWriteByte
+        - ptrToRefParam
+        - rangeExprCopy
+        - rangeValCopy
+        - redundantSprint
+        - regexpPattern
+        - regexpSimplify
+        - ruleGuard
+        - singleCaseSwitch
+        - sloppyLen
+        - sloppyReassign
+        - stringConcatSimplify
+        - switchTrue
+        - timeExprSimplify
+        - tooManyResultsChecker
+        - truncateCmp
+        - typeAssertChain
+        - typeSwitchVar
+        - typeUnparen
+        - underef
+        - unlabelStmt
+        - unlambda
+        - unslice
+        - valSwap
+        - weakCond
+        - yodaStyleExpr
+    staticcheck:
+      checks:
+        - all
+    gosec:
+      excludes:
+        - G115
+  exclusions:
+    paths:
+      - _test.go$
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

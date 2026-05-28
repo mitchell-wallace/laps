@@ -52,7 +52,7 @@ func Execute(v string) error {
 	}()
 
 	// Hook-only command handling
-	cmdName, hookArgs := splitArgs(os.Args[1:])
+	cmdName, hookArgs, hookFileValue := splitArgs(os.Args[1:])
 	if cmdName != "" && !isKnownCommand(cmdName) {
 		repoRoot, beadsDir, err := store.DiscoverRepoRoot()
 		if err != nil {
@@ -62,7 +62,7 @@ func Execute(v string) error {
 		if err != nil {
 			exit(2, "%v", err)
 		}
-		path := filepath.Join(beadsDir, store.ResolveFile(fileFlag))
+		path := filepath.Join(beadsDir, store.ResolveFile(hookFileValue))
 		vars := map[string]string{
 			"command":   cmdName,
 			"file":      path,

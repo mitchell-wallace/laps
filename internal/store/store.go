@@ -55,8 +55,12 @@ func DiscoverRepoRoot() (repoRoot string, beadsDir string, err error) {
 
 	for {
 		beadsPath := filepath.Join(dir, ".laps")
-		if info, err := os.Stat(beadsPath); err == nil && info.IsDir() {
-			return dir, beadsPath, nil
+		if info, err := os.Stat(beadsPath); err == nil {
+			if info.IsDir() {
+				return dir, beadsPath, nil
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", "", fmt.Errorf("%w: stat %s: %v", ErrStore, beadsPath, err)
 		}
 
 		gitPath := filepath.Join(dir, ".git")
@@ -147,7 +151,9 @@ func Save(path string, data *File) error {
 		return fmt.Errorf("%w: write temp file: %v", ErrStore, err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
+		if rmErr := os.Remove(tmpPath); rmErr != nil {
+			return fmt.Errorf("%w: rename temp file to %s: %v (cleanup: %v)", ErrStore, path, err, rmErr)
+		}
 		return fmt.Errorf("%w: rename temp file to %s: %v", ErrStore, path, err)
 	}
 	return nil
