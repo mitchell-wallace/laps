@@ -84,9 +84,10 @@ var varRe = regexp.MustCompile(`\$\{(\w+)\}|\$(\w+)`)
 func substitute(s string, vars map[string]string) string {
 	return varRe.ReplaceAllStringFunc(s, func(match string) string {
 		// match is either ${name} or $name
-		name := varRe.FindStringSubmatch(match)[1]
+		m := varRe.FindStringSubmatch(match)
+		name := m[1]
 		if name == "" {
-			name = varRe.FindStringSubmatch(match)[2]
+			name = m[2]
 		}
 		if v, ok := vars[name]; ok {
 			return v

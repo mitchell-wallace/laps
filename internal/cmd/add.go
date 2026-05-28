@@ -34,7 +34,7 @@ Input modes (mutually exclusive):
 Prints the new task's id on success.`,
 	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		path, _, beadsDir := getStorePath()
+		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
 
 		exitCode := 0
@@ -98,7 +98,6 @@ Prints the new task's id on success.`,
 			exit(1, "add: title is required")
 		}
 
-		_, repoRoot, _ := getStorePath()
 		file := loadFile(path)
 		existing := make(map[string]struct{}, len(file.Tasks))
 		for _, t := range file.Tasks {

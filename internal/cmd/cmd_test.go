@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,12 +73,10 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	os.Stdout = oldOut
 	os.Stderr = oldErr
 
-	outBuf := make([]byte, 4096)
-	n, _ := rOut.Read(outBuf)
-	errBuf := make([]byte, 4096)
-	m, _ := rErr.Read(errBuf)
+	outBuf, _ := io.ReadAll(rOut)
+	errBuf, _ := io.ReadAll(rErr)
 
-	return string(outBuf[:n]), string(errBuf[:m]), code
+	return string(outBuf), string(errBuf), code
 }
 
 func runMBExecute(args ...string) (stdout string, stderr string, err error) {
@@ -121,12 +120,10 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	wOut.Close()
 	wErr.Close()
 
-	outBuf := make([]byte, 4096)
-	n, _ := rOut.Read(outBuf)
-	errBuf := make([]byte, 4096)
-	m, _ := rErr.Read(errBuf)
+	outBuf, _ := io.ReadAll(rOut)
+	errBuf, _ := io.ReadAll(rErr)
 
-	return string(outBuf[:n]), string(errBuf[:m]), err
+	return string(outBuf), string(errBuf), err
 }
 
 func TestAddHead(t *testing.T) {
