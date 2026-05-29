@@ -128,6 +128,15 @@ Other names that may conflict with future features in a task-tracking CLI includ
 
 > **Tip:** When in doubt, prefix your hook-only commands with a project-specific namespace (e.g. `myproject-deploy`) to avoid future collisions.
 
+## Versioning
+
+Version is tracked in `VERSION` at the repo root. Pushing a change to `VERSION` on `main` triggers an automated release:
+
+1. `auto-tag` workflow reads the new version from `VERSION`, creates a `vX.Y.Z` git tag, and dispatches `release.yml`.
+2. `release` workflow runs [GoReleaser](https://goreleaser.com) to build binaries for Linux, macOS, and Windows, then publishes a GitHub Release with checksums and the install script.
+
+See `.github/workflows/auto-tag.yml` and `.github/workflows/release.yml` for details.
+
 ### Example `.laps/hooks.json`
 
 See [`examples/hooks.json`](examples/hooks.json) for a working auto-commit example.

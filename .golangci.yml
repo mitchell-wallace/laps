@@ -1,22 +1,16 @@
 version: "2"
 linters:
+  default: standard
   enable:
     - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    - misspell
-    - gocritic
     - gosec
+    - gocritic
+    - misspell
     - nilnil
-    - prealloc
   settings:
     gocritic:
       enabled-checks:
         - appendAssign
-        - argOrder
         - assignOp
         - badCall
         - badCond
@@ -24,7 +18,6 @@ linters:
         - builtinShadow
         - captLocal
         - caseOrder
-        - codegenComment
         - commentedOutCode
         - commentedOutImport
         - defaultCaseOrder
@@ -38,7 +31,6 @@ linters:
         - equalFold
         - evalOrder
         - exitAfterDefer
-        - externalErrorReassign
         - filepathJoin
         - flagDeref
         - flagName
@@ -50,7 +42,6 @@ linters:
         - initClause
         - mapKey
         - newDeref
-        - newWithoutInit
         - nilValReturn
         - octalLiteral
         - offBy1
@@ -65,7 +56,7 @@ linters:
         - redundantSprint
         - regexpPattern
         - regexpSimplify
-        - ruleGuard
+        - ruleguard
         - singleCaseSwitch
         - sloppyLen
         - sloppyReassign
@@ -84,16 +75,12 @@ linters:
         - valSwap
         - weakCond
         - yodaStyleExpr
-    staticcheck:
-      checks:
-        - all
     gosec:
       excludes:
         - G115
   exclusions:
     paths:
       - _test.go$
-
 formatters:
   enable:
     - gofmt

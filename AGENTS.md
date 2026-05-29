@@ -9,7 +9,7 @@ Laps is a lightweight task tracker for AI coding agents. The project is intentio
 ## Build, Test, and Development Commands
 - `make build` builds `bin/laps` with version metadata from Git tags.
 - `make test` runs the full Go test suite with `go test ./...`.
-- `make lint` runs `go vet ./...` for static checks.
+- `make lint` runs `golangci-lint run ./...` for static checks.
 - `make clean` removes the local build output in `bin/`.
 
 For quick iteration, `go run ./cmd/laps list` is useful when testing CLI behavior without rebuilding.
@@ -22,6 +22,21 @@ Tests use Go’s built-in `testing` package. Place tests alongside the code they
 
 ## Commit & Pull Request Guidelines
 Recent history uses short, imperative commit subjects, often with Conventional Commit prefixes such as `feat:` and `fix:`. Keep commits scoped to one change, for example: `fix: initialize missing laps.json file automatically`. Pull requests should explain the user-visible behavior change, note any data-file or hook implications, link the relevant issue when applicable, and include terminal output or screenshots when CLI output changes materially.
+
+## Releasing
+
+Releases are automated via GitHub Actions. The process is:
+
+1. Update `VERSION` (repo root) to the new semver (e.g. `0.5.0`).
+2. Commit with a conventional commit message (e.g. `chore: bump version to 0.5.0`).
+3. Push to `main`. The `auto-tag` workflow detects the VERSION change, creates `vX.Y.Z`, pushes it, and dispatches `release.yml`.
+4. The `release` workflow checks if a GitHub Release already exists for that tag (idempotent), then runs GoReleaser if not.
+
+Important notes:
+- `main.version` is injected via ldflags in `.goreleaser.yaml` (`-X main.version={{.Version}}`). The source variable `cmd.version` stays `""` — GoReleaser and `make build` (via `git describe`) supply the value.
+- `auto-tag` validates VERSION format with `^[0-9]+\.[0-9]+\.[0-9]+$` and skips if unchanged.
+- The `release` workflow uses goreleaser-action@v6 with `--clean`. Install scripts are uploaded as release assets via `.goreleaser.yaml` `release.extra_files`.
+- If a release needs to be redone, delete the existing tag locally and on origin first, then re-push.
 
 ## Configuration & Safety Notes
 Laps writes task data under `.laps/` in the repository root. Use `examples/hooks.json` as the reference when adding hooks, and avoid destructive hook commands unless they are clearly documented and tested.
