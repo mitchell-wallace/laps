@@ -3,6 +3,8 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -15,6 +17,7 @@ var (
 	addDescription string
 	addAssignee    string
 	addJSON        string
+	addStdin       bool
 )
 
 var addCmd = &cobra.Command{
@@ -30,6 +33,7 @@ Positions:
 Input modes (mutually exclusive):
   --title "..." [--description "..."] [--assignee "..."]   Provide task fields.
   --json '{"title":"...","description":"...","assignee":"..."}'   Provide task as JSON.
+  --title "..." --stdin [--assignee "..."]   Read description from stdin.
 
 Prints the new task's id on success.`,
 	Args: cobra.MinimumNArgs(0),
@@ -64,13 +68,17 @@ Prints the new task's id on success.`,
 		}
 
 		flagMode := cmd.Flags().Changed("title") || cmd.Flags().Changed("description") || cmd.Flags().Changed("assignee")
-		if !flagMode && addJSON == "" {
+		if !flagMode && addJSON == "" && !addStdin {
 			exitCode = 1
-			exit(1, "add: --title or --json is required")
+			exit(1, "add: --title or --json or --stdin is required")
 		}
-		if flagMode && addJSON != "" {
+		if addJSON != "" && (flagMode || addStdin) {
 			exitCode = 1
-			exit(1, "add: --json is mutually exclusive with --title, --description, and --assignee")
+			exit(1, "add: --json is mutually exclusive with --title, --description, --assignee, and --stdin")
+		}
+		if addStdin && cmd.Flags().Changed("description") {
+			exitCode = 1
+			exit(1, "add: --stdin is mutually exclusive with --description")
 		}
 
 		var title, description, assignee string
@@ -87,6 +95,24 @@ Prints the new task's id on success.`,
 			title = payload.Title
 			description = payload.Description
 			assignee = strings.TrimSpace(payload.Assignee)
+		} else if addStdin {
+			fi, err := os.Stdin.Stat()
+			if err != nil {
+				exitCode = 1
+				exit(1, "add: cannot check stdin: %v", err)
+			}
+			if fi.Mode()&os.ModeCharDevice != 0 {
+				exitCode = 1
+				exit(1, "add: --stdin requires piped input, not a terminal")
+			}
+			data, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				exitCode = 1
+				exit(1, "add: reading stdin: %v", err)
+			}
+			title = addTitle
+			description = strings.TrimRight(string(data), "\n")
+			assignee = strings.TrimSpace(addAssignee)
 		} else {
 			title = addTitle
 			description = strings.ReplaceAll(addDescription, "\\n", "\n")
@@ -156,5 +182,6 @@ func init() {
 	addCmd.Flags().StringVar(&addDescription, "description", "", "task description")
 	addCmd.Flags().StringVar(&addAssignee, "assignee", "", "task assignee")
 	addCmd.Flags().StringVar(&addJSON, "json", "", "task as json object")
+	addCmd.Flags().BoolVar(&addStdin, "stdin", false, "read description from stdin")
 	rootCmd.AddCommand(addCmd)
 }
