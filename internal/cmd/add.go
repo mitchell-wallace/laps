@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -137,36 +138,32 @@ Prints the new task's id on success.`,
 			exit(2, "add: %v", err)
 		}
 
+		order, fallbackHead, err := store.ComputeInsertOrder(file, position, afterID)
+		if err != nil {
+			if errors.Is(err, store.ErrTaskNotFound) {
+				exitCode = 3
+				exit(3, "add: task %s not found", afterID)
+			}
+			exitCode = 2
+			exit(2, "add: %v", err)
+		}
+		if fallbackHead {
+			fmt.Fprintf(os.Stderr, "laps: lap %s already complete; added to next available spot (head).\n", afterID)
+		}
+
 		t := store.Task{
 			ID:          id,
 			Title:       title,
 			Description: description,
 			Assignee:    assignee,
 			IsDone:      false,
+			Order:       order,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
 		task = &t
 
-		switch position {
-		case "head":
-			file.Tasks = append([]store.Task{*task}, file.Tasks...)
-		case "tail":
-			file.Tasks = append(file.Tasks, *task)
-		case "after":
-			found := false
-			for i, t := range file.Tasks {
-				if t.ID == afterID {
-					file.Tasks = append(file.Tasks[:i+1], append([]store.Task{*task}, file.Tasks[i+1:]...)...)
-					found = true
-					break
-				}
-			}
-			if !found {
-				exitCode = 3
-				exit(3, "add: task %s not found", afterID)
-			}
-		}
+		file.Tasks = append(file.Tasks, *task)
 
 		if err := store.Save(path, file); err != nil {
 			exitCode = 2

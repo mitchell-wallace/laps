@@ -119,7 +119,7 @@ func loadFile(path string) *store.File {
 	data, err := store.Load(path)
 	if err != nil {
 		if errors.Is(err, store.ErrEmptyFile) {
-			f := &store.File{Version: 1, Tasks: []store.Task{}}
+			f := &store.File{Version: store.CurrentVersion, Tasks: []store.Task{}}
 			if err := store.Save(path, f); err != nil {
 				exit(2, "initialize file: %v", err)
 			}
@@ -127,5 +127,17 @@ func loadFile(path string) *store.File {
 		}
 		exit(2, "%v", err)
 	}
+	if data.Version > store.CurrentVersion {
+		exit(2, "file %s was written by a newer version of laps (schema version %d); please update laps", path, data.Version)
+	}
+	if store.Migrate(data) {
+		if err := store.Save(path, data); err != nil {
+			exit(2, "migrate file: %v", err)
+		}
+	}
+	// Present canonical order to every command regardless of the on-disk array
+	// order, so head selection never depends on how the file happens to be laid
+	// out (e.g. after a hand edit or merge).
+	store.Normalize(data)
 	return data
 }

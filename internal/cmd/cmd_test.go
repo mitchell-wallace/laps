@@ -920,3 +920,99 @@ func TestCountCommand(t *testing.T) {
 		t.Fatalf("expected output %q, got %q", expected, out)
 	}
 }
+
+func TestOrderingHeadLandsBelowDone(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "A")
+	runMB("add", "tail", "--title", "B")
+	out, _, _ := runMB("add", "head", "--title", "C")
+	cid := strings.TrimSpace(out)
+
+	// Complete C (the head todo).
+	runMB("done")
+
+	// Default list shows only todos, head first: A then B.
+	list, _, _ := runMB("list")
+	if !strings.Contains(list, "1. ") || !idxBefore(list, "— A", "— B") {
+		t.Fatalf("expected A before B in todo list, got:\n%s", list)
+	}
+	if strings.Contains(list, cid) {
+		t.Fatalf("completed lap %s should not appear in default list:\n%s", cid, list)
+	}
+
+	// New head lands at the top of the todo section, still below the done lap.
+	runMB("add", "head", "--title", "D")
+	list2, _, _ := runMB("list")
+	if !idxBefore(list2, "— D", "— A") {
+		t.Fatalf("expected new head D before A, got:\n%s", list2)
+	}
+
+	// The done lap is the most recent completion.
+	done, _, _ := runMB("list", "--done")
+	if !strings.Contains(done, cid) {
+		t.Fatalf("expected completed lap %s in --done, got:\n%s", cid, done)
+	}
+}
+
+func TestAddAfterDoneWarnsAndBecomesHead(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "A")
+	out, _, _ := runMB("add", "head", "--title", "C")
+	cid := strings.TrimSpace(out)
+	runMB("done") // completes C
+
+	_, errStr, code := runMB("add", "after", cid, "--title", "D")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+	if !strings.Contains(errStr, "already complete") || !strings.Contains(errStr, "head") {
+		t.Fatalf("expected fallback-to-head warning, got stderr: %q", errStr)
+	}
+	list, _, _ := runMB("list")
+	if !idxBefore(list, "— D", "— A") {
+		t.Fatalf("expected D to be the new head, got:\n%s", list)
+	}
+}
+
+func TestAutoMigrateV1File(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	v1 := `{"version":1,"tasks":[` +
+		`{"id":"old-1","title":"First","description":"","isDone":false,"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z","completedAt":null},` +
+		`{"id":"old-2","title":"Second","description":"","isDone":false,"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z","completedAt":null}` +
+		`]}`
+	path := filepath.Join(beadsDir, "laps.json")
+	if err := os.WriteFile(path, []byte(v1), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Any command triggers auto-migration on load.
+	list, _, _ := runMB("list")
+	if !idxBefore(list, "First", "Second") {
+		t.Fatalf("expected migration to preserve todo order, got:\n%s", list)
+	}
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	if !strings.Contains(got, `"version": 2`) {
+		t.Fatalf("expected version 2 after migration, got:\n%s", got)
+	}
+	if !strings.Contains(got, `"order"`) {
+		t.Fatalf("expected order keys after migration, got:\n%s", got)
+	}
+}
+
+// idxBefore reports whether substring a appears before substring b in s.
+func idxBefore(s, a, b string) bool {
+	ia := strings.Index(s, a)
+	ib := strings.Index(s, b)
+	return ia >= 0 && ib >= 0 && ia < ib
+}

@@ -29,9 +29,9 @@ laps list
 ### `laps add <head|tail|after> [id]`
 Add a task to the queue.
 
-- `head` — insert at the front of the queue.
+- `head` — insert at the front of the todo queue (the new head, below any completed laps).
 - `tail` — append to the end of the queue.
-- `after <id>` — insert immediately after the specified task id.
+- `after <id>` — insert immediately after the specified task id. If `<id>` is already complete, the lap is added at the head instead (with a notice on stderr).
 
 Flags:
 - `--title <string>` — task title (required unless using `--json`).
