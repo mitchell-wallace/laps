@@ -145,7 +145,7 @@ func Save(path string, data *File) error {
 		return fmt.Errorf("%w: marshal JSON: %v", ErrStore, err)
 	}
 	b = append(b, '\n')
-	
+
 	tmpPath := fmt.Sprintf("%s.%d.tmp", path, os.Getpid())
 	if err := os.WriteFile(tmpPath, b, 0644); err != nil {
 		return fmt.Errorf("%w: write temp file: %v", ErrStore, err)

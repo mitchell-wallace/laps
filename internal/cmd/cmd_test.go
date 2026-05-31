@@ -873,3 +873,50 @@ func TestCompareVersions(t *testing.T) {
 		}
 	}
 }
+
+func TestCountCommand(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	// Initially, when no tasks are present
+	out, errStr, code := runMB("count")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	expectedEmpty := "Laps done: 0 out of 0\n\nNo tasks found.\n"
+	if out != expectedEmpty {
+		t.Fatalf("expected output %q, got %q", expectedEmpty, out)
+	}
+
+	// Add some tasks
+	_, _, code1 := runMB("add", "tail", "--title", "Task 1", "--assignee", "coder")
+	_, _, code2 := runMB("add", "tail", "--title", "Task 2", "--assignee", "coder")
+	_, _, code3 := runMB("add", "tail", "--title", "Task 3", "--assignee", "reviewer")
+	_, _, code4 := runMB("add", "tail", "--title", "Task 4") // unassigned
+	if code1 != 0 || code2 != 0 || code3 != 0 || code4 != 0 {
+		t.Fatal("failed to add tasks")
+	}
+
+	// Complete the first task (Task 1, assigned to coder)
+	_, _, code5 := runMB("done")
+	if code5 != 0 {
+		t.Fatal("failed to complete task")
+	}
+
+	// Output should be:
+	// Laps done: 1 out of 4
+	//
+	// Breakdown by role:
+	// - coder: 1 complete, 1 incomplete
+	// - reviewer: 0 complete, 1 incomplete
+	// - unassigned: 0 complete, 1 incomplete
+	out, errStr, code = runMB("count")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+
+	expected := "Laps done: 1 out of 4\n\nBreakdown by role:\n- coder: 1 complete, 1 incomplete\n- reviewer: 0 complete, 1 incomplete\n- unassigned: 0 complete, 1 incomplete\n"
+	if out != expected {
+		t.Fatalf("expected output %q, got %q", expected, out)
+	}
+}

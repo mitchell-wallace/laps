@@ -9,7 +9,7 @@ var deleteCmd = &cobra.Command{
 	Use:   "delete <id>",
 	Short: "Delete a task",
 	Long:  `Delete a task by id, regardless of whether it is todo or done.`,
-	Args: cobra.MinimumNArgs(0),
+	Args:  cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 1 {
 			exit(1, "delete: task id required")
