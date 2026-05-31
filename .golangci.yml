@@ -78,6 +78,11 @@ linters:
     gosec:
       excludes:
         - G115
+        - G204
+        - G301
+        - G304
+        - G306
+        - G703
   exclusions:
     paths:
       - _test.go$

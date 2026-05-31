@@ -93,7 +93,7 @@ func Execute(v string) error {
 	return rootCmd.Execute()
 }
 
-func getStorePath() (path string, repoRoot string, beadsDir string) {
+func getStorePath() (path, repoRoot, beadsDir string) {
 	repoRoot, beadsDir, err := store.DiscoverRepoRoot()
 	if err != nil {
 		exit(2, "%v", err)

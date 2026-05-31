@@ -47,7 +47,7 @@ type File struct {
 // .laps/ directory. If a .git directory is encountered first, the walk stops
 // and .laps/ is created next to .git. If neither is found up to the
 // filesystem root, an error is returned.
-func DiscoverRepoRoot() (repoRoot string, beadsDir string, err error) {
+func DiscoverRepoRoot() (repoRoot, beadsDir string, err error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", "", fmt.Errorf("%w: get working directory: %v", ErrStore, err)
@@ -65,7 +65,7 @@ func DiscoverRepoRoot() (repoRoot string, beadsDir string, err error) {
 
 		gitPath := filepath.Join(dir, ".git")
 		if _, err := os.Stat(gitPath); err == nil {
-			if mkErr := os.MkdirAll(beadsPath, 0755); mkErr != nil {
+			if mkErr := os.MkdirAll(beadsPath, 0o755); mkErr != nil {
 				return "", "", fmt.Errorf("%w: create .laps directory: %v", ErrStore, mkErr)
 			}
 			return dir, beadsPath, nil
@@ -133,7 +133,7 @@ func Load(path string) (*File, error) {
 
 // Save marshals and writes a task file, creating parent directories if needed.
 func Save(path string, data *File) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("%w: create directory for %s: %v", ErrStore, path, err)
 	}
 	// Normalise nil slices so we write [] instead of null.
@@ -147,7 +147,7 @@ func Save(path string, data *File) error {
 	b = append(b, '\n')
 
 	tmpPath := fmt.Sprintf("%s.%d.tmp", path, os.Getpid())
-	if err := os.WriteFile(tmpPath, b, 0644); err != nil {
+	if err := os.WriteFile(tmpPath, b, 0o644); err != nil {
 		return fmt.Errorf("%w: write temp file: %v", ErrStore, err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
@@ -177,7 +177,7 @@ func CheckDefaultStore(beadsDir string) error {
 // of "title|createdAt|description[:200]". If the generated ID collides with
 // an entry in existingIDs, the hash slice is extended by one character until
 // unique.
-func GenerateID(repoRoot string, title string, createdAt time.Time, description string, existingIDs map[string]struct{}) (string, error) {
+func GenerateID(repoRoot, title string, createdAt time.Time, description string, existingIDs map[string]struct{}) (string, error) {
 	prefix := normalizePrefix(filepath.Base(repoRoot))
 	input := title + "|" + createdAt.Format(time.RFC3339) + "|" + truncate(description, 200)
 	sum := sha256.Sum256([]byte(input))

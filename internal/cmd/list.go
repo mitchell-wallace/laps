@@ -57,7 +57,7 @@ Default shows todo tasks only, head first.
 			})
 			for i, d := range done {
 				t := file.Tasks[d]
-				lines = append(lines, fmt.Sprintf("%d. ~~%s~~", i+1, formatListTask(t)))
+				lines = append(lines, fmt.Sprintf("%d. ~~%s~~", i+1, formatListTask(&t)))
 			}
 		} else {
 			var todos []int
@@ -72,13 +72,13 @@ Default shows todo tasks only, head first.
 			num := 1
 			for _, idx := range todos {
 				t := file.Tasks[idx]
-				lines = append(lines, fmt.Sprintf("%d. %s", num, formatListTask(t)))
+				lines = append(lines, fmt.Sprintf("%d. %s", num, formatListTask(&t)))
 				num++
 			}
 			if listAll {
 				for _, idx := range dones {
 					t := file.Tasks[idx]
-					lines = append(lines, fmt.Sprintf("%d. ~~%s~~", num, formatListTask(t)))
+					lines = append(lines, fmt.Sprintf("%d. ~~%s~~", num, formatListTask(&t)))
 					num++
 				}
 			}
@@ -97,7 +97,7 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 }
 
-func formatListTask(t store.Task) string {
+func formatListTask(t *store.Task) string {
 	text := fmt.Sprintf("%s — %s", t.ID, t.Title)
 	if t.Assignee != "" {
 		text += fmt.Sprintf(" (assignee: %s)", t.Assignee)

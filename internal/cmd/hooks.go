@@ -11,7 +11,7 @@ import (
 	"github.com/mitchell-wallace/laps/internal/store"
 )
 
-func runBeforeHooks(cmdName string, beadsDir string, path string, task *store.Task, args []string) {
+func runBeforeHooks(cmdName, beadsDir, path string, task *store.Task, args []string) {
 	hf, err := hooks.Load(beadsDir)
 	if err != nil {
 		exit(2, "hooks: %v", err)
@@ -26,7 +26,7 @@ func runBeforeHooks(cmdName string, beadsDir string, path string, task *store.Ta
 	}
 }
 
-func runAfterHooksDeferred(cmdName string, beadsDir string, path string, task **store.Task, output *string, exitCode *int, args []string) func() {
+func runAfterHooksDeferred(cmdName, beadsDir, path string, task **store.Task, output *string, exitCode *int, args []string) func() {
 	return func() {
 		hf, err := hooks.Load(beadsDir)
 		if err != nil || hf == nil {
@@ -87,7 +87,7 @@ func shellQuoteArgs(args []string) string {
 	return strings.Join(quoted, " ")
 }
 
-func getOptionalHookContext() (path string, beadsDir string, ok bool) {
+func getOptionalHookContext() (path, beadsDir string, ok bool) {
 	_, beadsDir, err := store.DiscoverRepoRoot()
 	if err != nil {
 		return "", "", false

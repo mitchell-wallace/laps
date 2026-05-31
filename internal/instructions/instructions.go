@@ -66,7 +66,7 @@ func writeBlock(path string) error {
 	}
 
 	newContent := replaceBlock(content, blockContent)
-	return os.WriteFile(path, []byte(newContent), 0644)
+	return os.WriteFile(path, []byte(newContent), 0o644)
 }
 
 func removeBlock(path string) error {
@@ -75,7 +75,7 @@ func removeBlock(path string) error {
 		return err
 	}
 	newContent := replaceBlock(string(b), "")
-	return os.WriteFile(path, []byte(newContent), 0644)
+	return os.WriteFile(path, []byte(newContent), 0o644)
 }
 
 func replaceBlock(content, block string) string {
