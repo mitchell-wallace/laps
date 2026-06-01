@@ -1136,9 +1136,11 @@ func TestJSONOutputDelete(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
 
-	out, _, _ := runMB("add", "head", "--title", "Delete me")
+	out, _, _ := runMB("add", "head", "--title", "Delete me", "--json-output")
 	var addResult map[string]interface{}
-	json.Unmarshal([]byte(strings.TrimSpace(out)), &addResult)
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &addResult); err != nil {
+		t.Fatalf("expected valid JSON from add, got: %s", out)
+	}
 	id := addResult["task"].(map[string]interface{})["id"].(string)
 
 	out, errStr, code := runMB("delete", id, "--json-output")
