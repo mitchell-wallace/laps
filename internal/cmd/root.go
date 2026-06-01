@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -13,9 +14,11 @@ import (
 
 var version string
 var fileFlag string
+var jsonOutput bool
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&fileFlag, "file", "f", "", "task file name (without .laps/ path)")
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json-output", false, "emit structured JSON output")
 }
 
 var rootCmd = &cobra.Command{
@@ -34,7 +37,16 @@ type exitError struct {
 func (e *exitError) Error() string { return fmt.Sprintf("exit %d", e.code) }
 
 func exit(code int, format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "laps: "+format+"\n", args...)
+	msg := fmt.Sprintf(format, args...)
+	if jsonOutput {
+		b, _ := json.Marshal(map[string]interface{}{
+			"error":    msg,
+			"exitCode": code,
+		})
+		fmt.Fprintln(os.Stderr, string(b))
+	} else {
+		fmt.Fprintf(os.Stderr, "laps: %s\n", msg)
+	}
 	panic(&exitError{code: code})
 }
 
@@ -77,14 +89,14 @@ func Execute(v string) error {
 		if err != nil {
 			exit(4, "hook: %v", err)
 		}
-		if passback != "" {
+		if passback != "" && !jsonOutput {
 			fmt.Print(passback)
 		}
 		passback, err = hooks.Dispatch(hf, cmdName, "after", vars, repoRoot)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "laps: after hook: %v\n", err)
 		}
-		if passback != "" {
+		if passback != "" && !jsonOutput {
 			fmt.Print(passback)
 		}
 		return nil
@@ -140,4 +152,12 @@ func loadFile(path string) *store.File {
 	// out (e.g. after a hand edit or merge).
 	store.Normalize(data)
 	return data
+}
+
+func printJSON(v interface{}) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		exit(2, "json marshal: %v", err)
+	}
+	fmt.Println(string(b))
 }
