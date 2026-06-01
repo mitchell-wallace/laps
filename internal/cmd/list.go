@@ -34,6 +34,7 @@ Default shows todo tasks only, head first.
 		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
 
 		var lines []string
+		var jsonTasks []store.Task
 		if listDone {
 			var done []int
 			for i, t := range file.Tasks {
@@ -58,6 +59,7 @@ Default shows todo tasks only, head first.
 			for i, d := range done {
 				t := file.Tasks[d]
 				lines = append(lines, fmt.Sprintf("%d. ~~%s~~", i+1, formatListTask(&t)))
+				jsonTasks = append(jsonTasks, t)
 			}
 		} else {
 			var todos []int
@@ -73,12 +75,14 @@ Default shows todo tasks only, head first.
 			for _, idx := range todos {
 				t := file.Tasks[idx]
 				lines = append(lines, fmt.Sprintf("%d. %s", num, formatListTask(&t)))
+				jsonTasks = append(jsonTasks, t)
 				num++
 			}
 			if listAll {
 				for _, idx := range dones {
 					t := file.Tasks[idx]
 					lines = append(lines, fmt.Sprintf("%d. ~~%s~~", num, formatListTask(&t)))
+					jsonTasks = append(jsonTasks, t)
 					num++
 				}
 			}
@@ -86,25 +90,10 @@ Default shows todo tasks only, head first.
 
 		output = strings.Join(lines, "\n")
 		if jsonOutput {
-			var tasks []store.Task
-			if listDone {
-				for _, idx := range done {
-					tasks = append(tasks, file.Tasks[idx])
-				}
-			} else {
-				for _, idx := range todos {
-					tasks = append(tasks, file.Tasks[idx])
-				}
-				if listAll {
-					for _, idx := range dones {
-						tasks = append(tasks, file.Tasks[idx])
-					}
-				}
+			if jsonTasks == nil {
+				jsonTasks = []store.Task{}
 			}
-			if tasks == nil {
-				tasks = []store.Task{}
-			}
-			printJSON(map[string]interface{}{"tasks": tasks})
+			printJSON(map[string]interface{}{"tasks": jsonTasks})
 		} else if output != "" {
 			fmt.Println(output)
 		}
