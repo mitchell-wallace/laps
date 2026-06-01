@@ -50,7 +50,11 @@ Output is title, blank line, description — nothing else.`,
 			if file.Tasks[i].ID == taskID {
 				task = &file.Tasks[i]
 				output = formatTaskDetails(task)
-				fmt.Println(output)
+				if jsonOutput {
+					printJSON(map[string]interface{}{"task": task})
+				} else {
+					fmt.Println(output)
+				}
 				return
 			}
 		}

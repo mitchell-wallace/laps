@@ -85,7 +85,27 @@ Default shows todo tasks only, head first.
 		}
 
 		output = strings.Join(lines, "\n")
-		if output != "" {
+		if jsonOutput {
+			var tasks []store.Task
+			if listDone {
+				for _, idx := range done {
+					tasks = append(tasks, file.Tasks[idx])
+				}
+			} else {
+				for _, idx := range todos {
+					tasks = append(tasks, file.Tasks[idx])
+				}
+				if listAll {
+					for _, idx := range dones {
+						tasks = append(tasks, file.Tasks[idx])
+					}
+				}
+			}
+			if tasks == nil {
+				tasks = []store.Task{}
+			}
+			printJSON(map[string]interface{}{"tasks": tasks})
+		} else if output != "" {
 			fmt.Println(output)
 		}
 	},

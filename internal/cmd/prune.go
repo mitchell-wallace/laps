@@ -78,7 +78,11 @@ Prints the number of tasks removed.`,
 			exit(2, "prune: %v", err)
 		}
 		output = fmt.Sprintf("%d", removed)
-		fmt.Println(removed)
+		if jsonOutput {
+			printJSON(map[string]interface{}{"removed": removed})
+		} else {
+			fmt.Println(removed)
+		}
 	},
 }
 

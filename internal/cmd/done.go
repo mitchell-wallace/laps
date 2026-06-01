@@ -31,14 +31,18 @@ If there is no head task, exits non-zero with "no head task".`,
 				file.Tasks[i].IsDone = true
 				file.Tasks[i].CompletedAt = &now
 				file.Tasks[i].UpdatedAt = now
-				task = &file.Tasks[i]
-				if err := store.Save(path, file); err != nil {
-					exitCode = 2
-					exit(2, "done: %v", err)
-				}
-				output = task.ID
+			task = &file.Tasks[i]
+			if err := store.Save(path, file); err != nil {
+				exitCode = 2
+				exit(2, "done: %v", err)
+			}
+			output = task.ID
+			if jsonOutput {
+				printJSON(map[string]interface{}{"task": task})
+			} else {
 				fmt.Println(task.ID)
-				return
+			}
+			return
 			}
 		}
 		exitCode = 3

@@ -10,7 +10,11 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the laps version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(version)
+		if jsonOutput {
+			printJSON(map[string]interface{}{"version": version})
+		} else {
+			fmt.Println(version)
+		}
 	},
 }
 

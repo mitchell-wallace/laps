@@ -44,6 +44,9 @@ var deleteCmd = &cobra.Command{
 			exitCode = 2
 			exit(2, "delete: %v", err)
 		}
+		if jsonOutput {
+			printJSON(map[string]interface{}{"deleted": id})
+		}
 	},
 }
 

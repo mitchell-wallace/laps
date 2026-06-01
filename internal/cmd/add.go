@@ -170,7 +170,11 @@ Prints the new task's id on success.`,
 			exit(2, "add: %v", err)
 		}
 		output = id
-		fmt.Println(id)
+		if jsonOutput {
+			printJSON(map[string]interface{}{"task": task})
+		} else {
+			fmt.Println(id)
+		}
 	},
 }
 

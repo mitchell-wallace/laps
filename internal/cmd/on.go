@@ -25,6 +25,9 @@ Idempotent — safe to run multiple times.`,
 			exitCode = 2
 			exit(2, "on: %v", err)
 		}
+		if jsonOutput {
+			printJSON(map[string]interface{}{"status": "enabled"})
+		}
 	},
 }
 

@@ -22,6 +22,9 @@ var offCmd = &cobra.Command{
 			exitCode = 2
 			exit(2, "off: %v", err)
 		}
+		if jsonOutput {
+			printJSON(map[string]interface{}{"status": "disabled"})
+		}
 	},
 }
 

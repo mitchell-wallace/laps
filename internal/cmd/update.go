@@ -40,7 +40,14 @@ prompts for confirmation before running the install script unless --yes is set.`
 
 		if version == "" || version == "dev" {
 			output = "Current version: dev (cannot check for updates)"
-			fmt.Println(output)
+			if jsonOutput {
+				printJSON(map[string]interface{}{
+					"currentVersion": "dev",
+					"error":          "cannot check for updates",
+				})
+			} else {
+				fmt.Println(output)
+			}
 			return
 		}
 
@@ -50,9 +57,6 @@ prompts for confirmation before running the install script unless --yes is set.`
 			exit(2, "update: %v", err)
 		}
 
-		output = fmt.Sprintf("Current version: %s\nLatest version:  %s", version, latest)
-		fmt.Printf("%s\n", output)
-
 		cmp, err := compareVersions(version, latest)
 		if err != nil {
 			exitCode = 2
@@ -60,12 +64,32 @@ prompts for confirmation before running the install script unless --yes is set.`
 		}
 
 		if cmp >= 0 {
-			output += "\nYou are up to date."
-			fmt.Println("You are up to date.")
+			output = fmt.Sprintf("Current version: %s\nLatest version:  %s\nYou are up to date.", version, latest)
+			if jsonOutput {
+				printJSON(map[string]interface{}{
+					"currentVersion": version,
+					"latestVersion":  latest,
+					"upToDate":       true,
+					"updated":        false,
+				})
+			} else {
+				fmt.Printf("Current version: %s\nLatest version:  %s\n", version, latest)
+				fmt.Println("You are up to date.")
+			}
 			return
 		}
 
 		if !updateYes {
+			if jsonOutput {
+				printJSON(map[string]interface{}{
+					"currentVersion": version,
+					"latestVersion":  latest,
+					"upToDate":       false,
+					"updated":        false,
+				})
+				return
+			}
+			fmt.Printf("Current version: %s\nLatest version:  %s\n", version, latest)
 			fmt.Print("Update to latest version? [Y/n] ")
 			reader := bufio.NewReader(os.Stdin)
 			response, err := reader.ReadString('\n')
@@ -75,17 +99,27 @@ prompts for confirmation before running the install script unless --yes is set.`
 			}
 			response = strings.TrimSpace(strings.ToLower(response))
 			if response != "" && response != "y" && response != "yes" {
-				output += "\nUpdate cancelled."
+				output = fmt.Sprintf("Current version: %s\nLatest version:  %s\nUpdate cancelled.", version, latest)
 				fmt.Println("Update cancelled.")
 				return
 			}
+		} else if !jsonOutput {
+			fmt.Printf("Current version: %s\nLatest version:  %s\n", version, latest)
 		}
 
 		if err := installLatestVersionFn(); err != nil {
 			exitCode = 2
 			exit(2, "update: install failed: %v", err)
 		}
-		output += "\nUpdate installed."
+		output = fmt.Sprintf("Current version: %s\nLatest version:  %s\nUpdate installed.", version, latest)
+		if jsonOutput {
+			printJSON(map[string]interface{}{
+				"currentVersion": version,
+				"latestVersion":  latest,
+				"upToDate":       false,
+				"updated":        true,
+			})
+		}
 	},
 }
 

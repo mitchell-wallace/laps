@@ -72,7 +72,37 @@ var countCmd = &cobra.Command{
 		}
 
 		output = strings.Join(lines, "\n")
-		fmt.Println(output)
+		if jsonOutput {
+			type roleBreakdown struct {
+				Assignee   string `json:"assignee"`
+				Complete   int    `json:"complete"`
+				Incomplete int    `json:"incomplete"`
+			}
+			var breakdown []roleBreakdown
+			var roles []string
+			for r := range stats {
+				roles = append(roles, r)
+			}
+			sort.Strings(roles)
+			for _, r := range roles {
+				s := stats[r]
+				breakdown = append(breakdown, roleBreakdown{
+					Assignee:   r,
+					Complete:   s.complete,
+					Incomplete: s.incomplete,
+				})
+			}
+			if breakdown == nil {
+				breakdown = []roleBreakdown{}
+			}
+			printJSON(map[string]interface{}{
+				"done":      doneCount,
+				"total":     totalCount,
+				"breakdown": breakdown,
+			})
+		} else {
+			fmt.Println(output)
+		}
 	},
 }
 
