@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -37,6 +38,7 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 
 	rootCmd.SetArgs(args)
 	fileFlag = ""
+	jsonOutput = false
 	listAll = false
 	listDone = false
 	addTitle = ""
@@ -97,6 +99,7 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 
 	rootCmd.SetArgs(args)
 	fileFlag = ""
+	jsonOutput = false
 	listAll = false
 	listDone = false
 	addTitle = ""
@@ -1015,4 +1018,323 @@ func idxBefore(s, a, b string) bool {
 	ia := strings.Index(s, a)
 	ib := strings.Index(s, b)
 	return ia >= 0 && ib >= 0 && ia < ib
+}
+
+func TestJSONOutputAdd(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, errStr, code := runMB("add", "head", "--title", "JSON task", "--description", "desc", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	task, ok := result["task"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected task object in JSON, got: %s", out)
+	}
+	if task["title"] != "JSON task" {
+		t.Fatalf("expected title 'JSON task', got: %v", task["title"])
+	}
+	if task["description"] != "desc" {
+		t.Fatalf("expected description 'desc', got: %v", task["description"])
+	}
+}
+
+func TestJSONOutputGet(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Get me", "--description", "details")
+	out, errStr, code := runMB("get", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	task, ok := result["task"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected task object in JSON, got: %s", out)
+	}
+	if task["title"] != "Get me" {
+		t.Fatalf("expected title 'Get me', got: %v", task["title"])
+	}
+}
+
+func TestJSONOutputList(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "A")
+	runMB("add", "tail", "--title", "B")
+	out, errStr, code := runMB("list", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	tasks, ok := result["tasks"].([]interface{})
+	if !ok {
+		t.Fatalf("expected tasks array in JSON, got: %s", out)
+	}
+	if len(tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got: %d", len(tasks))
+	}
+}
+
+func TestJSONOutputListEmpty(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, errStr, code := runMB("list", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	tasks, ok := result["tasks"].([]interface{})
+	if !ok {
+		t.Fatalf("expected tasks array in JSON, got: %s", out)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("expected 0 tasks, got: %d", len(tasks))
+	}
+}
+
+func TestJSONOutputDone(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Do me")
+	out, errStr, code := runMB("done", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	task, ok := result["task"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected task object in JSON, got: %s", out)
+	}
+	if task["isDone"] != true {
+		t.Fatalf("expected isDone true, got: %v", task["isDone"])
+	}
+}
+
+func TestJSONOutputDelete(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Delete me")
+	var addResult map[string]interface{}
+	json.Unmarshal([]byte(strings.TrimSpace(out)), &addResult)
+	id := addResult["task"].(map[string]interface{})["id"].(string)
+
+	out, errStr, code := runMB("delete", id, "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	if result["deleted"] != id {
+		t.Fatalf("expected deleted id %s, got: %v", id, result["deleted"])
+	}
+}
+
+func TestJSONOutputCount(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "A", "--assignee", "alice")
+	runMB("add", "tail", "--title", "B", "--assignee", "alice")
+	runMB("done")
+
+	out, errStr, code := runMB("count", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	if result["done"].(float64) != 1 {
+		t.Fatalf("expected done=1, got: %v", result["done"])
+	}
+	if result["total"].(float64) != 2 {
+		t.Fatalf("expected total=2, got: %v", result["total"])
+	}
+	breakdown, ok := result["breakdown"].([]interface{})
+	if !ok || len(breakdown) != 1 {
+		t.Fatalf("expected 1 breakdown entry, got: %v", result["breakdown"])
+	}
+}
+
+func TestJSONOutputPrune(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "A")
+	runMB("done")
+
+	out, errStr, code := runMB("prune", "0", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	if result["removed"].(float64) != 1 {
+		t.Fatalf("expected removed=1, got: %v", result["removed"])
+	}
+}
+
+func TestJSONOutputVersion(t *testing.T) {
+	version = "0.6.0"
+	out, _, code := runMB("version", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	if result["version"] != "0.6.0" {
+		t.Fatalf("expected version '0.6.0', got: %v", result["version"])
+	}
+}
+
+func TestJSONOutputError(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("get", "--json-output")
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(errStr)), &result); err != nil {
+		t.Fatalf("expected valid JSON on stderr, got: %s", errStr)
+	}
+	if result["error"] != "no head task" {
+		t.Fatalf("expected error 'no head task', got: %v", result["error"])
+	}
+	if result["exitCode"].(float64) != 3 {
+		t.Fatalf("expected exitCode 3, got: %v", result["exitCode"])
+	}
+}
+
+func TestJSONOutputUpdateDev(t *testing.T) {
+	version = "dev"
+	out, errStr, code := runMB("update", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	if result["currentVersion"] != "dev" {
+		t.Fatalf("expected currentVersion 'dev', got: %v", result["currentVersion"])
+	}
+}
+
+func TestJSONOutputUpdateUpToDate(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	oldFetch := fetchLatestVersionFunc
+	defer func() { fetchLatestVersionFunc = oldFetch }()
+	fetchLatestVersionFunc = func() (string, error) { return "0.5.0", nil }
+
+	version = "0.5.0"
+	out, errStr, code := runMB("update", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	if result["upToDate"] != true {
+		t.Fatalf("expected upToDate true, got: %v", result["upToDate"])
+	}
+}
+
+func TestJSONOutputUpdateAvailable(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	oldFetch := fetchLatestVersionFunc
+	defer func() { fetchLatestVersionFunc = oldFetch }()
+	fetchLatestVersionFunc = func() (string, error) { return "0.6.0", nil }
+
+	version = "0.5.0"
+	out, errStr, code := runMB("update", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	if result["upToDate"] != false {
+		t.Fatalf("expected upToDate false, got: %v", result["upToDate"])
+	}
+	if result["updated"] != false {
+		t.Fatalf("expected updated false without --yes, got: %v", result["updated"])
+	}
+}
+
+func TestJSONOutputOnOff(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, errStr, code := runMB("on", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0 for on, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON from on, got: %s", out)
+	}
+	if result["status"] != "enabled" {
+		t.Fatalf("expected status 'enabled', got: %v", result["status"])
+	}
+
+	out, errStr, code = runMB("off", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0 for off, got %d, stderr: %s", code, errStr)
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON from off, got: %s", out)
+	}
+	if result["status"] != "disabled" {
+		t.Fatalf("expected status 'disabled', got: %v", result["status"])
+	}
+}
+
+func TestIsJSONOutput(t *testing.T) {
+	if !isJSONOutput([]string{"list", "--json-output"}) {
+		t.Fatal("expected true for --json-output")
+	}
+	if isJSONOutput([]string{"list"}) {
+		t.Fatal("expected false without --json-output")
+	}
+	if !isJSONOutput([]string{"--json-output", "list"}) {
+		t.Fatal("expected true for flag before command")
+	}
 }
