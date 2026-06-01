@@ -68,6 +68,19 @@ func Execute(v string) error {
 		jsonOutput = true
 	}
 
+	// Intercept --version before Cobra so we can respect jsonOutput.
+	// Cobra's built-in --version handler prints plain text unconditionally.
+	for _, a := range os.Args[1:] {
+		if a == "--version" || a == "-v" {
+			if jsonOutput {
+				printJSON(map[string]interface{}{"version": version})
+			} else {
+				fmt.Println(version)
+			}
+			return nil
+		}
+	}
+
 	// Hook-only command handling
 	cmdName, hookArgs, hookFileValue := splitArgs(os.Args[1:])
 	if cmdName != "" && !isKnownCommand(cmdName) {

@@ -128,7 +128,7 @@ func splitArgs(args []string) (cmd string, posArgs []string, fileValue string) {
 
 func isJSONOutput(args []string) bool {
 	for _, a := range args {
-		if a == "--json-output" {
+		if a == "--json-output" || a == "--json-output=true" {
 			return true
 		}
 	}

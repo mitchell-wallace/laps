@@ -80,6 +80,7 @@ prompts for confirmation before running the install script unless --yes is set.`
 		}
 
 		if !updateYes {
+			output = fmt.Sprintf("Current version: %s\nLatest version:  %s\nUpdate available.", version, latest)
 			if jsonOutput {
 				printJSON(map[string]interface{}{
 					"currentVersion": version,
