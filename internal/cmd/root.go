@@ -63,6 +63,11 @@ func Execute(v string) error {
 		}
 	}()
 
+	// Detect --json-output early for hook-only commands
+	if isJSONOutput(os.Args[1:]) {
+		jsonOutput = true
+	}
+
 	// Hook-only command handling
 	cmdName, hookArgs, hookFileValue := splitArgs(os.Args[1:])
 	if cmdName != "" && !isKnownCommand(cmdName) {

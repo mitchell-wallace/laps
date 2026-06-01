@@ -41,7 +41,7 @@ func runAfterHooksDeferred(cmdName, beadsDir, path string, task **store.Task, ou
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "laps: after hook: %v\n", err)
 		}
-		if passback != "" {
+		if passback != "" && !jsonOutput {
 			fmt.Print(passback)
 		}
 	}
@@ -124,4 +124,13 @@ func splitArgs(args []string) (cmd string, posArgs []string, fileValue string) {
 		}
 	}
 	return cmd, posArgs, fileValue
+}
+
+func isJSONOutput(args []string) bool {
+	for _, a := range args {
+		if a == "--json-output" {
+			return true
+		}
+	}
+	return false
 }
