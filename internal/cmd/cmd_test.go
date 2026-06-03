@@ -263,6 +263,140 @@ func TestAddRequiresJSONTitle(t *testing.T) {
 	}
 }
 
+func TestAddJSONArrayPreservesOrderByPosition(t *testing.T) {
+	tests := []struct {
+		name     string
+		position []string
+		setup    func() string
+	}{
+		{name: "head", position: []string{"head"}},
+		{name: "tail", position: []string{"tail"}},
+		{
+			name:     "after",
+			position: []string{"after"},
+			setup: func() string {
+				out, _, _ := runMB("add", "tail", "--title", "Anchor")
+				return strings.TrimSpace(out)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, cleanup := setupTempRepo(t)
+			defer cleanup()
+
+			args := append([]string{"add"}, tt.position...)
+			if tt.setup != nil {
+				args = append(args, tt.setup())
+			}
+			args = append(args, "--json", `[{"title":"First"},{"title":"Second"},{"title":"Third"}]`)
+			out, errStr, code := runMB(args...)
+			if code != 0 {
+				t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+			}
+			if got := len(strings.Fields(out)); got != 3 {
+				t.Fatalf("expected 3 ids, got %d: %q", got, out)
+			}
+
+			list, _, _ := runMB("list")
+			if !idxBefore(list, "First", "Second") || !idxBefore(list, "Second", "Third") {
+				t.Fatalf("expected input order to be preserved, got:\n%s", list)
+			}
+			if tt.name == "after" && !idxBefore(list, "Anchor", "First") {
+				t.Fatalf("expected batch after anchor, got:\n%s", list)
+			}
+		})
+	}
+}
+
+func TestAddJSONArrayValidationIsAtomic(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("add", "tail", "--json", `[{"title":"Valid"},{"assignee":"alice"}]`)
+	if code != 1 {
+		t.Fatalf("expected code 1, got %d", code)
+	}
+	if !strings.Contains(errStr, "task 2 title is required") {
+		t.Fatalf("expected indexed title error, got: %s", errStr)
+	}
+	list, _, _ := runMB("list")
+	if strings.Contains(list, "Valid") {
+		t.Fatalf("expected no tasks from invalid batch, got:\n%s", list)
+	}
+}
+
+func TestAddJSONArrayRejectsEmptyArray(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("add", "tail", "--json", `[]`)
+	if code != 1 {
+		t.Fatalf("expected code 1, got %d", code)
+	}
+	if !strings.Contains(errStr, "task array must not be empty") {
+		t.Fatalf("expected empty array error, got: %s", errStr)
+	}
+}
+
+func TestAddJSONDashReadsArrayFromStdin(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.WriteString(`[{"title":"From stdin 1"},{"title":"From stdin 2"}]`); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = r
+	defer func() {
+		os.Stdin = oldStdin
+		_ = r.Close()
+	}()
+
+	out, errStr, code := runMB("add", "tail", "--json", "-")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if got := len(strings.Fields(out)); got != 2 {
+		t.Fatalf("expected 2 ids, got output %q", out)
+	}
+	list, _, _ := runMB("list")
+	if !idxBefore(list, "From stdin 1", "From stdin 2") {
+		t.Fatalf("expected stdin batch order, got:\n%s", list)
+	}
+}
+
+func TestAddJSONArrayHooksRunOnceWithoutSingleTaskContext(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	hooks := `{"version":1,"hooks":[{"title":"batch","command":"add","when":"after","run":"printf '%s|%s|%s' \"$id\" \"$title\" \"$output\" > .laps/add-hook.txt"}]}`
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errStr, code := runMB("add", "tail", "--json", `[{"title":"A"},{"title":"B"}]`)
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	data, err := os.ReadFile(filepath.Join(beadsDir, "add-hook.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "||" + strings.TrimSpace(out)
+	if got := string(data); got != want {
+		t.Fatalf("expected one command-level hook context %q, got %q", want, got)
+	}
+}
+
 func TestGetHead(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
@@ -1043,6 +1177,25 @@ func TestJSONOutputAdd(t *testing.T) {
 	}
 	if task["description"] != "desc" {
 		t.Fatalf("expected description 'desc', got: %v", task["description"])
+	}
+}
+
+func TestJSONOutputAddArray(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, errStr, code := runMB("add", "tail", "--json", `[{"title":"A"},{"title":"B"}]`, "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result struct {
+		Tasks []map[string]interface{} `json:"tasks"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	if len(result.Tasks) != 2 || result.Tasks[0]["title"] != "A" || result.Tasks[1]["title"] != "B" {
+		t.Fatalf("expected ordered tasks array, got: %s", out)
 	}
 }
 

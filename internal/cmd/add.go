@@ -33,10 +33,12 @@ Positions:
 
 Input modes (mutually exclusive):
   --title "..." [--description "..."] [--assignee "..."]   Provide task fields.
-  --json '{"title":"...","description":"...","assignee":"..."}'   Provide task as JSON.
+  --json '{"title":"...","description":"...","assignee":"..."}'   Provide one task as JSON.
+  --json '[{"title":"..."},{"title":"..."}]'   Provide multiple tasks as JSON.
+  --json -   Read one task or an array of tasks as JSON from stdin.
   --title "..." --stdin [--assignee "..."]   Read description from stdin.
 
-Prints the new task's id on success.`,
+Prints each new task id on success.`,
 	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		path, repoRoot, beadsDir := getStorePath()
@@ -82,47 +84,52 @@ Prints the new task's id on success.`,
 			exit(1, "add: --stdin is mutually exclusive with --description")
 		}
 
-		var title, description, assignee string
+		var payloads []addPayload
+		isBatch := false
 		if addJSON != "" {
-			var payload struct {
-				Title       string `json:"title"`
-				Description string `json:"description"`
-				Assignee    string `json:"assignee"`
+			jsonInput := []byte(addJSON)
+			if addJSON == "-" {
+				data, err := readPipedStdin("--json -")
+				if err != nil {
+					exitCode = 1
+					exit(1, "add: %v", err)
+				}
+				jsonInput = data
 			}
-			if err := json.Unmarshal([]byte(addJSON), &payload); err != nil {
+			var err error
+			payloads, isBatch, err = parseAddJSON(jsonInput)
+			if err != nil {
 				exitCode = 1
 				exit(1, "add: invalid json: %v", err)
 			}
-			title = payload.Title
-			description = payload.Description
-			assignee = strings.TrimSpace(payload.Assignee)
 		} else if addStdin {
-			fi, err := os.Stdin.Stat()
+			data, err := readPipedStdin("--stdin")
 			if err != nil {
 				exitCode = 1
-				exit(1, "add: cannot check stdin: %v", err)
+				exit(1, "add: %v", err)
 			}
-			if fi.Mode()&os.ModeCharDevice != 0 {
-				exitCode = 1
-				exit(1, "add: --stdin requires piped input, not a terminal")
-			}
-			data, err := io.ReadAll(os.Stdin)
-			if err != nil {
-				exitCode = 1
-				exit(1, "add: reading stdin: %v", err)
-			}
-			title = addTitle
-			description = strings.TrimRight(string(data), "\n")
-			assignee = strings.TrimSpace(addAssignee)
+			payloads = []addPayload{{
+				Title:       addTitle,
+				Description: strings.TrimRight(string(data), "\n"),
+				Assignee:    strings.TrimSpace(addAssignee),
+			}}
 		} else {
-			title = addTitle
-			description = strings.ReplaceAll(addDescription, "\\n", "\n")
-			assignee = strings.TrimSpace(addAssignee)
+			payloads = []addPayload{{
+				Title:       addTitle,
+				Description: strings.ReplaceAll(addDescription, "\\n", "\n"),
+				Assignee:    strings.TrimSpace(addAssignee),
+			}}
 		}
 
-		if strings.TrimSpace(title) == "" {
-			exitCode = 1
-			exit(1, "add: title is required")
+		for i := range payloads {
+			payloads[i].Assignee = strings.TrimSpace(payloads[i].Assignee)
+			if strings.TrimSpace(payloads[i].Title) == "" {
+				exitCode = 1
+				if isBatch {
+					exit(1, "add: task %d title is required", i+1)
+				}
+				exit(1, "add: title is required")
+			}
 		}
 
 		file := loadFile(path)
@@ -131,51 +138,131 @@ Prints the new task's id on success.`,
 			existing[t.ID] = struct{}{}
 		}
 
-		now := time.Now().UTC()
-		id, err := store.GenerateID(repoRoot, title, now, description, existing)
-		if err != nil {
-			exitCode = 2
-			exit(2, "add: %v", err)
-		}
-
-		order, fallbackHead, err := store.ComputeInsertOrder(file, position, afterID)
-		if err != nil {
-			if errors.Is(err, store.ErrTaskNotFound) {
-				exitCode = 3
-				exit(3, "add: task %s not found", afterID)
+		tasks := make([]store.Task, len(payloads))
+		indices := insertionIndices(position, len(payloads))
+		currentAfterID := afterID
+		for _, payloadIndex := range indices {
+			payload := payloads[payloadIndex]
+			now := time.Now().UTC()
+			id, err := store.GenerateID(repoRoot, payload.Title, now, payload.Description, existing)
+			if err != nil {
+				exitCode = 2
+				exit(2, "add: %v", err)
 			}
-			exitCode = 2
-			exit(2, "add: %v", err)
-		}
-		if fallbackHead {
-			fmt.Fprintf(os.Stderr, "laps: lap %s already complete; added to next available spot (head).\n", afterID)
-		}
+			existing[id] = struct{}{}
 
-		t := store.Task{
-			ID:          id,
-			Title:       title,
-			Description: description,
-			Assignee:    assignee,
-			IsDone:      false,
-			Order:       order,
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		}
-		task = &t
+			insertAfterID := currentAfterID
+			order, fallbackHead, err := store.ComputeInsertOrder(file, position, insertAfterID)
+			if err != nil {
+				if errors.Is(err, store.ErrTaskNotFound) {
+					exitCode = 3
+					exit(3, "add: task %s not found", insertAfterID)
+				}
+				exitCode = 2
+				exit(2, "add: %v", err)
+			}
+			if fallbackHead {
+				fmt.Fprintf(os.Stderr, "laps: lap %s already complete; added to next available spot (head).\n", insertAfterID)
+			}
 
-		file.Tasks = append(file.Tasks, *task)
+			t := store.Task{
+				ID:          id,
+				Title:       payload.Title,
+				Description: payload.Description,
+				Assignee:    payload.Assignee,
+				IsDone:      false,
+				Order:       order,
+				CreatedAt:   now,
+				UpdatedAt:   now,
+			}
+			tasks[payloadIndex] = t
+			file.Tasks = append(file.Tasks, t)
+			if position == "after" {
+				currentAfterID = id
+			}
+		}
 
 		if err := store.Save(path, file); err != nil {
 			exitCode = 2
 			exit(2, "add: %v", err)
 		}
-		output = id
+
+		ids := make([]string, len(tasks))
+		for i := range tasks {
+			ids[i] = tasks[i].ID
+		}
+		output = strings.Join(ids, "\n")
+		if len(tasks) == 1 {
+			task = &tasks[0]
+		}
 		if jsonOutput {
-			printJSON(map[string]interface{}{"task": task})
+			if isBatch {
+				printJSON(map[string]interface{}{"tasks": tasks})
+			} else {
+				printJSON(map[string]interface{}{"task": &tasks[0]})
+			}
 		} else {
-			fmt.Println(id)
+			fmt.Println(output)
 		}
 	},
+}
+
+type addPayload struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Assignee    string `json:"assignee"`
+}
+
+func parseAddJSON(data []byte) (payloads []addPayload, isBatch bool, err error) {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" {
+		return nil, false, errors.New("empty input")
+	}
+	switch trimmed[0] {
+	case '{':
+		var payload addPayload
+		if err := json.Unmarshal(data, &payload); err != nil {
+			return nil, false, err
+		}
+		return []addPayload{payload}, false, nil
+	case '[':
+		if err := json.Unmarshal(data, &payloads); err != nil {
+			return nil, true, err
+		}
+		if len(payloads) == 0 {
+			return nil, true, errors.New("task array must not be empty")
+		}
+		return payloads, true, nil
+	default:
+		return nil, false, errors.New("expected object or array")
+	}
+}
+
+func readPipedStdin(flag string) ([]byte, error) {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("cannot check stdin: %v", err)
+	}
+	if fi.Mode()&os.ModeCharDevice != 0 {
+		return nil, fmt.Errorf("%s requires piped input, not a terminal", flag)
+	}
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return nil, fmt.Errorf("reading stdin: %v", err)
+	}
+	return data, nil
+}
+
+func insertionIndices(position string, count int) []int {
+	indices := make([]int, count)
+	for i := range indices {
+		if position == "head" {
+			indices[i] = count - 1 - i
+		} else {
+			indices[i] = i
+		}
+	}
+	return indices
 }
 
 func init() {

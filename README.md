@@ -37,9 +37,23 @@ Flags:
 - `--title <string>` — task title (required unless using `--json`).
 - `--description <string>` — task description. Supports `\n` for newlines.
 - `--assignee <string>` — optional task assignee.
-- `--json <object>` — provide task as `{"title": "...", "description": "...", "assignee": "..."}`. Mutually exclusive with the field flags.
+- `--json <object|array|->` — provide one task as an object, multiple tasks as an array, or read either form from stdin with `-`. Mutually exclusive with the field flags.
 
-Prints the new task's id on success.
+JSON arrays are validated before the queue is modified, written in one update,
+and preserve their input order for `head`, `tail`, and `after` insertion. This is
+useful for generated plans:
+
+```bash
+laps add tail --json '[
+  {"title":"Implement parser","assignee":"SENIOR"},
+  {"title":"Verify parser","assignee":"VERIFY"}
+]'
+
+jq -c . plan.json | laps add tail --json -
+```
+
+Prints each new task id on success. With `--json-output`, object input returns a
+`task` object and array input returns a `tasks` array.
 
 ### `laps get [head|<id>]`
 Get a task by id, or read the head task if no argument is given.
@@ -106,6 +120,9 @@ Use `$var` or `${var}` in `run`:
 - `$exit_code` — laps's exit code (`after` hooks only).
 - `$output` — laps's stdout (`after` hooks only).
 - `$file` — the resolved task file path.
+
+For a batch `laps add --json '[...]'`, hooks run once for the add command with
+empty single-task variables (`$id`, `$title`, `$description`, and `$assignee`).
 
 ### Hook-only commands
 
