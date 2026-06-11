@@ -2158,8 +2158,8 @@ func TestDoneUndoRecent(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d", code)
 	}
-	if !strings.Contains(out, "Recent task") {
-		t.Fatalf("expected title 'Recent task' in output, got: %s", out)
+	if !strings.Contains(out, "Done state cleared for Recent task") {
+		t.Fatalf("expected 'Done state cleared for Recent task' in output, got: %s", out)
 	}
 
 	// Verify task is no longer done
@@ -2229,8 +2229,8 @@ func TestDoneUndoForce(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected code 0 with -y, got %d", code)
 	}
-	if !strings.Contains(out, "Old task") {
-		t.Fatalf("expected title in output, got: %s", out)
+	if !strings.Contains(out, "Done state cleared for Old task") {
+		t.Fatalf("expected 'Done state cleared for Old task' in output, got: %s", out)
 	}
 }
 

@@ -150,7 +150,7 @@ var doneUndoCmd = &cobra.Command{
 		if jsonOutput {
 			printJSON(map[string]interface{}{"task": latest})
 		} else {
-			fmt.Println(latest.Title)
+			fmt.Printf("Done state cleared for %s (%s)\n", latest.Title, latest.ID)
 		}
 	},
 }
