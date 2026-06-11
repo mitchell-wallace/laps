@@ -11,19 +11,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v2
       - uses: actions/setup-go@v5
         with:
           go-version: 'stable'
-      - run: make build
+      - run: just build
 
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v2
       - uses: actions/setup-go@v5
         with:
           go-version: 'stable'
-      - run: make test
+      - run: just test
 
   lint:
     runs-on: ubuntu-latest
