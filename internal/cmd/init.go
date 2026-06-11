@@ -38,19 +38,20 @@ var initCmd = &cobra.Command{
 		claimLine := ".laps/claim"
 
 		var lines []string
+		found := false
 		if data, err := os.ReadFile(gitignorePath); err == nil {
 			scanner := bufio.NewScanner(bytes.NewReader(data))
 			for scanner.Scan() {
-				line := strings.TrimSpace(scanner.Text())
-				if line == claimLine {
-					lines = nil
+				text := scanner.Text()
+				if strings.TrimSpace(text) == claimLine {
+					found = true
 					break
 				}
-				lines = append(lines, scanner.Text())
+				lines = append(lines, text)
 			}
 		}
 
-		if lines != nil {
+		if !found {
 			lines = append(lines, claimLine)
 			data := []byte(strings.Join(lines, "\n") + "\n")
 			if err := os.WriteFile(gitignorePath, data, 0o644); err != nil {
@@ -87,13 +88,16 @@ var initCmd = &cobra.Command{
 			}
 			addCmd := exec.Command("git", append([]string{"add"}, files...)...)
 			addCmd.Dir = repoRoot
-			_ = addCmd.Run()
-			commitCmd := exec.Command("git", "commit", "-m", "chore: laps init")
-			commitCmd.Dir = repoRoot
-			if out, err := commitCmd.CombinedOutput(); err != nil {
-				fmt.Fprintf(os.Stderr, "laps: note: auto-commit failed: %s\n", strings.TrimSpace(string(out)))
+			if out, err := addCmd.CombinedOutput(); err != nil {
+				fmt.Fprintf(os.Stderr, "laps: note: auto-commit (git add) failed: %s\n", strings.TrimSpace(string(out)))
 			} else {
-				fmt.Println("Committed initialization")
+				commitCmd := exec.Command("git", "commit", "-m", "chore: laps init")
+				commitCmd.Dir = repoRoot
+				if out, err := commitCmd.CombinedOutput(); err != nil {
+					fmt.Fprintf(os.Stderr, "laps: note: auto-commit (git commit) failed: %s\n", strings.TrimSpace(string(out)))
+				} else {
+					fmt.Println("Committed initialization")
+				}
 			}
 		}
 	},
