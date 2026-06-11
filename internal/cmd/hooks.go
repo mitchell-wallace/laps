@@ -116,14 +116,15 @@ func splitArgs(args []string) (cmd string, posArgs []string, fileValue string) {
 		}
 		if cmd == "" {
 			if strings.HasPrefix(a, "-") {
-				if a == "-f" || a == "--file" {
+				switch {
+				case a == "-f" || a == "--file":
 					skipNext = true
 					if i+1 < len(args) {
 						fileValue = args[i+1]
 					}
-				} else if strings.HasPrefix(a, "-f=") {
+				case strings.HasPrefix(a, "-f="):
 					fileValue = strings.TrimPrefix(a, "-f=")
-				} else if strings.HasPrefix(a, "--file=") {
+				case strings.HasPrefix(a, "--file="):
 					fileValue = strings.TrimPrefix(a, "--file=")
 				}
 				continue

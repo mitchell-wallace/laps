@@ -25,19 +25,16 @@ Output is title, blank line, description — nothing else.`,
 		file := loadFile(path)
 
 		var task *store.Task
-		var taskID string
 		if target == "head" {
 			for i := range file.Tasks {
 				if !file.Tasks[i].IsDone {
 					task = &file.Tasks[i]
-					taskID = file.Tasks[i].ID
 					break
 				}
 			}
 		} else {
-			taskID = target
 			for i := range file.Tasks {
-				if file.Tasks[i].ID == taskID {
+				if file.Tasks[i].ID == target {
 					task = &file.Tasks[i]
 					break
 				}
