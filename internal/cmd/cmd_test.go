@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/pflag"
 )
 
@@ -47,11 +49,13 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	addJSON = ""
 	addStdin = false
 	updateYes = false
+	forceUndo = false
 	for _, f := range []*pflag.FlagSet{
 		rootCmd.PersistentFlags(),
 		addCmd.Flags(),
 		listCmd.Flags(),
 		updateCmd.Flags(),
+		doneUndoCmd.Flags(),
 	} {
 		f.VisitAll(func(flag *pflag.Flag) {
 			flag.Changed = false
@@ -109,11 +113,13 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	addJSON = ""
 	addStdin = false
 	updateYes = false
+	forceUndo = false
 	for _, f := range []*pflag.FlagSet{
 		rootCmd.PersistentFlags(),
 		addCmd.Flags(),
 		listCmd.Flags(),
 		updateCmd.Flags(),
+		doneUndoCmd.Flags(),
 	} {
 		f.VisitAll(func(flag *pflag.Flag) {
 			flag.Changed = false
@@ -518,22 +524,39 @@ func TestListOutputIncludesAssignee(t *testing.T) {
 	}
 }
 
-func TestDone(t *testing.T) {
-	_, cleanup := setupTempRepo(t)
+func TestDoneWithClaim(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
 	defer cleanup()
 
 	out, _, _ := runMB("add", "head", "--title", "Do me")
 	id := strings.TrimSpace(out)
-	out, _, code := runMB("done")
+	_, _, code := runMB("claim")
+	if code != 0 {
+		t.Fatalf("claim failed, code %d", code)
+	}
+	out, _, code = runMB("done")
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d", code)
 	}
-	if strings.TrimSpace(out) != id {
-		t.Fatalf("expected done to print %s, got %s", id, out)
+	if !strings.Contains(out, "Do me") {
+		t.Fatalf("expected title 'Do me' in output, got: %s", out)
+	}
+	if !strings.Contains(out, "laps done undo") {
+		t.Fatalf("expected undo hint in output, got: %s", out)
+	}
+	claimPath := filepath.Join(beadsDir, "claim")
+	if _, err := os.Stat(claimPath); !os.IsNotExist(err) {
+		t.Fatal("expected claim file to be removed after done")
+	}
+	data, _ := store.Load(filepath.Join(beadsDir, "laps.json"))
+	for _, task := range data.Tasks {
+		if task.ID == id && !task.IsDone {
+			t.Fatal("expected task to be done")
+		}
 	}
 }
 
-func TestDoneNoHead(t *testing.T) {
+func TestDoneNoHeadNoClaim(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
 
@@ -541,8 +564,8 @@ func TestDoneNoHead(t *testing.T) {
 	if code != 3 {
 		t.Fatalf("expected code 3, got %d", code)
 	}
-	if !strings.Contains(errStr, "no head task") {
-		t.Fatalf("expected no head task, got: %s", errStr)
+	if !strings.Contains(errStr, "no claimed lap and no head task") {
+		t.Fatalf("expected no claimed lap and no head task, got: %s", errStr)
 	}
 }
 
@@ -586,6 +609,7 @@ func TestPruneDefault(t *testing.T) {
 		_, _, _ = runMB("add", "tail", "--title", fmt.Sprintf("Task %d", i))
 	}
 	for i := 0; i < 25; i++ {
+		runMB("claim")
 		_, _, _ = runMB("done")
 	}
 
@@ -612,6 +636,7 @@ func TestPruneZero(t *testing.T) {
 	defer cleanup()
 
 	_, _, _ = runMB("add", "tail", "--title", "A")
+	runMB("claim")
 	_, _, _ = runMB("done")
 
 	out, _, code := runMB("prune", "0")
@@ -684,6 +709,7 @@ func TestHookPassback(t *testing.T) {
 	hooks := `{"version":1,"hooks":[{"title":"pass","command":"done","when":"after","run":"echo passback","passback":true}]}`
 	os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644)
 
+	runMB("claim")
 	out, _, code := runMB("done")
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d", code)
@@ -793,6 +819,7 @@ func TestBeforeHookTaskVariables(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooksDone), 0644); err != nil {
 		t.Fatal(err)
 	}
+	runMB("claim")
 	out, _, _ = runMB("done")
 	if !strings.Contains(out, "DONE:"+id+":TaskA:DescA:alice") {
 		t.Fatalf("expected DONE before-hook variables, got: %s", out)
@@ -965,6 +992,7 @@ func TestPruneAcceptsExtraArgs(t *testing.T) {
 	defer cleanup()
 
 	_, _, _ = runMB("add", "tail", "--title", "A")
+	runMB("claim")
 	_, _, _ = runMB("done")
 
 	out, errStr, code := runMB("prune", "0", "extra")
@@ -1113,6 +1141,7 @@ func TestCountCommand(t *testing.T) {
 	}
 
 	// Complete the first task (Task 1, assigned to coder)
+	runMB("claim")
 	_, _, code5 := runMB("done")
 	if code5 != 0 {
 		t.Fatal("failed to complete task")
@@ -1146,6 +1175,7 @@ func TestOrderingHeadLandsBelowDone(t *testing.T) {
 	cid := strings.TrimSpace(out)
 
 	// Complete C (the head todo).
+	runMB("claim")
 	runMB("done")
 
 	// Default list shows only todos, head first: A then B.
@@ -1178,6 +1208,7 @@ func TestAddAfterDoneWarnsAndBecomesHead(t *testing.T) {
 	runMB("add", "tail", "--title", "A")
 	out, _, _ := runMB("add", "head", "--title", "C")
 	cid := strings.TrimSpace(out)
+	runMB("claim")
 	runMB("done") // completes C
 
 	_, errStr, code := runMB("add", "after", cid, "--title", "D")
@@ -1346,6 +1377,7 @@ func TestJSONOutputDone(t *testing.T) {
 	defer cleanup()
 
 	runMB("add", "head", "--title", "Do me")
+	runMB("claim")
 	out, errStr, code := runMB("done", "--json-output")
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
@@ -1393,6 +1425,7 @@ func TestJSONOutputCount(t *testing.T) {
 
 	runMB("add", "tail", "--title", "A", "--assignee", "alice")
 	runMB("add", "tail", "--title", "B", "--assignee", "alice")
+	runMB("claim")
 	runMB("done")
 
 	out, errStr, code := runMB("count", "--json-output")
@@ -1420,6 +1453,7 @@ func TestJSONOutputPrune(t *testing.T) {
 	defer cleanup()
 
 	runMB("add", "tail", "--title", "A")
+	runMB("claim")
 	runMB("done")
 
 	out, errStr, code := runMB("prune", "0", "--json-output")
@@ -1608,6 +1642,7 @@ func TestJSONOutputListDone(t *testing.T) {
 
 	runMB("add", "tail", "--title", "A")
 	runMB("add", "tail", "--title", "B")
+	runMB("claim")
 	runMB("done")
 
 	out, errStr, code := runMB("list", "--done", "--json-output")
@@ -1637,6 +1672,7 @@ func TestJSONOutputListAll(t *testing.T) {
 
 	runMB("add", "tail", "--title", "Todo")
 	runMB("add", "tail", "--title", "Done")
+	runMB("claim")
 	runMB("done")
 
 	out, errStr, code := runMB("list", "--all", "--json-output")
@@ -1685,6 +1721,7 @@ func TestJSONOutputPruneDefault(t *testing.T) {
 		runMB("add", "tail", "--title", fmt.Sprintf("Task %d", i))
 	}
 	for i := 0; i < 25; i++ {
+		runMB("claim")
 		runMB("done")
 	}
 
@@ -1701,7 +1738,7 @@ func TestJSONOutputPruneDefault(t *testing.T) {
 	}
 }
 
-func TestJSONOutputDoneNoHead(t *testing.T) {
+func TestJSONOutputDoneNoHeadNoClaim(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
 
@@ -1713,8 +1750,8 @@ func TestJSONOutputDoneNoHead(t *testing.T) {
 	if err := json.Unmarshal([]byte(strings.TrimSpace(errStr)), &result); err != nil {
 		t.Fatalf("expected valid JSON on stderr, got: %s", errStr)
 	}
-	if result["error"] != "no head task" {
-		t.Fatalf("expected error 'no head task', got: %v", result["error"])
+	if !strings.Contains(result["error"].(string), "no claimed lap") {
+		t.Fatalf("expected error containing 'no claimed lap', got: %v", result["error"])
 	}
 }
 
@@ -1784,6 +1821,7 @@ func TestJSONOutputHookPassbackSuppression(t *testing.T) {
 	defer cleanup()
 
 	runMB("add", "head", "--title", "A")
+	runMB("claim")
 	hooks := `{"version":1,"hooks":[{"title":"pass","command":"done","when":"after","run":"echo passback","passback":true}]}`
 	os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644)
 
@@ -1831,5 +1869,525 @@ func TestJSONOutputVersionFlag(t *testing.T) {
 	}
 	if result["version"] != "test" {
 		t.Fatalf("expected version 'test', got: %v", result["version"])
+	}
+}
+
+// --- Claim tests ---
+
+func TestClaimHead(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "First task", "--description", "Desc")
+	runMB("add", "tail", "--title", "Second task")
+
+	out, _, code := runMB("claim")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "First task") {
+		t.Fatalf("expected title 'First task' in output, got: %s", out)
+	}
+	if !strings.Contains(out, "Desc") {
+		t.Fatalf("expected description 'Desc' in output, got: %s", out)
+	}
+	if !strings.Contains(out, "laps claim undo") {
+		t.Fatalf("expected undo hint in output, got: %s", out)
+	}
+
+	data, err := os.ReadFile(filepath.Join(beadsDir, "claim"))
+	if err != nil {
+		t.Fatalf("expected claim file: %v", err)
+	}
+	if strings.TrimSpace(string(data)) == "" {
+		t.Fatal("expected non-empty claim file")
+	}
+}
+
+func TestClaimByID(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Task A")
+	runMB("add", "tail", "--title", "Task B")
+	idA := strings.TrimSpace(out)
+
+	out, _, code := runMB("claim", idA)
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "Task A") {
+		t.Fatalf("expected title 'Task A' in output, got: %s", out)
+	}
+}
+
+func TestClaimNoHead(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("claim")
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	if !strings.Contains(errStr, "no head task") {
+		t.Fatalf("expected 'no head task', got: %s", errStr)
+	}
+}
+
+func TestClaimNotFound(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("claim", "nonexistent-id")
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	if !strings.Contains(errStr, "task not found") {
+		t.Fatalf("expected 'task not found', got: %s", errStr)
+	}
+}
+
+func TestClaimUndo(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Task to claim")
+	runMB("claim")
+
+	out, _, code := runMB("claim", "undo")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "Claim cleared for") {
+		t.Fatalf("expected 'Claim cleared for' in output, got: %s", out)
+	}
+	if !strings.Contains(out, "Task to claim") {
+		t.Fatalf("expected title in output, got: %s", out)
+	}
+}
+
+func TestClaimUndoNothingClaimed(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("claim", "undo")
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	if !strings.Contains(errStr, "no claimed lap to clear") {
+		t.Fatalf("expected 'no claimed lap to clear', got: %s", errStr)
+	}
+}
+
+// --- Done tests ---
+
+func TestDoneBareNoClaimHasHead(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Head task")
+
+	_, errStr, code := runMB("done")
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	if !strings.Contains(errStr, "no claimed lap") {
+		t.Fatalf("expected 'no claimed lap' in error, got: %s", errStr)
+	}
+	if !strings.Contains(errStr, "Head task") {
+		t.Fatalf("expected head task title in error, got: %s", errStr)
+	}
+}
+
+func TestDoneExplicitID(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Do me", "--description", "desc")
+	id := strings.TrimSpace(out)
+
+	out, _, code := runMB("done", id)
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "Do me") {
+		t.Fatalf("expected title 'Do me' in output, got: %s", out)
+	}
+	if !strings.Contains(out, "laps done undo") {
+		t.Fatalf("expected undo hint, got: %s", out)
+	}
+}
+
+func TestDoneExplicitIDAlreadyDone(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Do me")
+	id := strings.TrimSpace(out)
+	runMB("claim")
+	runMB("done")
+
+	_, errStr, code := runMB("done", id)
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	if !strings.Contains(errStr, "already done") {
+		t.Fatalf("expected 'already done' in error, got: %s", errStr)
+	}
+}
+
+func TestDoneExplicitIDNotFound(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("done", "nonexistent-id")
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	if !strings.Contains(errStr, "task not found") {
+		t.Fatalf("expected 'task not found', got: %s", errStr)
+	}
+}
+
+func TestDoneClaimedNotFound(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Task")
+	runMB("claim")
+	// Remove the claimed task from the store
+	data, _ := store.Load(filepath.Join(beadsDir, "laps.json"))
+	data.Tasks = nil
+	store.Save(filepath.Join(beadsDir, "laps.json"), data)
+
+	_, errStr, code := runMB("done")
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	if !strings.Contains(errStr, "not found") {
+		t.Fatalf("expected 'not found' in error, got: %s", errStr)
+	}
+}
+
+func TestDoneClaimedAlreadyDone(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Task")
+	id := strings.TrimSpace(out)
+	runMB("claim")
+	// Mark done externally
+	data, _ := store.Load(filepath.Join(beadsDir, "laps.json"))
+	for i := range data.Tasks {
+		if data.Tasks[i].ID == id {
+			now := time.Now().UTC()
+			data.Tasks[i].IsDone = true
+			data.Tasks[i].CompletedAt = &now
+		}
+	}
+	store.Save(filepath.Join(beadsDir, "laps.json"), data)
+
+	_, errStr, code := runMB("done")
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	if !strings.Contains(errStr, "already done") {
+		t.Fatalf("expected 'already done' in error, got: %s", errStr)
+	}
+}
+
+func TestDoneExplicitIDWithClaim(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "tail", "--title", "Task A")
+	idA := strings.TrimSpace(out)
+	runMB("add", "head", "--title", "Task B")
+	runMB("claim") // claims Task B
+
+	// Complete Task A explicitly (different from claimed task)
+	out, _, code := runMB("done", idA)
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "Task A") {
+		t.Fatalf("expected 'Task A' title, got: %s", out)
+	}
+
+	// Claim should still exist (we completed a different task)
+	claimedID, _ := store.ReadClaim(beadsDir)
+	if claimedID == "" {
+		t.Fatal("expected claim to persist after completing different task")
+	}
+}
+
+func TestDoneExplicitIDMatchesClaim(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Task X")
+	out, _, _ := runMB("add", "tail", "--title", "Task Y")
+	idY := strings.TrimSpace(out)
+	runMB("claim", idY) // claim Task Y
+
+	// Complete Task Y (matches claim)
+	out, _, code := runMB("done", idY)
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "Task Y") {
+		t.Fatalf("expected 'Task Y' title, got: %s", out)
+	}
+
+	// Claim should be cleared
+	claimedID, _ := store.ReadClaim(beadsDir)
+	if claimedID != "" {
+		t.Fatal("expected claim cleared when completing matching task")
+	}
+}
+
+func TestDoneUndoRecent(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Recent task")
+	runMB("claim")
+	runMB("done")
+
+	out, _, code := runMB("done", "undo")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "Recent task") {
+		t.Fatalf("expected title 'Recent task' in output, got: %s", out)
+	}
+
+	// Verify task is no longer done
+	data, _ := store.Load(filepath.Join(beadsDir, "laps.json"))
+	for _, task := range data.Tasks {
+		if task.Title == "Recent task" && task.IsDone {
+			t.Fatal("expected task to be undone")
+		}
+	}
+}
+
+func TestDoneUndoOld(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Old task")
+	id := strings.TrimSpace(out)
+	runMB("claim")
+	runMB("done")
+
+	// Manually set completedAt to 6 minutes ago
+	path := filepath.Join(beadsDir, "laps.json")
+	data, _ := store.Load(path)
+	for i := range data.Tasks {
+		if data.Tasks[i].ID == id {
+			old := time.Now().UTC().Add(-6 * time.Minute)
+			data.Tasks[i].CompletedAt = &old
+		}
+	}
+	store.Save(path, data)
+
+	_, errStr, code := runMB("done", "undo")
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	if !strings.Contains(errStr, "was completed") {
+		t.Fatalf("expected age warning, got: %s", errStr)
+	}
+	if !strings.Contains(errStr, "Old task") {
+		t.Fatalf("expected task title in error, got: %s", errStr)
+	}
+	if !strings.Contains(errStr, "undo -y") {
+		t.Fatalf("expected -y hint in error, got: %s", errStr)
+	}
+}
+
+func TestDoneUndoForce(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Old task")
+	id := strings.TrimSpace(out)
+	runMB("claim")
+	runMB("done")
+
+	path := filepath.Join(beadsDir, "laps.json")
+	data, _ := store.Load(path)
+	for i := range data.Tasks {
+		if data.Tasks[i].ID == id {
+			old := time.Now().UTC().Add(-6 * time.Minute)
+			data.Tasks[i].CompletedAt = &old
+		}
+	}
+	store.Save(path, data)
+
+	out, _, code := runMB("done", "undo", "-y")
+	if code != 0 {
+		t.Fatalf("expected code 0 with -y, got %d", code)
+	}
+	if !strings.Contains(out, "Old task") {
+		t.Fatalf("expected title in output, got: %s", out)
+	}
+}
+
+func TestDoneUndoNoCompleted(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("done", "undo")
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	if !strings.Contains(errStr, "no completed task to undo") {
+		t.Fatalf("expected 'no completed task to undo', got: %s", errStr)
+	}
+}
+
+// --- JSON output tests ---
+
+func TestJSONOutputClaim(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "JSON claim task")
+	out, errStr, code := runMB("claim", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	if _, ok := result["task"]; !ok {
+		t.Fatalf("expected task key in JSON, got: %s", out)
+	}
+	if result["claimedId"] == "" {
+		t.Fatalf("expected claimedId in JSON, got: %s", out)
+	}
+}
+
+func TestJSONOutputClaimUndo(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Undo JSON")
+	runMB("claim")
+	out, errStr, code := runMB("claim", "undo", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	if result["unclaimedId"] == "" {
+		t.Fatalf("expected unclaimedId in JSON, got: %s", out)
+	}
+	if result["title"] != "Undo JSON" {
+		t.Fatalf("expected title 'Undo JSON', got: %v", result["title"])
+	}
+}
+
+func TestJSONOutputDoneUndo(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Undo JSON done")
+	runMB("claim")
+	runMB("done")
+	out, errStr, code := runMB("done", "undo", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	task, ok := result["task"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected task object in JSON, got: %s", out)
+	}
+	if task["isDone"] != false {
+		t.Fatalf("expected isDone false, got: %v", task["isDone"])
+	}
+}
+
+func TestJSONOutputClaimBareError(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("claim", "--json-output")
+	if code != 3 {
+		t.Fatalf("expected code 3, got %d", code)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(errStr)), &result); err != nil {
+		t.Fatalf("expected valid JSON on stderr, got: %s", errStr)
+	}
+	if result["error"] != "no head task" {
+		t.Fatalf("expected error 'no head task', got: %v", result["error"])
+	}
+}
+
+// --- Init tests ---
+
+func TestInit(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	os.WriteFile(".gitignore", []byte("/bin/\n"), 0644)
+
+	// Remove .laps/laps.json that setupTempRepo created (it only creates dir)
+	// Actually setupTempRepo just creates the dir, so laps.json doesn't exist yet.
+
+	out, _, code := runMB("init")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, output: %s", code, out)
+	}
+	if !strings.Contains(out, "Created .laps/laps.json") {
+		t.Fatalf("expected created message, got: %s", out)
+	}
+	if !strings.Contains(out, "Added .laps/claim to .gitignore") {
+		t.Fatalf("expected gitignore message, got: %s", out)
+	}
+
+	if _, err := os.Stat(filepath.Join(beadsDir, "laps.json")); err != nil {
+		t.Fatalf("expected laps.json to exist: %v", err)
+	}
+
+	gitignoreData, _ := os.ReadFile(".gitignore")
+	if !strings.Contains(string(gitignoreData), ".laps/claim") {
+		t.Fatal("expected .laps/claim in .gitignore")
+	}
+
+	// Run again - should say Already initialized
+	out, _, code = runMB("init")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "Already initialized") {
+		t.Fatalf("expected 'Already initialized', got: %s", out)
+	}
+}
+
+func TestInitGitignoreAlreadyExists(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	os.WriteFile(".gitignore", []byte("/bin/\n.laps/claim\n"), 0644)
+
+	out, _, code := runMB("init")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "Created .laps/laps.json") {
+		t.Fatalf("expected created message, got: %s", out)
+	}
+	if strings.Contains(out, ".gitignore") {
+		t.Fatalf("should not modify .gitignore, but output: %s", out)
 	}
 }

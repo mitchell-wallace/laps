@@ -377,6 +377,11 @@ func ComputeInsertOrder(f *File, position, afterID string) (order int, fallbackH
 	}
 }
 
+// FindTask returns a pointer to the lap with the given id, or nil.
+func FindTask(f *File, id string) *Task {
+	return findTask(f, id)
+}
+
 // findTask returns a pointer to the lap with the given id, or nil.
 func findTask(f *File, id string) *Task {
 	for i := range f.Tasks {

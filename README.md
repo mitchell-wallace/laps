@@ -55,10 +55,27 @@ jq -c . plan.json | laps add tail --json -
 Prints each new task id on success. With `--json-output`, object input returns a
 `task` object and array input returns a `tasks` array.
 
+### `laps init`
+Initialize laps in the current repository. Creates `.laps/laps.json` (if absent)
+and appends `.laps/claim` to `.gitignore` (if not already present). When changes
+are made, attempts to auto-commit them as `chore: laps init`.
+
 ### `laps get [head|<id>]`
 Get a task by id, or read the head task if no argument is given.
 
 Output is title, optional assignee, blank line, description.
+
+### `laps claim [head|<id>]`
+Claim a task for the current session. Writes the claimed task id to
+`.laps/claim` so that a subsequent bare `laps done` knows which task to
+complete. Defaults to the head task.
+
+After claiming, a hint is printed suggesting `laps claim undo` if the wrong
+task was claimed.
+
+### `laps claim undo`
+Clear the claimed lap stored in `.laps/claim`. Prints the id and title of the
+un-claimed lap.
 
 ### `laps list [--all | --done]`
 List tasks as a markdown numbered list.
@@ -67,10 +84,22 @@ List tasks as a markdown numbered list.
 - `--all` — include done tasks after todo items (struck through).
 - `--done` — show only completed tasks, most recent first.
 
-### `laps done`
-Complete the head task. Sets it to done and prints the task id.
+### `laps done [<id>]`
+Complete a task. When called with a task id, completes that task directly.
+When called without arguments, reads the claimed lap from `.laps/claim` (set by
+`laps claim`) and completes it. If no task is claimed and no id is given,
+prints a hint with the head task's id and title.
 
-If there is no head task, exits non-zero with `no head task`.
+Prints the task title on success. If the completed task matches the claimed
+lap, `.laps/claim` is cleared automatically.
+
+A hint is printed suggesting `laps done undo` if the wrong task was marked done.
+
+### `laps done undo [-y]`
+Re-open the most recently completed lap. If it was completed more than
+5 minutes ago, the command fails unless `-y` (or `--yes`) is passed.
+
+Prints the task title on success.
 
 ### `laps delete <id>`
 Delete a task by id, regardless of whether it is todo or done.
@@ -105,7 +134,7 @@ Laps can run custom shell commands before or after any laps command via `.laps/h
 |-------|-------------|
 | `title` | Human-readable name for the hook. |
 | `description` | What the hook does. |
-| `command` | The laps command that triggers this hook (e.g. `done`, `add`). Can also be a custom name for hook-only commands. |
+| `command` | The laps command that triggers this hook (e.g. `done`, `add`). Can also be a custom name for hook-only commands. Subcommands use a hyphenated form, e.g. `done-undo`, `claim-undo`. |
 | `when` | `before` or `after`. |
 | `run` | Shell command to execute. |
 | `passback` | If `true`, the hook's stdout is printed after laps's output. |

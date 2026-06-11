@@ -438,3 +438,54 @@ func TestCheckDefaultStore_MissingNoCandidates(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestClaimCRUD(t *testing.T) {
+	dir := t.TempDir()
+	beadsDir := filepath.Join(dir, ".laps")
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteClaim(beadsDir, "test-id-123"); err != nil {
+		t.Fatalf("WriteClaim: %v", err)
+	}
+
+	id, err := ReadClaim(beadsDir)
+	if err != nil {
+		t.Fatalf("ReadClaim: %v", err)
+	}
+	if id != "test-id-123" {
+		t.Fatalf("expected 'test-id-123', got %q", id)
+	}
+
+	cp := ClaimPath(beadsDir)
+	if _, err := os.Stat(cp); err != nil {
+		t.Fatalf("claim file should exist: %v", err)
+	}
+
+	if err := RemoveClaim(beadsDir); err != nil {
+		t.Fatalf("RemoveClaim: %v", err)
+	}
+
+	id, err = ReadClaim(beadsDir)
+	if err != nil {
+		t.Fatalf("ReadClaim after remove: %v", err)
+	}
+	if id != "" {
+		t.Fatalf("expected empty claim after remove, got %q", id)
+	}
+
+	// Remove when already gone should not error
+	if err := RemoveClaim(beadsDir); err != nil {
+		t.Fatalf("RemoveClaim on empty: %v", err)
+	}
+
+	// ReadClaim on missing file
+	id, err = ReadClaim(beadsDir)
+	if err != nil {
+		t.Fatalf("ReadClaim on empty: %v", err)
+	}
+	if id != "" {
+		t.Fatalf("expected empty claim, got %q", id)
+	}
+}
