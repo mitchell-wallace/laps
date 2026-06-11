@@ -163,16 +163,52 @@ func Save(path string, data *File) error {
 	}
 	b = append(b, '\n')
 
+	if err := SafeWriteFile(path, b, 0o644); err != nil {
+		return fmt.Errorf("%w: %v", ErrStore, err)
+	}
+	return nil
+}
+
+// SafeWriteFile writes data to a temporary file, calls Sync to ensure it is committed to disk,
+// closes the file, and then renames it atomically to path. It also attempts to sync the parent
+// directory of the destination file.
+func SafeWriteFile(path string, data []byte, perm os.FileMode) error {
 	tmpPath := fmt.Sprintf("%s.%d.tmp", path, os.Getpid())
-	if err := os.WriteFile(tmpPath, b, 0o644); err != nil {
-		return fmt.Errorf("%w: write temp file: %v", ErrStore, err)
+	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
+		return err
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		if rmErr := os.Remove(tmpPath); rmErr != nil {
-			return fmt.Errorf("%w: rename temp file to %s: %v (cleanup: %v)", ErrStore, path, err, rmErr)
+
+	var success bool
+	defer func() {
+		if !success {
+			_ = f.Close()
+			_ = os.Remove(tmpPath)
 		}
-		return fmt.Errorf("%w: rename temp file to %s: %v", ErrStore, path, err)
+	}()
+
+	if _, err := f.Write(data); err != nil {
+		return err
 	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	success = true
+
+	// Sync parent directory to persist the rename. Ignore errors as some filesystems
+	// or operating systems (like Windows) do not support directory syncing.
+	if df, err := os.Open(filepath.Dir(path)); err == nil {
+		_ = df.Sync()
+		_ = df.Close()
+	}
+
 	return nil
 }
 

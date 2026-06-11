@@ -771,6 +771,48 @@ func TestHookAssigneeVariable(t *testing.T) {
 	}
 }
 
+func TestBeforeHookTaskVariables(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "TaskA", "--description", "DescA", "--assignee", "alice")
+	id := strings.TrimSpace(out)
+
+	// Test GET before hook
+	hooksGet := `{"version":1,"hooks":[{"title":"beforeGet","command":"get","when":"before","run":"echo GET:$id:$title:$description:$assignee","passback":true}]}`
+	if err := os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooksGet), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out, _, _ = runMB("get", id)
+	if !strings.Contains(out, "GET:"+id+":TaskA:DescA:alice") {
+		t.Fatalf("expected GET before-hook variables, got: %s", out)
+	}
+
+	// Test DONE before hook
+	hooksDone := `{"version":1,"hooks":[{"title":"beforeDone","command":"done","when":"before","run":"echo DONE:$id:$title:$description:$assignee","passback":true}]}`
+	if err := os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooksDone), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out, _, _ = runMB("done")
+	if !strings.Contains(out, "DONE:"+id+":TaskA:DescA:alice") {
+		t.Fatalf("expected DONE before-hook variables, got: %s", out)
+	}
+
+	// Add another task to delete
+	out, _, _ = runMB("add", "head", "--title", "TaskB", "--description", "DescB", "--assignee", "bob")
+	id2 := strings.TrimSpace(out)
+
+	// Test DELETE before hook
+	hooksDelete := `{"version":1,"hooks":[{"title":"beforeDelete","command":"delete","when":"before","run":"echo DELETE:$id:$title:$description:$assignee","passback":true}]}`
+	if err := os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooksDelete), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out, _, _ = runMB("delete", id2)
+	if !strings.Contains(out, "DELETE:"+id2+":TaskB:DescB:bob") {
+		t.Fatalf("expected DELETE before-hook variables, got: %s", out)
+	}
+}
+
 func TestHookArgsPassthrough(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
@@ -841,6 +883,40 @@ func TestHookOnlyCommandFromSubdir(t *testing.T) {
 	}
 	if string(data) != "wrapped" {
 		t.Fatalf("expected hook output 'wrapped', got %q", string(data))
+	}
+}
+
+func TestHookOnlyCommandFileParsing(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	hooks := `{"version":1,"hooks":[{"title":"printfile","command":"customcmd","when":"before","run":"echo $file","passback":true}]}`
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(hooks), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		args     []string
+		expected string
+	}{
+		{[]string{"customcmd"}, "laps.json"},
+		{[]string{"-f", "other.json", "customcmd"}, "other.json"},
+		{[]string{"--file", "other2.json", "customcmd"}, "other2.json"},
+		{[]string{"-f=other3.json", "customcmd"}, "other3.json"},
+		{[]string{"--file=other4.json", "customcmd"}, "other4.json"},
+	}
+
+	for _, tc := range tests {
+		t.Run(strings.Join(tc.args, "_"), func(t *testing.T) {
+			out, errStr, err := runMBExecute(tc.args...)
+			if err != nil {
+				t.Fatalf("expected nil error, got %v, stderr: %s", err, errStr)
+			}
+			expectedPath := filepath.Join(beadsDir, tc.expected)
+			if !strings.Contains(strings.TrimSpace(out), expectedPath) {
+				t.Fatalf("expected output to contain %q, got: %q", expectedPath, out)
+			}
+		})
 	}
 }
 

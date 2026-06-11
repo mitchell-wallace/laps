@@ -19,25 +19,30 @@ var deleteCmd = &cobra.Command{
 		checkDefault(beadsDir)
 		file := loadFile(path)
 
+		var task *store.Task
+		for i := range file.Tasks {
+			if file.Tasks[i].ID == id {
+				task = &file.Tasks[i]
+				break
+			}
+		}
+
 		exitCode := 0
 		var output string
-		var task *store.Task
 		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
+		runBeforeHooks(cmd.Name(), beadsDir, path, task, args)
 
-		found := false
+		if task == nil {
+			exitCode = 3
+			exit(3, "task not found")
+		}
+
 		var tasks []store.Task
 		for i := range file.Tasks {
 			if file.Tasks[i].ID == id {
-				found = true
-				task = &file.Tasks[i]
 				continue
 			}
 			tasks = append(tasks, file.Tasks[i])
-		}
-		if !found {
-			exitCode = 3
-			exit(3, "task not found")
 		}
 		file.Tasks = tasks
 		if err := store.Save(path, file); err != nil {

@@ -19,34 +19,38 @@ If there is no head task, exits non-zero with "no head task".`,
 		checkDefault(beadsDir)
 		file := loadFile(path)
 
-		exitCode := 0
-		var output string
 		var task *store.Task
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
-
 		for i := range file.Tasks {
 			if !file.Tasks[i].IsDone {
-				now := time.Now().UTC()
-				file.Tasks[i].IsDone = true
-				file.Tasks[i].CompletedAt = &now
-				file.Tasks[i].UpdatedAt = now
 				task = &file.Tasks[i]
-				if err := store.Save(path, file); err != nil {
-					exitCode = 2
-					exit(2, "done: %v", err)
-				}
-				output = task.ID
-				if jsonOutput {
-					printJSON(map[string]interface{}{"task": task})
-				} else {
-					fmt.Println(task.ID)
-				}
-				return
+				break
 			}
 		}
-		exitCode = 3
-		exit(3, "no head task")
+
+		exitCode := 0
+		var output string
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
+		runBeforeHooks(cmd.Name(), beadsDir, path, task, args)
+
+		if task == nil {
+			exitCode = 3
+			exit(3, "no head task")
+		}
+
+		now := time.Now().UTC()
+		task.IsDone = true
+		task.CompletedAt = &now
+		task.UpdatedAt = now
+		if err := store.Save(path, file); err != nil {
+			exitCode = 2
+			exit(2, "done: %v", err)
+		}
+		output = task.ID
+		if jsonOutput {
+			printJSON(map[string]interface{}{"task": task})
+		} else {
+			fmt.Println(task.ID)
+		}
 	},
 }
 

@@ -24,42 +24,45 @@ Output is title, blank line, description — nothing else.`,
 		checkDefault(beadsDir)
 		file := loadFile(path)
 
-		exitCode := 0
-		var output string
 		var task *store.Task
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
-
 		var taskID string
 		if target == "head" {
-			for _, t := range file.Tasks {
-				if !t.IsDone {
-					taskID = t.ID
+			for i := range file.Tasks {
+				if !file.Tasks[i].IsDone {
+					task = &file.Tasks[i]
+					taskID = file.Tasks[i].ID
 					break
 				}
 			}
-			if taskID == "" {
-				exitCode = 3
-				exit(3, "no head task")
-			}
 		} else {
 			taskID = target
-		}
-
-		for i := range file.Tasks {
-			if file.Tasks[i].ID == taskID {
-				task = &file.Tasks[i]
-				output = formatTaskDetails(task)
-				if jsonOutput {
-					printJSON(map[string]interface{}{"task": task})
-				} else {
-					fmt.Println(output)
+			for i := range file.Tasks {
+				if file.Tasks[i].ID == taskID {
+					task = &file.Tasks[i]
+					break
 				}
-				return
 			}
 		}
-		exitCode = 3
-		exit(3, "task not found")
+
+		exitCode := 0
+		var output string
+		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
+		runBeforeHooks(cmd.Name(), beadsDir, path, task, args)
+
+		if task == nil {
+			exitCode = 3
+			if target == "head" {
+				exit(3, "no head task")
+			}
+			exit(3, "task not found")
+		}
+
+		output = formatTaskDetails(task)
+		if jsonOutput {
+			printJSON(map[string]interface{}{"task": task})
+		} else {
+			fmt.Println(output)
+		}
 	},
 }
 

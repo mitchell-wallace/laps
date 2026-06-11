@@ -20,9 +20,12 @@ func runBeforeHooks(cmdName, beadsDir, path string, task *store.Task, args []str
 		return
 	}
 	vars := buildHookVars(task, path, cmdName, "", "", args)
-	_, err = hooks.Dispatch(hf, cmdName, "before", vars, filepath.Dir(beadsDir))
+	passback, err := hooks.Dispatch(hf, cmdName, "before", vars, filepath.Dir(beadsDir))
 	if err != nil {
 		exit(4, "hook: %v", err)
+	}
+	if passback != "" && !jsonOutput {
+		fmt.Print(passback)
 	}
 }
 
@@ -106,7 +109,7 @@ func isKnownCommand(name string) bool {
 
 func splitArgs(args []string) (cmd string, posArgs []string, fileValue string) {
 	skipNext := false
-	for _, a := range args {
+	for i, a := range args {
 		if skipNext {
 			skipNext = false
 			continue
@@ -115,6 +118,13 @@ func splitArgs(args []string) (cmd string, posArgs []string, fileValue string) {
 			if strings.HasPrefix(a, "-") {
 				if a == "-f" || a == "--file" {
 					skipNext = true
+					if i+1 < len(args) {
+						fileValue = args[i+1]
+					}
+				} else if strings.HasPrefix(a, "-f=") {
+					fileValue = strings.TrimPrefix(a, "-f=")
+				} else if strings.HasPrefix(a, "--file=") {
+					fileValue = strings.TrimPrefix(a, "--file=")
 				}
 				continue
 			}
