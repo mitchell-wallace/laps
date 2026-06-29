@@ -38,6 +38,10 @@ write one event per affected lap/transition after the store save succeeds.
 - **WHEN** `laps claim <new-id>` replaces a different claimed lap
 - **THEN** an `unclaimed` event with `detail.reason` of `replaced` SHALL be appended before the new `claimed` event
 
+#### Scenario: Completing a claimed lap logs completion then unclaim
+- **WHEN** `laps done` completes a lap that is currently claimed
+- **THEN** a `completed` event SHALL be appended, immediately followed by an `unclaimed` event with `detail.reason` of `completed`
+
 #### Scenario: Reads are not logged
 - **WHEN** `laps get` or `laps list` runs
 - **THEN** no event SHALL be appended
@@ -77,11 +81,36 @@ append only entries that are missing.
 ### Requirement: Event-log reader
 The system SHALL provide `laps log` to read the event log, supporting `-n <count>`,
 `--lap <id>`, `--session <id>`, `--since <time>`, and `--json-output`. `laps log --lap <id>`
-SHALL show the full lifecycle of a single lap.
+SHALL show the full lifecycle of a single lap. The reader SHALL apply all filters first and then
+truncate to `-n` (filter-then-limit), so the limit bounds matching events shown, not lines
+scanned. Output SHALL be ordered newest-last (chronological). The default limit SHALL be `20`.
+`--since` SHALL take an RFC3339 timestamp and SHALL be inclusive of the exact timestamp.
+Malformed JSONL lines SHALL be skipped with a one-line stderr note per offending line and SHALL
+NOT abort the read. `--json-output` SHALL emit a single object `{ "events": [ ... ] }`.
 
 #### Scenario: Reading recent events
 - **WHEN** `laps log` runs
 - **THEN** it SHALL print recent logged events
+
+#### Scenario: Default limit is twenty
+- **WHEN** `laps log` runs with more than twenty events logged and no explicit `-n`
+- **THEN** it SHALL print the twenty most recent matching events, ordered newest-last
+
+#### Scenario: Filters apply before the limit
+- **WHEN** `laps log --lap <id> -n 5` runs and that lap has more than five events
+- **THEN** it SHALL print the five most recent events matching the lap filter, ordered newest-last
+
+#### Scenario: Since filter is RFC3339 and inclusive
+- **WHEN** `laps log --since 2026-01-01T00:00:00Z` runs and an event's timestamp equals that value
+- **THEN** that event SHALL be included in the output
+
+#### Scenario: Malformed JSONL is skipped not fatal
+- **WHEN** `laps log` reads a file containing a line that is not valid JSON
+- **THEN** it SHALL emit a one-line note on stderr for that line and SHALL continue reading the remaining lines rather than aborting
+
+#### Scenario: JSON output wraps events
+- **WHEN** `laps log --json-output` runs
+- **THEN** it SHALL emit a single JSON object whose `events` field is the array of matching events
 
 #### Scenario: Filtering to one lap's lifecycle
 - **WHEN** `laps log --lap <id>` runs

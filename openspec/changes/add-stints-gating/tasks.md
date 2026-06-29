@@ -4,15 +4,17 @@
 - [ ] 1.2 `laps stints hold <name>` / `release <name>` target any non-archived stint, including not-yet-enqueued stints; archived stints are refused
 - [ ] 1.3 Make hold/release idempotent: already-held/already-released operations do not append duplicate events
 - [ ] 1.4 Append `stint.held` / `stint.released` events only when state changes
-- [ ] 1.5 `laps stints ls` shows held as resolved by the remaining rendering product call
+- [ ] 1.5 `laps stints ls` renders `held` as a SEPARATE badge/marker alongside the queued/active/done lifecycle state, not as a replacement (DECIDED: hold is orthogonal to lifecycle; the lifecycle column keeps its value and a held marker flags held metadata regardless of whether the hold has taken effect at the head)
 - [ ] 1.6 Tests: hold sets / release clears before and after enqueue; default missing held is false; archived target refused; idempotent operations do not double-log; held shown in `stints ls`
 
 ## 2. Gated flow ops & exit codes
 
 - [ ] 2.1 Implement held detection for `get`/`claim` flow-start resolution and status gate probing: at each context head, a held `kind:"stint"` ref returns held and SHALL NOT descend into the child file
-- [ ] 2.2 Map head/flow `get`/`claim` exit codes: `0` lap, `10` held, `11` empty, `12` complete, while preserving existing explicit-id/store/hook failure codes
-- [ ] 2.3 For clean state exits, do not use the generic error helper: text mode emits no stdout for `10`/`11`/`12`, held warnings go to stderr, and JSON mode emits a small state object on stdout
+- [ ] 2.2 Map head/flow `get`/`claim` exit codes: `0` lap, `10` held, `11` empty, `12` complete, while preserving existing explicit-id/store/hook failure codes. Use the decided empty-vs-complete mapping (see Resolved Product Calls): `12` = everything resolvable from root head is done and nothing enqueueable remains; `11` = root resolves to zero todo because nothing was enqueued (incl. only-unqueued stint files / empty active stint file)
+- [ ] 2.3 For clean state exits, do not use the generic `exit()` helper (it always writes a `laps:` stderr line / error-JSON to stderr). Add a dedicated `exitState(code)` that sets the captured `exitCode`, in JSON mode prints the small queue-state object to **stdout** via `printJSON`, then panics `*exitError{code}` with no stderr error line; held cases also warn on stderr. It MUST go through the existing panic→recover→`os.Exit` path so `runAfterHooksDeferred` still observes the code (a bare `os.Exit`/`return` would skip the after-hook)
+- [ ] 2.6 Replace the empty `exit(3,"no head task")` at the post-defer `task == nil` site in `get.go`/`claim.go:49-52` (already after the after-hook defer at `get.go:46`) with `exitState(11)` empty vs `exitState(12)` complete; leave `checkDefault`'s `exit(2)`-on-corrupt and explicit-id-not-found `exit(3)` unchanged (note `checkDefault`'s `ErrEmptyState→exit(3)` branch is dead — nothing returns `ErrEmptyState` — so it is not the empty path). Have flow-start resolution return a single typed queue-state (`lap|held|empty|complete`) consumed by both `get`/`claim` and the `status` gate probe
 - [ ] 2.4 Allow `get <id>` to inspect a held stint with a warning; block `claim <id>` into a held stint with exit `10`, no claim mutation, and the same warning
+- [ ] 2.4a A hold gates ONLY flow-start (`get`/`claim`): `list`, `count`, `add`, `edit`, `assign`, and `delete` operate normally inside/under a held stint (DECIDED). Verify these commands are unaffected by a held stint (no exit-code change, no warning, no mutation block) and add tests covering at least `list`/`add`/`edit`/`delete` under a held head
 - [ ] 2.5 Tests: held head → no lap + exit 10 + warning; nested held encountered during descent → exit 10; empty → 11; complete → 12; lap present → 0; explicit id not found remains 3; `get <id>` held inspection warns; `claim <id>` held target exits 10 and does not claim; hook sees exit code
 
 ## 3. Finish-under-hold

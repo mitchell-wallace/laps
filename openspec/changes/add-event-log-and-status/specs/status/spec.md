@@ -61,4 +61,8 @@ active claim so stale claims left by crashed sessions are visible.
 
 #### Scenario: Status surfaces claim age
 - **WHEN** `laps status` runs with an active claim
-- **THEN** it SHALL report how long that lap has been claimed
+- **THEN** it SHALL expose `claimedAt` as an RFC3339 UTC timestamp and `ageSeconds` as an integer count of seconds since `claimedAt`
+
+#### Scenario: No claim yields null timestamp and age
+- **WHEN** `laps status` runs and no lap is claimed
+- **THEN** `claimedAt` SHALL be `null` and `ageSeconds` SHALL be `null`

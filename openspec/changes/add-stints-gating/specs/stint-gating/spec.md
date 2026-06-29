@@ -29,7 +29,9 @@ state changes.
 The system SHALL make head `laps get` and head `laps claim` return no lap — a clean stop rather
 than an error — when `get`/`claim` flow-start resolution encounters a held stint at the current
 context head, and SHALL NOT select a lap from the held stint. Held interactions SHALL warn on
-stderr that the stint is held and should not be implemented yet.
+stderr that the stint is held and should not be implemented yet. The set of gated commands is
+closed: only `get` and `claim` flow-start are gated by hold. `list`, `count`, `add`, `edit`,
+`assign`, and `delete` SHALL operate normally inside or under a held stint.
 
 #### Scenario: Get on a held head
 - **WHEN** the resolved head is a held stint and `laps get` runs
@@ -50,6 +52,10 @@ stderr that the stint is held and should not be implemented yet.
 #### Scenario: Explicit claim is blocked by held stint
 - **WHEN** `laps claim <id>` targets a lap inside a held stint
 - **THEN** it SHALL exit `10`, leave the claim unchanged, and warn on stderr that the stint is held and should not be implemented yet
+
+#### Scenario: Non-flow-start scoped commands are unaffected by hold
+- **WHEN** a stint is held and `laps list`, `laps count`, `laps add`, `laps edit`, `laps assign`, or `laps delete` runs targeting that stint
+- **THEN** each command SHALL operate normally with no exit-code change, no held warning, and no mutation block
 
 ### Requirement: Queue-state exit codes
 `laps get` and `laps claim` SHALL signal queue state via exit code: `0` when a lap is returned,
@@ -97,7 +103,11 @@ held.
 `laps status` SHALL report a primary `held` state, the held stint, and the gate message when the
 resolved head is held and no valid active claim takes precedence, in both text and
 `--json-output`, and SHALL exit `0` for valid snapshots. When a valid active claim exists,
-`status.state` SHALL remain `active` and held gate metadata SHALL be included separately.
+`status.state` SHALL remain `active` and held gate metadata SHALL be included separately. This
+`held` state **extends** the `status` capability's state taxonomy (`active`/`ready`/`empty`/
+`complete`, added by `add-event-log-and-status`); the merged set of `status.state` values is
+`active`/`ready`/`empty`/`complete`/`held`, and consumers SHALL NOT treat the original four as a
+closed list.
 
 #### Scenario: Status reports held
 - **WHEN** the resolved head is a held stint, there is no active-claim precedence conflict, and `laps status` runs

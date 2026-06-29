@@ -41,7 +41,12 @@ than the laps queue, so the highest-value additions are (a) a ground-truth event
   `claimedAt` drives the
   "active since" / stale-claim signal in `status`. (`add-stints` adds a `scope` field to the
   same object.) Claim JSON parsing SHALL ignore unknown fields so later `{scope}` additions do
-  not break older structured-claim readers.
+  not break older structured-claim readers. In this change `done` continues to match the claim
+  by **id within the selected file** and ignores the new `claim.file` field (only `status`
+  surfaces a `file` mismatch as `claim.valid=false`); `add-stints` is what makes `done` honor the
+  recorded file/scope. Note `done.go:92` re-reads the claim with the error ignored before
+  clearing it — decide whether that read should now surface a malformed-claim error or stay
+  best-effort (recommend staying best-effort: a clear failure must not block a completed `done`).
 - **Status states.** `active` (a valid todo lap is claimed / work in progress), `ready` (todo
   laps exist and nothing valid is claimed), `empty` (no laps), and `complete` (laps exist, all
   done). `status` exits 0 for valid repo/store snapshots; malformed stores, unreadable stores,
@@ -53,21 +58,29 @@ than the laps queue, so the highest-value additions are (a) a ground-truth event
   affected lap/transition after the store save succeeds: batch `add --json` emits one `created`
   line per new lap, and `prune` emits one `pruned` line per removed lap. Claim-only mutations
   append only after `WriteClaim` or `RemoveClaim` succeeds, and do not log failed claim writes
-  or removals. Reclaiming the same lap preserves `claimedAt` and does not duplicate log entries;
+  or removals.   Reclaiming the same lap preserves `claimedAt` and does not duplicate log entries;
   replacing a different claimed lap emits `unclaimed` with `detail.reason:"replaced"` followed
   by `claimed` for the new lap.
+- **Claim-clear replay on `done` — DECIDED.** `done` emits a separate `unclaimed` event with
+  `detail.reason:"completed"` immediately after the `completed` event, rather than folding claim
+  clearing into `completed.detail`. This keeps the log uniform with the claim-replacement case
+  (already `unclaimed` / `detail.reason:"replaced"`): one `unclaimed` event per applied claim
+  removal, tagged with the reason, regardless of whether the trigger was a replace or a
+  completion.
 - **Init preserves `.gitignore`.** `init` must scan the complete `.gitignore`, preserve all
   existing lines, and append only missing `.laps/claim` / `.laps/log.jsonl` entries.
-
-## Open Product Calls
-
-- Claim-clear replay: choose whether `done` emits a separate `unclaimed` event when it clears a
-  claim, or records claim clearing in `completed.detail`.
-- Status JSON shape and stale-claim policy: choose exact field names/nullability and whether a
-  `stale` boolean exists now or only `claimedAt`/`ageSeconds` are exposed until a threshold is
-  selected.
-- Log reader filter semantics: choose default limit, `--since` timestamp format/inclusivity,
-  filter-before-limit ordering, malformed JSONL behavior, and JSON output shape.
+- **Status JSON shape and stale-claim policy — DECIDED.** The status snapshot exposes `claimedAt`
+  (nullable RFC3339 UTC timestamp; `null` when no lap is claimed) and `ageSeconds` (integer seconds
+  since `claimedAt`; `null` when `claimedAt` is `null`). No `stale` boolean is added in this
+  change; a stale flag is deferred until a threshold/policy is selected, since "stale" is a
+  policy judgement that needs the operator threshold the structured claim now feeds.
+- **Log reader filter semantics — DECIDED.** `laps log` applies all filters (`--lap`,
+  `--session`, `--since`) first and then truncates to `-n` (filter-then-limit), so the limit is
+  the number of matching events shown, not lines scanned. Output is newest-last (chronological
+  order). The default limit is `-n 20`. `--since` takes an RFC3339 timestamp and is inclusive of
+  the exact timestamp. Malformed JSONL lines are skipped with a one-line stderr note per line and
+  never abort the read (the best-effort contract applied to the reader). `--json-output` emits a
+  single object `{ "events": [ ... ] }`.
 
 ## Risks
 

@@ -47,7 +47,34 @@ relay loop can stop on a gate, finish on completion, or idle on an empty queue w
 
 - **Clean state exits are not generic errors.** The `10`/`11`/`12` queue-state exits SHALL avoid
   the generic error helper's stderr/error-JSON shape. They are control-flow signals for Rally;
-  after-hooks still receive the final exit code.
+  after-hooks still receive the final exit code. The mechanism is load-bearing and must be
+  specified, because the natural implementations break it: today `exit()` (`root.go:39-51`)
+  always writes a `laps:` stderr line (or an `{error,exitCode}` JSON object to **stderr**), and
+  the only way a nonzero OS code is produced is the `panic(*exitError)` → `recover` → `os.Exit`
+  path (`root.go:50,57-64`); the deferred after-hook (`hooks.go:32-51`, registered at
+  `get.go:46`/`claim.go:46`) reads `*exitCode` only during that panic unwind. So a naive
+  `os.Exit(11)` or `return`-with-error would skip the after-hook and violate "hook sees the
+  code". Define a dedicated clean-state exit (e.g. `exitState(code int)`) that, after the Run
+  handler has (1) set the captured `exitCode = code` and (2) in JSON mode printed the small
+  queue-state object to **stdout** via `printJSON` (note `exit()` puts JSON on stderr — this
+  stdout-vs-stderr split is the contract), panics `*exitError{code}` with **no** stderr error
+  line. Held cases additionally warn on stderr. Routing `10`/`11`/`12` through the existing
+  panic/recover path is what keeps `runAfterHooksDeferred` firing.
+- **Empty/complete is distinguished at the existing post-defer `task == nil` site.** Today
+  `get`/`claim` reach `exit(3,"no head task")` at `get.go:49-52` / `claim.go:49-55` *after* the
+  after-hook defer is registered (`get.go:46`/`claim.go:46`), so the hook already observes the
+  code — no reordering is needed. This change replaces that single empty `exit(3)` with
+  `exitState(11)` (empty) vs `exitState(12)` (laps exist but all done), per the empty-vs-complete
+  taxonomy product call. `checkDefault` (`root.go:136-146`) is **not** the empty path and needs no
+  change: `CheckDefaultStore` returns `nil` for a missing/empty default store (`store.go:397-404`,
+  via `ErrEmptyFile`), and its `ErrEmptyState→exit(3)` branch is **dead** (nothing in the codebase
+  produces `store.ErrEmptyState`). `checkDefault`'s only live effect is `exit(2)` on a *corrupt*
+  default store, which stays `2`. Explicit-id-not-found stays `exit(3)` in the `target != "head"`
+  branch.
+- **Flow-start resolution returns one typed queue-state.** `add-stints`' resolver returns "the
+  first lap"; gating needs a single typed outcome (`lap | held | empty | complete`) shared by
+  `get`/`claim` and the `status` gate probe, so the exit codes and the `held` status derive from
+  **one** resolution pass rather than two divergent ad-hoc detections.
 - **Existing failures keep existing codes.** Explicit id not found remains exit `3`, store/io
   failures remain `2`, and hook failures remain `4`; `11`/`12` apply only to head/flow
   operations that find no lap to start because the queue is empty or complete. Exit `10` applies
@@ -57,14 +84,26 @@ relay loop can stop on a gate, finish on completion, or idle on an empty queue w
   complete the lap and allow the `add-stints` drain/archive behavior to run; a held drained
   stint must not stay stuck as the next gate.
 
-## Open Product Calls
+## Resolved Product Calls
 
-- Empty vs complete across stints: decide how unqueued stint files, archived drained stints,
-  root queues with only done refs, and empty active stint files map to `empty` vs `complete`.
-- `stints ls` rendering: decide whether held replaces lifecycle state or appears as a separate
-  boolean/marker alongside queued/active/done.
-- Non-starting scoped commands besides explicit `get`/`claim`: decide whether `list`, `count`,
-  `add`, `edit`, and `delete` can inspect or mutate inside/under a held stint.
+- **Empty vs complete across stints — DECIDED (distinct mapping).** `complete` (exit `12`) means
+  every entry resolvable from the root head is done — including drained/archived done refs and
+  root queues holding only done refs — and nothing enqueueable remains. `empty` (exit `11`) means
+  the root resolves to zero todo entries because nothing was ever enqueued — including a repo with
+  only unqueued stint files, and an empty active stint file. The two stay distinct so Rally can
+  tell "pipeline finished, stop" (`12`) from "idle, wait for work" (`11`). This mapping governs
+  both the `get`/`claim` exit codes (tasks 2.2/2.6) and `status` empty/complete (tasks 4.2/4.3).
+- **`stints ls` rendering — DECIDED (separate badge).** `held` is rendered as a separate
+  badge/marker alongside the queued/active/done lifecycle state, not as a replacement for it.
+  Hold is orthogonal to lifecycle: a stint can be held-and-queued, held-and-active, or
+  held-and-done, and all three combinations are renderable. The lifecycle column keeps its
+  queued/active/done value; an additional held marker flags stints whose held metadata is set,
+  regardless of whether the hold has taken effect at the head yet.
+- **Non-starting scoped commands under hold — DECIDED (hold gates only flow-start).** A hold
+  gates ONLY flow-start (`get`/`claim`). `list`, `count`, `add`, `edit`, `assign`, and `delete`
+  operate normally inside/under a held stint, consistent with explicit `get <id>` being allowed
+  to inspect a held stint (with the held warning) and `done` being allowed to finish. Hold is a
+  pause on serving the next lap, not a freeze on the stint's data.
 
 ## Risks
 
