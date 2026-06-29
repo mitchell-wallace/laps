@@ -50,7 +50,8 @@ scope flags.
 - **THEN** it SHALL fail with an error rather than choosing one target model
 
 ### Requirement: Scoped structure operations
-The structure operations `add`, `move`, `edit`, and `delete` SHALL default to the active scope.
+The structure operations `add`, `move`, `edit`, `assign`, and `delete` SHALL default to the
+active scope (`assign` follows `edit`, of which it is a shortcut).
 Every id-taking queue operation SHALL resolve explicit ids within the selected scope first,
 including `get <id>`, `claim <id>`, `done <id>`, `add after <id>`, `move`, `edit`, `assign`,
 and `delete`. When the id is not in scope but exists in another stint, the command SHALL fail
