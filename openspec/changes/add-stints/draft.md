@@ -34,16 +34,16 @@ over storage that already works — low risk.
 - **Read-through resolution** for flow ops (`get`/`claim`/`done`/`list`): descend from root head
   through active stint-refs to the first real lap. Recursive (nesting-ready). **Invisible to
   agents** — `get` still returns title + description of a lap; the agent never knows it's nested.
-- **Scope flags** (persistent, mutually exclusive, default `--active`), uniform on every verb:
+- **Scope flags** (shared local, mutually exclusive, default `--active`), uniform on queue-targeting verbs:
   - `--active` / `-c` — deepest active context, recursive (the default).
   - `--root` / `-r` — root file, no descent.
   - `--stint <name>` / `-s` — named stint file, no descent.
   - Mostly sugar over `-f` (`--stint x` ≈ `-f stints/x`); `--active`/`--root` add descend / no-descend
-    semantics `-f` can't express. Keep `-f` as the raw escape. `-r/-s/-c` chosen as the only
+    semantics `-f` can't express. `-f` is incompatible with scope flags. `-r/-s/-c` chosen as the only
     foreclosure-free shorthands (`-t`→title, `-a`→assignee/all, `-d`→description are protected).
   - Division of use: agents use bare verbs (implicit `--active`); `prepare-laps` uses long forms
     so the planner holds an explicit structural model.
-- **Structure ops** (`add`/`move`/`edit`/`delete`) default to active scope; `-r`/`-s` redirect.
+- **Structure ops** (`add`/`move`/`edit`/`assign`/`delete`) default to active scope; `-r`/`-s` redirect.
   Explicit-id resolution: within scope; if not found in scope but found elsewhere, the error
   **names the stint** ("`a7` is in stint `search` — re-run with `-s search`"). No silent cross-file action.
 - **Claim records scope** (preemption-correctness): claim file becomes `{lap, scope, claimedAt}`.
@@ -62,9 +62,10 @@ over storage that already works — low risk.
   non-destructively (its partial progress is safe in its file; resumes when the interloper drains).
   `enqueue` always targets root (it manages the root pipeline).
 - **Commands**: `laps stints ls | new <name> | enqueue <name> [pos] | show <name> | rm <name>`;
-  `st` alias for `stints`. `--tree` render flag on `list` for the full recursive overview.
+  `st` alias for `stints`. `stints ls` shows each stint's lap counts and whether it is queued.
+  `--tree` render flag on `list` for the full recursive overview.
 - **Log integration** (infra from change 2): events carry `scope`; add `stint.enqueued`,
-  `stint.activated` (optional), `stint.completed`/`stint.archived`.
+  `stint.completed`/`stint.archived`.
 - **Status integration** (status from change 2): report active stint + per-stint progress.
   (`held` state is 3b.)
 
@@ -87,7 +88,7 @@ over storage that already works — low risk.
 ## Open questions (for formalisation)
 
 - Exact claim-file JSON shape + back-compat parsing (shared with change 2's `claimedAt`).
-- `laps stints ls` columns (name, state queued/active/done, todo/done counts, order).
+- `laps stints ls` columns beyond name, queued flag, and lap counts.
 - Whether `status` extension and `list --tree` fully land here or are minimal.
 - ID generation across stint files: prefix is repo-based (identical across stints), so cross-stint
   collisions are rare-but-possible; confirm generation scans only the target file's ids and that

@@ -16,7 +16,7 @@ class of desync bugs.
 **Goals:**
 - `laps.json` canonical; a queue entry is a lap or a stint ref (schema v3, back-compat).
 - Flow ops descend to the deepest active stint, invisibly to agents.
-- One consistent scope vocabulary (`--active`/`--root`/`--stint`) across every verb.
+- One consistent scope vocabulary (`--active`/`--root`/`--stint`) across queue-targeting verbs.
 - Preemption-safe completion: claims survive head changes.
 - Auto-advancing pipeline with auto-archive of drained stints.
 
@@ -35,10 +35,12 @@ class of desync bugs.
 - **Read-through resolution.** Flow ops start at the root head and descend through active
   stint refs to the first lap; recursive for nesting. Agents see a lap's title/description and
   never know it was nested.
-- **Scope flags.** Persistent, mutually exclusive, default `--active`. `-r`/`-s`/`-c` are the
+- **Scope flags.** Shared local flags on queue-targeting commands, mutually exclusive, default
+  `--active`. `-r`/`-s`/`-c` are the
   only foreclosure-free shorthands (`-t`→title, `-a`→assignee/all, `-d`→description stay free
   for their natural owners). Mostly sugar over `-f`; `--active`/`--root` add the descend /
-  no-descend semantics `-f` can't express. Agents use bare verbs (implicit `--active`);
+  no-descend semantics `-f` can't express. Raw `--file` is mutually exclusive with scope flags
+  so one invocation has only one target model. Agents use bare verbs (implicit `--active`);
   `prepare-laps` writes the long forms for an explicit structural model.
 - **Scoped id resolution.** Explicit-id structure ops resolve within the selected scope; if the
   id lives in another stint, the error names it ("`a7` is in stint `search` — re-run with
@@ -52,14 +54,54 @@ class of desync bugs.
   its ref to done and moves the file to `.laps/stints/archive/`. Draining is content-based and
   position-independent — a preempted, non-head stint still drains when its last lap completes,
   and the done ref is skipped on later advance.
+- **`done undo` unarchives when needed.** If the most recent completion being undone was inside
+  a drained-and-archived stint, `done undo` restores the archived stint file to `.laps/stints/`,
+  reopens the root stint ref, and then reopens the lap within the normal undo rules.
 - **Enqueue / preemption.** Default tail (planned-work order). `head` preempts the active stint;
   because each stint's progress lives in its own file, preemption is non-destructive and the
   paused stint resumes when the interloper drains.
+- **Stint listing includes unqueued files.** `stints ls` lists stint files, shows lap counts for
+  each, and shows whether each stint is currently queued. Empty and unqueued stints are ordinary
+  stint files with no special state beyond their counts and queued flag.
 - **Nesting.** The resolution engine and drain cascade are depth-agnostic (honoring "even if
   stints nest"), but creation tooling stays flat in this change — `enqueue` targets root only.
 - **Integration.** Events carry the resolved `scope` and add `stint.enqueued`/`completed`/
   `archived` (the event log already defaults `scope` to `root`); `status` reports the active
   stint and per-stint progress; `list --tree` renders the full recursive overview.
+
+## Implementation Contracts
+
+- **Schema loading order.** Before adding strict `kind`/`ref` fields, load enough top-level
+  envelope data to reject newer schema versions with the existing clear "update laps" message;
+  then run v1->v2 ordering migration and v2->v3 `kind:"lap"` stamping in order.
+- **Stint names are file names, not paths.** `stints new`/`enqueue`/archive SHALL reject blank
+  names, path separators, `.`/`..`, and names that would collide with an existing active or
+  archived stint file. Archive moves SHALL be no-overwrite.
+- **Resolver failures are classified.** Resolution SHALL keep a visited set for stint refs and
+  fail deterministically for cycles, missing child files, malformed stint refs, and malformed
+  child files instead of looping or silently skipping a ref.
+- **Command scope matrix.** Queue data commands accept scope flags only when they operate on a
+  queue snapshot or queue entry: `add`, `get`, `claim`, `done`, `list`, `count`, `delete`,
+  `prune`, `move`, `edit`, and `assign`. Admin/readers without a queue target (`init`, `on`,
+  `off`, `update`, `version`, `help`, hook-only commands, `log`, and `status`) do not accept
+  these flags unless their own change explicitly adds scope-specific filters.
+- **Explicit id resolution.** Every id-taking queue operation (`get <id>`, `claim <id>`,
+  `done <id>`, `add after <id>`, `move`, `edit`, `assign`, and `delete`) resolves ids inside
+  the selected scope first; if the id exists in another stint, the error names that stint and
+  does not mutate any file. `stints enqueue after <id>` is root-queue structural work: it
+  resolves the `after` id only in root, and if the id exists only in a stint it fails naming
+  that stint.
+
+## Open Product Calls
+
+- Deleting a claimed lap: decide whether `delete` clears the claim, refuses, or leaves a stale
+  claim when the deleted id is currently claimed.
+- `stints rm`: decide what it may remove and whether active, queued, archived, or claimed
+  stints require an explicit force path.
+- Hook variables under resolution: decide whether `$file` is the selected root file or the
+  resolved stint file, and whether a new `$scope` hook variable is added.
+- Scope identity encoding: choose canonical scope strings for claims, events, status, and
+  resolver visited keys, especially nested stints (for example `root`, `auth`, `auth/search`).
 
 ## Risks
 

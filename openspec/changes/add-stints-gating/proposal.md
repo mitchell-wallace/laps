@@ -8,16 +8,16 @@ whether to stop, wait, or finish.
 ## What Changes
 
 - **`laps stints hold <name>` / `laps stints release <name>`** — mark a stint held / clear the
-  hold. The held flag travels with the stint and takes effect when the stint reaches the
-  resolved head.
-- **Gated flow ops** — when the resolved head is a held stint, `get`/`claim` return **no lap**
-  (a clean stop, not an error) instead of descending.
+  hold. The held flag travels with the stint reference and takes effect when that reference is
+  encountered during flow resolution before descent.
+- **Gated flow ops** — when resolution sees a held stint at the current context head,
+  `get`/`claim` return **no lap** (a clean stop, not an error) instead of descending.
 - **Queue-state exit codes** on `get`/`claim`: `0` lap returned, `10` held/gated, `11` empty,
   `12` complete.
 - **Hold blocks starting, not finishing** — `done` for the claimed lap still succeeds while a
   stint is held.
 - **`status` + `stints ls`** surface the gate: a `held` state, the held stint, and the gate
-  message; `status` still always exits 0.
+  message; `status` still exits 0 for valid snapshots.
 - **Log events** `stint.held` / `stint.released`.
 
 ## Capabilities

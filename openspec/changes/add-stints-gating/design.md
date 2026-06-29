@@ -19,9 +19,12 @@ relay loop can stop on a gate, finish on completion, or idle on an empty queue w
 
 ## Decisions
 
-- **Held stops descent.** A held flag travels with the stint; when the resolved head is a held
-  stint, flow resolution stops there rather than descending. The flag only matters once the
-  stint is at the head, so a held stint deeper in the pipeline has no effect until it arrives.
+- **Held stops flow-start descent.** A held flag travels with the stint reference. For
+  `get`/`claim` flow-start resolution and status gate probing, if the current context head is a
+  held `kind:"stint"` ref, resolution returns `held` and does not open the child file. The flag
+  only matters once the stint is at the current context head, so a held stint deeper in the
+  pipeline has no effect until descent reaches its parent context. Non-starting scoped commands
+  are covered by an open product call.
 - **Exit codes carry queue state.** `get`/`claim` return `0` (lap), `10` (held), `11` (empty),
   `12` (complete), chosen to avoid the existing `2`/`3`/`4` (io/store, not-found/empty,
   hook). The relay loop branches on the code without parsing output. `status` stays exit-0 and
@@ -33,6 +36,37 @@ relay loop can stop on a gate, finish on completion, or idle on an empty queue w
 - **Rally contract change.** Today `get`/`claim` exit `3` on an empty queue; moving to
   `10`/`11`/`12` is a deliberate contract change Rally adopts in lockstep, gated behind a
   version bump.
+
+## Implementation Contracts
+
+- **Clean state exits are not generic errors.** The `10`/`11`/`12` queue-state exits SHALL avoid
+  the generic error helper's stderr/error-JSON shape. They are control-flow signals for Rally;
+  after-hooks still receive the final exit code.
+- **Existing failures keep existing codes.** Explicit id not found remains exit `3`, store/io
+  failures remain `2`, and hook failures remain `4`; `10`/`11`/`12` apply only to head/flow
+  operations that find no lap to start because the queue is held, empty, or complete.
+- **Final-lap drain still wins.** `done` for a claimed final lap inside a held stint SHALL
+  complete the lap and allow the `add-stints` drain/archive behavior to run; a held drained
+  stint must not stay stuck as the next gate.
+
+## Open Product Calls
+
+- Held schema/version ownership: decide whether `held` folds into the unreleased v3 stint schema
+  or bumps the schema to v4, including missing-field default `false` and older-version rejection.
+- Hold target semantics: decide whether a stint can be held before enqueue, whether archived
+  stints can be targeted, how duplicate refs are handled, and idempotency/logging for already
+  held or already released stints.
+- Queue-state output: decide exact text/stdout/stderr and `--json-output` shape for clean
+  `10`/`11`/`12` exits.
+- Empty vs complete across stints: decide how unqueued stint files, archived drained stints,
+  root queues with only done refs, and empty active stint files map to `empty` vs `complete`.
+- Status precedence: decide whether an existing valid claim keeps status `active` even when the
+  next head is held, or whether `held` takes precedence.
+- `stints ls` rendering: decide whether held replaces lifecycle state or appears as a separate
+  boolean/marker alongside queued/active/done.
+- Non-starting scoped commands and explicit ids: decide whether `list`, `count`, `add`, `edit`,
+  `delete`, `get <id>`, and `claim <id>` can inspect or mutate inside/under a held stint; the
+  current gated contract only covers starting the next lap via head `get`/`claim`.
 
 ## Risks
 

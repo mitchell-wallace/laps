@@ -18,15 +18,25 @@ log.
 ### Requirement: Logged events
 The system SHALL log these state transitions: `created`, `completed`, `reopened`,
 `claimed`, `unclaimed`, `moved`, `edited`, `deleted`, `pruned`. The system SHALL NOT log
-read-only commands (`get`, `list`, `status`).
+read-only or admin commands (`get`, `list`, `count`, `status`, `log`, `version`, `help`,
+hook-only commands, `init`, `on`, `off`, `update`). Commands that affect multiple laps SHALL
+write one event per affected lap/transition after the store save succeeds.
 
 #### Scenario: Completing a lap logs it
 - **WHEN** `laps done` completes a lap
 - **THEN** a `completed` event for that lap SHALL be appended
 
+#### Scenario: Claim write failure does not log
+- **WHEN** `laps claim` fails to write the claim file
+- **THEN** no `claimed` event SHALL be appended
+
 #### Scenario: Reads are not logged
 - **WHEN** `laps get` or `laps list` runs
 - **THEN** no event SHALL be appended
+
+#### Scenario: Batch add logs each created lap
+- **WHEN** `laps add tail --json '[{"title":"A"},{"title":"B"}]'` succeeds
+- **THEN** two `created` events SHALL be appended, one for each new lap
 
 ### Requirement: Event schema and attribution
 Each log line SHALL be a JSON object containing `ts` (UTC timestamp), `event`, `cmd`, and
@@ -44,7 +54,8 @@ populated from the `LAPS_SESSION` environment variable, empty when the variable 
 
 ### Requirement: Log gitignored on init
 `laps init` SHALL ensure `.laps/log.jsonl` is gitignored, appending it to `.gitignore`
-when absent, alongside `.laps/claim`.
+when absent, alongside `.laps/claim`. It SHALL preserve all existing `.gitignore` lines and
+append only entries that are missing.
 
 #### Scenario: Init ignores the log
 - **WHEN** `laps init` runs and `.gitignore` does not list `.laps/log.jsonl`
@@ -62,3 +73,7 @@ SHALL show the full lifecycle of a single lap.
 #### Scenario: Filtering to one lap's lifecycle
 - **WHEN** `laps log --lap <id>` runs
 - **THEN** it SHALL print only events for that lap, in order
+
+#### Scenario: Missing log is empty
+- **WHEN** `laps log` runs before `.laps/log.jsonl` exists
+- **THEN** it SHALL behave as an empty log rather than failing

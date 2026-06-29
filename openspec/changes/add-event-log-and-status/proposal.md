@@ -11,7 +11,7 @@ It is the highest-leverage observability item given how the operator actually wo
 
 ## What Changes
 
-- **Event log `.laps/log.jsonl`** — append-only JSONL, **native** to each mutating command
+- **Event log `.laps/log.jsonl`** — append-only JSONL, **native** to each task/claim-mutating command
   (not a user hook, so it cannot be disabled) and **best-effort** (an append failure never
   fails the command). Gitignored via `init`. Logs state transitions plus `claim`, never
   reads. Line schema `{ts, event, cmd, lap?, title?, assignee?, scope, detail{}, session}`;
@@ -20,10 +20,11 @@ It is the highest-leverage observability item given how the operator actually wo
 - **`laps log`** reader with `-n`, `--lap`, `--session`, `--since`, `--json-output`.
   `laps log --lap <id>` shows one lap's full lifecycle.
 - **`laps status [--json-output]`** — counts, active (claimed) lap, head, assignee
-  breakdown, and a queue state of `active | empty | complete`.
+  breakdown, and a queue state. The current `active | empty | complete` taxonomy needs one
+  product decision before implementation for the common "todo exists, nothing claimed" state.
 - **Structured claim** — the claim file becomes `{lap, claimedAt}` (legacy bare-id read
   back-compatibly). `claimedAt` lets `status` show how long the active lap has been held and
-  flag stale claims from crashed sessions.
+  exposes the data needed for stale-claim handling once that threshold/policy is chosen.
 
 ## Capabilities
 
@@ -42,3 +43,5 @@ It is the highest-leverage observability item given how the operator actually wo
   transition history survives `done undo`, `delete`, and `prune`.
 - **Out of scope**: `scope` population and `stint.*` events (added by `add-stints`); the
   `held` state (added by `add-stints-gating`); log rotation; failed-command logging.
+- **Coordination**: depends on `improve-cli-ergonomics` before wiring `move`/`edit`/`assign`
+  events, or those event types must be routed to the CLI-ergonomics change/follow-up.

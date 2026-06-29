@@ -5,7 +5,9 @@ A queue entry SHALL be either a lap or a stint reference. The on-disk schema SHA
 version 3, adding a `kind` discriminator with values `lap` and `stint`; an entry without
 `kind` SHALL be treated as a lap. A version-2 file SHALL migrate to version 3 by stamping
 `kind:"lap"` on every entry and bumping the version. A stint reference SHALL name its stint
-by `ref` and SHALL carry its own order key, completion state, and timestamps like a lap.
+by `ref` and SHALL carry its own id, title/display field, order key, completion state, and
+timestamps like a lap. Stint-reference ids SHALL be unique within their containing queue file;
+the `ref` SHALL be the stable lookup key for the child stint file.
 
 #### Scenario: Version 2 migrates to version 3
 - **WHEN** a version-2 file is loaded
@@ -21,20 +23,30 @@ by `ref` and SHALL carry its own order key, completion state, and timestamps lik
 
 ### Requirement: Stint files
 A stint SHALL be stored at `.laps/stints/<name>.laps.json` using the same file schema as the
-main queue. Drained stints SHALL be stored under `.laps/stints/archive/`.
+main queue. Drained stints SHALL be stored under `.laps/stints/archive/`. Stint names SHALL be
+file-safe names rather than paths: blank names, path separators, `.`/`..`, and names colliding
+with an existing active or archived stint SHALL be rejected. Archive moves SHALL NOT overwrite
+an existing file.
 
 #### Scenario: Creating a stint
 - **WHEN** `laps stints new <name>` runs
 - **THEN** an empty stint file SHALL be created at `.laps/stints/<name>.laps.json`
 
+#### Scenario: Unsafe stint name rejected
+- **WHEN** `laps stints new ../auth` runs
+- **THEN** the command SHALL fail without creating or overwriting files outside `.laps/stints/`
+
 ### Requirement: Stint commands
 The system SHALL provide `laps stints` with subcommands `ls`, `new <name>`,
 `enqueue <name> [head|tail|after <id>]`, `show <name>`, and `rm <name>`, plus `st` as an
-alias for `stints`. `laps stints ls` SHALL show each stint's state and its todo/done counts.
+alias for `stints`. `laps stints` and `laps st` SHALL be registered as built-ins before
+hook-only command interception. `laps stints ls` SHALL list stint files with lap counts and a
+queued indicator; unqueued and empty stints SHALL be ordinary listed stint files rather than a
+separate lifecycle state.
 
 #### Scenario: Listing stints
 - **WHEN** `laps stints ls` runs
-- **THEN** each stint SHALL be listed with its state (queued/active/done) and todo/done counts
+- **THEN** each stint SHALL be listed with lap counts and whether it is queued
 
 #### Scenario: Alias
 - **WHEN** `laps st ls` runs
@@ -58,15 +70,25 @@ file and resume when the preempting stint drains.
 When a stint has no remaining todo laps it SHALL be considered drained. The operation that
 drains it SHALL mark its stint reference done (setting `completedAt`) and SHALL move the stint
 file to `.laps/stints/archive/`. Draining SHALL be content-based and independent of the stint's
-position in the queue.
+position in the queue. If `laps done undo` reopens a lap from an archived stint, it SHALL restore
+the stint file from archive, reopen the stint reference, and reopen the lap under the existing
+undo rules.
 
 #### Scenario: Completing the last lap drains and archives
 - **WHEN** `laps done` completes the final todo lap of a stint
 - **THEN** the stint reference SHALL be marked done and the stint file SHALL move to `.laps/stints/archive/`
 
+#### Scenario: Archive collision is refused
+- **WHEN** a drained stint would archive over an existing archived file with the same name
+- **THEN** the command SHALL fail without overwriting the archived file
+
 #### Scenario: A non-head stint still drains
 - **WHEN** the final todo lap of a stint that is not at the head is completed
 - **THEN** that stint SHALL drain and archive regardless of its position
+
+#### Scenario: Undo unarchives a drained stint
+- **WHEN** `laps done undo` reopens the latest completed lap and that lap's stint file is archived
+- **THEN** the stint file SHALL move back to `.laps/stints/`, the stint reference SHALL reopen, and the lap SHALL reopen
 
 ### Requirement: Stint reporting and events
 Stint operations SHALL append `stint.enqueued`, `stint.completed`, and `stint.archived`

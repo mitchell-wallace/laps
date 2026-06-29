@@ -20,10 +20,10 @@ storage that already works — low risk.
 - **Read-through resolution** — flow ops (`get`/`claim`/`done`/`list`) descend from the root
   head through active stint refs to the first real lap. Recursive (nesting-ready) and
   **invisible to agents**.
-- **Scope flags** on every verb, mutually exclusive, default `--active`: `--active`/`-c`
+- **Scope flags** on queue-targeting verbs, mutually exclusive, default `--active`: `--active`/`-c`
   (deepest active, recursive), `--root`/`-r` (root, no descent), `--stint <name>`/`-s`
   (named stint, no descent).
-- **Scoped structure ops** — `add`/`move`/`edit`/`delete` default to the active scope; an
+- **Scoped structure ops** — `add`/`move`/`edit`/`assign`/`delete` default to the active scope; an
   explicit id resolves within scope, and when it lives elsewhere the error names the stint.
 - **Claim records scope** — bare `done` completes the claimed lap within its recorded scope,
   immune to head changes from preemption or another session.
@@ -46,13 +46,15 @@ storage that already works — low risk.
 ## Impact
 
 - **Code**: schema v3 (`internal/store` — `kind`, stint-ref, migration); a resolution layer
-  used by `get`/`claim`/`done`/`list`; persistent scope flags on the root command;
+  used by `get`/`claim`/`done`/`list`; shared scope flags on queue-targeting commands;
   `internal/cmd/stints.go`; `claim.go` (scope field); drain + auto-archive; `list --tree`;
   event-log scope/events; `status` extension.
 - **Behavior**: `laps.json` may contain stint refs; agents are unaffected (bare verbs
   descend); operators gain scope flags and `laps stints`.
 - **Coordination**: depends on `add-event-log-and-status` (event-log infra, `status`, and the
-  structured claim with `claimedAt`); this change adds the `scope` field to the claim.
+  structured claim with `claimedAt`); this change adds the `scope` field to the claim. It also
+  depends on `improve-cli-ergonomics` if `move` and `edit` remain in this change's scoped
+  structure-ops contract.
 - **Out of scope**: hold/release, gate exit codes, the `held` state (`add-stints-gating`);
   cross-layer moves; nested-stint **creation** tooling (the engine recurses, but creation
   stays flat — `enqueue` targets root); color/TTY theming and the TUI.

@@ -22,8 +22,11 @@ and the lap state. Lap descriptions SHALL NOT be shown. The command SHALL accept
 - **THEN** completed laps SHALL be rendered struck through
 
 ### Requirement: Active-lap marker
-The `list` command SHALL mark the active lap — the lap recorded in `.laps/claim` —
-distinctly from other laps. When no lap is claimed, no lap SHALL display the marker.
+The `list` command SHALL mark the active lap — the lap returned by the central claim-reader
+contract — distinctly from other laps. The formatter SHALL NOT parse `.laps/claim` directly.
+When no lap is claimed, or the claimed id is not present in the rendered result, no lap SHALL
+display the marker. Claim-read failures SHALL fail the command using the normal store/io error
+path.
 
 #### Scenario: Claimed lap marked
 - **WHEN** a lap is claimed and `laps list` runs
@@ -31,6 +34,10 @@ distinctly from other laps. When no lap is claimed, no lap SHALL display the mar
 
 #### Scenario: No claim, no marker
 - **WHEN** no lap is claimed and `laps list` runs
+- **THEN** no lap SHALL display the active marker
+
+#### Scenario: Nonmatching claim, no marker
+- **WHEN** a claim exists for a lap outside the rendered result and `laps list` runs
 - **THEN** no lap SHALL display the active marker
 
 ### Requirement: List alias
