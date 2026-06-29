@@ -24,7 +24,8 @@ Highest-leverage non-stints item given how the operator actually works.
 - **Logged events** — state transitions + `claim`, **not** reads (`get`/`list`/`status`):
   `created`, `completed`, `reopened` (done-undo), `claimed`, `unclaimed`, `moved`, `edited`,
   `deleted`, `pruned`. (Stint events `stint.*` added in 3a.)
-- **Line schema**: `{ts, event, cmd, lap?, title?, assignee?, scope, detail{}, session}`.
+- **Line schema**: `{ts, event, cmd, file, lap?, title?, assignee?, scope, detail{}, session}`.
+  - `file` is the resolved `.laps`-relative task file.
   - `scope` defaults to `root` (stints populate it in 3a).
   - `title`/`assignee` denormalised so the log reads standalone.
   - `detail` is event-specific (`pos` for add, `from`/`to` for move/edit, `count` for prune).
@@ -43,20 +44,19 @@ Highest-leverage non-stints item given how the operator actually works.
 
 ### Status — `laps status [--json-output]`
 
-- Reports: counts (todo/done), claimed/active lap, head lap, assignee breakdown, and state
-  `active | empty | complete`. (`held` + per-stint progress added in 3a/3b.)
+- Reports: selected file, counts (todo/done), claimed/active lap, head lap, assignee breakdown,
+  and state `active | ready | empty | complete`. (`held` + per-stint progress added in 3a/3b.)
 - The `--json-output` form is the integration surface Rally consumes for its summary.
 
 ### Claim file → structured
 
-- Becomes `{lap, claimedAt}` (back-compat read of legacy bare-id: non-JSON token ⇒
-  `{lap: token, claimedAt: nil}`). `claimedAt` powers status "active since N" + stale-claim
-  detection after a crashed session. (`scope` field added in 3a.)
+- Becomes `{lap, file, claimedAt}` (back-compat read of legacy bare-id: non-JSON token ⇒
+  `{lap: token, file: selected file, claimedAt: nil}`). `claimedAt` powers status "active since
+  N" + future stale-claim policy. (`scope` field added in 3a.)
 
 ### List active-lap marker
 
-- Mark the claimed lap in `list` output. (May instead live in change 1 — assign to whichever ships
-  first; if 1 leads, it reads the claim file directly.)
+- Owned by change 1; it uses the shared claim reader rather than parsing `.laps/claim` directly.
 
 ## Out / deferred
 
@@ -69,8 +69,6 @@ Highest-leverage non-stints item given how the operator actually works.
 
 ## Open questions (for formalisation)
 
-- Event vocabulary + `detail` payload shapes; batch `add --json '[...]'` → one event with
-  `laps:[...]` or N events?
 - `status` text layout vs JSON shape.
-- Final claim-file JSON format (shared with 3a's `scope` addition).
-- Whether the active-lap marker lives here or in change 1.
+- Stale-claim threshold/policy.
+- `done` claim-clear replay shape.

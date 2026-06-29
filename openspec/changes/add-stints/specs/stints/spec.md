@@ -38,11 +38,14 @@ an existing file.
 
 ### Requirement: Stint commands
 The system SHALL provide `laps stints` with subcommands `ls`, `new <name>`,
-`enqueue <name> [head|tail|after <id>]`, `show <name>`, and `rm <name>`, plus `st` as an
+`enqueue <name> [head|tail|after <id>]`, `show <name>`, and `rm <name> [--force]`, plus `st` as an
 alias for `stints`. `laps stints` and `laps st` SHALL be registered as built-ins before
 hook-only command interception. `laps stints ls` SHALL list stint files with lap counts and a
 queued indicator; unqueued and empty stints SHALL be ordinary listed stint files rather than a
-separate lifecycle state.
+separate lifecycle state. `stints rm` SHALL remove unqueued non-archived stint files and archived
+stints, including archived stints that still have a done root ref. It SHALL refuse non-archived
+queued, active, or claimed stints unless `--force` is supplied; forced removal SHALL remove
+matching root refs and clear matching claims.
 
 #### Scenario: Listing stints
 - **WHEN** `laps stints ls` runs
@@ -51,6 +54,18 @@ separate lifecycle state.
 #### Scenario: Alias
 - **WHEN** `laps st ls` runs
 - **THEN** it SHALL behave identically to `laps stints ls`
+
+#### Scenario: Remove queued stint requires force
+- **WHEN** `laps stints rm auth` names a non-archived queued stint
+- **THEN** it SHALL fail without removing the stint file or root ref
+
+#### Scenario: Forced remove queued stint
+- **WHEN** `laps stints rm auth --force` names a non-archived queued stint
+- **THEN** it SHALL remove the stint file and matching root ref, and clear a matching claim if present
+
+#### Scenario: Remove archived stint with done ref
+- **WHEN** `laps stints rm auth` names an archived stint that still has a done root ref
+- **THEN** it SHALL remove the archived file and the done root ref
 
 ### Requirement: Enqueue a stint
 `laps stints enqueue <name>` SHALL insert a stint reference into the root queue using the same

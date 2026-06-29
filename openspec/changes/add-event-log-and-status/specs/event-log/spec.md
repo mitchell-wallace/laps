@@ -30,6 +30,14 @@ write one event per affected lap/transition after the store save succeeds.
 - **WHEN** `laps claim` fails to write the claim file
 - **THEN** no `claimed` event SHALL be appended
 
+#### Scenario: Same-lap reclaim does not duplicate events
+- **WHEN** `laps claim <id>` runs for the same lap that is already claimed
+- **THEN** the existing `claimedAt` SHALL be preserved and no duplicate `claimed` event SHALL be appended
+
+#### Scenario: Replacing a claim logs replacement
+- **WHEN** `laps claim <new-id>` replaces a different claimed lap
+- **THEN** an `unclaimed` event with `detail.reason` of `replaced` SHALL be appended before the new `claimed` event
+
 #### Scenario: Reads are not logged
 - **WHEN** `laps get` or `laps list` runs
 - **THEN** no event SHALL be appended
@@ -39,9 +47,10 @@ write one event per affected lap/transition after the store save succeeds.
 - **THEN** two `created` events SHALL be appended, one for each new lap
 
 ### Requirement: Event schema and attribution
-Each log line SHALL be a JSON object containing `ts` (UTC timestamp), `event`, `cmd`, and
-`scope` (defaulting to `root`), and SHALL include `lap`, `title`, `assignee`, and an
-event-specific `detail` object where applicable. Each line SHALL carry a `session` field
+Each log line SHALL be a JSON object containing `ts` (UTC timestamp), `event`, `cmd`, `file`,
+and `scope` (defaulting to `root`), and SHALL include `lap`, `title`, `assignee`, and an
+event-specific `detail` object where applicable. `file` SHALL be the resolved `.laps`-relative
+task file for the mutation. Each line SHALL carry a `session` field
 populated from the `LAPS_SESSION` environment variable, empty when the variable is unset.
 
 #### Scenario: Session stamped from environment
@@ -51,6 +60,10 @@ populated from the `LAPS_SESSION` environment variable, empty when the variable 
 #### Scenario: Scope defaults to root
 - **WHEN** an event is logged with no stint context
 - **THEN** its `scope` SHALL be `root`
+
+#### Scenario: File identity stamped
+- **WHEN** a mutating command runs against `--file auth`
+- **THEN** the appended line's `file` SHALL identify `auth.json`
 
 ### Requirement: Log gitignored on init
 `laps init` SHALL ensure `.laps/log.jsonl` is gitignored, appending it to `.gitignore`

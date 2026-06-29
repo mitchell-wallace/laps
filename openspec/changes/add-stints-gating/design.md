@@ -19,20 +19,26 @@ relay loop can stop on a gate, finish on completion, or idle on an empty queue w
 
 ## Decisions
 
-- **Held stops flow-start descent.** A held flag travels with the stint reference. For
-  `get`/`claim` flow-start resolution and status gate probing, if the current context head is a
-  held `kind:"stint"` ref, resolution returns `held` and does not open the child file. The flag
-  only matters once the stint is at the current context head, so a held stint deeper in the
-  pipeline has no effect until descent reaches its parent context. Non-starting scoped commands
-  are covered by an open product call.
+- **Held stops flow-start descent.** A held flag lives on the non-archived stint file metadata,
+  defaulting to `false` when absent. It is folded into schema v3 before the first v3/0.9.0 binary
+  ships. For `get`/`claim` flow-start resolution and status gate probing, if the current context
+  head references a held stint, resolution returns `held` and does not select a lap from that
+  child file. The flag only matters once the stint is at the current context head, so a held
+  stint deeper in the pipeline has no effect until descent reaches its parent context.
 - **Exit codes carry queue state.** `get`/`claim` return `0` (lap), `10` (held), `11` (empty),
   `12` (complete), chosen to avoid the existing `2`/`3`/`4` (io/store, not-found/empty,
-  hook). The relay loop branches on the code without parsing output. `status` stays exit-0 and
-  reports the same state in text and `--json-output`.
+  hook). Text mode emits no stdout for `10`/`11`/`12`; held cases warn on stderr that the stint
+  is held and should not be implemented yet. JSON mode emits a small state object on stdout.
+  `status` stays exit-0 for valid snapshots and reports the same state in text and
+  `--json-output`.
 - **Hold blocks starting, not finishing.** A hold gates `get`/`claim` (starting the next lap)
   but never `done` for the already-claimed lap — an agent mid-lap can always finish and record.
-- **Claim under a held head also returns `10`.** Agents should not claim into a held stint; the
-  gate is uniform across both flow entry points.
+- **Explicit id behavior under hold.** `get <id>` may inspect a lap inside a held stint, but it
+  warns on stderr that the stint is held and should not be implemented yet. `claim <id>` into a
+  held stint exits `10`, leaves the claim unchanged, and emits the same warning.
+- **Status precedence.** A valid active claim keeps `status.state=active` even when the next head
+  is held; status includes gate metadata separately. `held` is reported as the primary state only
+  when there is no valid active claim and the next flow-start operation would gate.
 - **Rally contract change.** Today `get`/`claim` exit `3` on an empty queue; moving to
   `10`/`11`/`12` is a deliberate contract change Rally adopts in lockstep, gated behind a
   version bump.
@@ -43,30 +49,22 @@ relay loop can stop on a gate, finish on completion, or idle on an empty queue w
   the generic error helper's stderr/error-JSON shape. They are control-flow signals for Rally;
   after-hooks still receive the final exit code.
 - **Existing failures keep existing codes.** Explicit id not found remains exit `3`, store/io
-  failures remain `2`, and hook failures remain `4`; `10`/`11`/`12` apply only to head/flow
-  operations that find no lap to start because the queue is held, empty, or complete.
+  failures remain `2`, and hook failures remain `4`; `11`/`12` apply only to head/flow
+  operations that find no lap to start because the queue is empty or complete. Exit `10` applies
+  to head flow-start operations gated by hold and to explicit `claim <id>` attempts into a held
+  stint.
 - **Final-lap drain still wins.** `done` for a claimed final lap inside a held stint SHALL
   complete the lap and allow the `add-stints` drain/archive behavior to run; a held drained
   stint must not stay stuck as the next gate.
 
 ## Open Product Calls
 
-- Held schema/version ownership: decide whether `held` folds into the unreleased v3 stint schema
-  or bumps the schema to v4, including missing-field default `false` and older-version rejection.
-- Hold target semantics: decide whether a stint can be held before enqueue, whether archived
-  stints can be targeted, how duplicate refs are handled, and idempotency/logging for already
-  held or already released stints.
-- Queue-state output: decide exact text/stdout/stderr and `--json-output` shape for clean
-  `10`/`11`/`12` exits.
 - Empty vs complete across stints: decide how unqueued stint files, archived drained stints,
   root queues with only done refs, and empty active stint files map to `empty` vs `complete`.
-- Status precedence: decide whether an existing valid claim keeps status `active` even when the
-  next head is held, or whether `held` takes precedence.
 - `stints ls` rendering: decide whether held replaces lifecycle state or appears as a separate
   boolean/marker alongside queued/active/done.
-- Non-starting scoped commands and explicit ids: decide whether `list`, `count`, `add`, `edit`,
-  `delete`, `get <id>`, and `claim <id>` can inspect or mutate inside/under a held stint; the
-  current gated contract only covers starting the next lap via head `get`/`claim`.
+- Non-starting scoped commands besides explicit `get`/`claim`: decide whether `list`, `count`,
+  `add`, `edit`, and `delete` can inspect or mutate inside/under a held stint.
 
 ## Risks
 

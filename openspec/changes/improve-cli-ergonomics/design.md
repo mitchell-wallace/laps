@@ -23,9 +23,11 @@ breaks its claim/hook/log identity. This change closes both gaps without a schem
 
 ## Decisions
 
-- **Two-line layout.** Line 1: `<n>. [marker]<title>` (title struck through when done).
+- **Two-line layout.** Line 1: `<n>. [marker]<title>` where the active marker is `> ` (title
+  struck through when done).
   Line 2: `   <id> · <assignee|—> · <todo|done>`. Assignee placeholder is an em dash when
-  unset.
+  unset. In the two-line layout, done styling strikes through only the title; `--oneline`
+  preserves the prior whole-line done strike.
 - **`--oneline` preserves** the existing `<n>. <id> — <title> (assignee: X)` form for
   consumers that parse the terse output. The two-line form is the new default per the
   product decision to make `list` slightly more detailed without showing descriptions.
@@ -39,9 +41,14 @@ breaks its claim/hook/log identity. This change closes both gaps without a schem
   errors; an `after` target that is done falls back to head with a stderr notice, mirroring
   `add after`. The lap id is never regenerated, and a successful move advances `updatedAt`.
 - **`edit` requires ≥1 field flag** — a no-op edit is rejected. Set fields are updated and
-  `updatedAt` advances. `edit` may target todo or done laps; editing a done lap succeeds with a
-  stderr warning and does not reopen the lap or change `completedAt`.
-- **`assign`** is sugar over `edit --assignee`; it follows the same done-lap warning rule.
+  `updatedAt` advances. `--title` must be nonblank after trimming; `--description ""` clears the
+  description; `--assignee ""` clears the assignee; non-empty assignees are trimmed; escaped
+  `\n` in descriptions follows `add` behavior. `edit` may target todo or done laps; editing a
+  done lap succeeds with a stderr warning and does not reopen the lap or change `completedAt`.
+- **`assign`** is sugar over `edit --assignee`; it accepts a blank role to clear the assignee and
+  follows the same done-lap warning rule.
+- **Text success output.** Non-JSON `move`, `edit`, and `assign` print only the affected lap id on
+  stdout; warnings and notices go to stderr.
 - **`--json-output`** is honored by `move`, `edit`, and `assign`, each emitting the affected
   task as a `task` object, matching the existing command convention (the repo has JSON-output
   tests for all commands).
@@ -50,14 +57,6 @@ breaks its claim/hook/log identity. This change closes both gaps without a schem
   runs. The mutating commands (`move`, `edit`, `assign`) run the existing before/after hook
   lifecycle with the affected task, `$file`, `$args`, `$output`, and `$exit_code` populated the
   same way as other mutating built-ins.
-
-## Open Product Calls
-
-- Exact active-marker token and done styling: pick the marker string and whether two-line done
-  rendering strikes only the title or both rendered lines.
-- Edit/output semantics: confirm whether `--description ""` and `--assignee ""` clear fields,
-  whether `assign` rejects blank-after-trim roles, and what non-JSON success text should be for
-  `move`/`edit`/`assign`.
 
 ## Risks
 

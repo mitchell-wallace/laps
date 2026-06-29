@@ -57,6 +57,8 @@ and `delete`. When the id is not in scope but exists in another stint, the comma
 with a message naming that stint and SHALL NOT mutate any file. `stints enqueue after <id>`
 SHALL resolve the `after` id only in the root queue; if the id exists only inside a stint, it
 SHALL fail with a message naming that stint.
+Deleting a claimed lap SHALL refuse by default with a stderr warning; `delete --force` SHALL
+remove the lap and clear the matching claim.
 
 #### Scenario: Add defaults to the active stint
 - **WHEN** `laps add head ...` runs while a stint is active
@@ -69,6 +71,14 @@ SHALL fail with a message naming that stint.
 #### Scenario: Out-of-scope id names the stint
 - **WHEN** an explicit id is not in the selected scope but exists in another stint
 - **THEN** the command SHALL fail with a message naming that stint
+
+#### Scenario: Claimed delete requires force
+- **WHEN** `laps delete <claimed-id>` runs for a claimed lap
+- **THEN** the command SHALL fail with a warning and SHALL leave the claim and lap unchanged
+
+#### Scenario: Forced claimed delete clears claim
+- **WHEN** `laps delete --force <claimed-id>` runs for a claimed lap
+- **THEN** the command SHALL remove the lap and clear the matching claim
 
 #### Scenario: Stint enqueue after is root-only
 - **WHEN** `laps stints enqueue auth after <id>` names an id that exists only inside another stint
@@ -90,8 +100,15 @@ keep its stint from draining, so the recorded scope SHALL always remain resolvab
 
 ### Requirement: Logged scope reflects resolution
 When a command resolves into a stint, the `scope` field of any event it logs SHALL be that
-stint's path rather than `root`.
+stint's canonical scope string rather than `root`. Canonical scopes SHALL be `root`, the
+root-level stint name, or slash paths for nested stints such as `auth/search`. Hooks for scoped
+operations SHALL receive `$file` as the resolved physical task file and `$scope` as the same
+canonical logical scope string.
 
 #### Scenario: Event records the resolved scope
 - **WHEN** a lap inside stint `auth` is completed
 - **THEN** the logged `completed` event SHALL have `scope` of `auth`
+
+#### Scenario: Nested scope is slash encoded
+- **WHEN** a lap inside nested stint `search` under `auth` is completed
+- **THEN** the logged event and hook `$scope` SHALL use `auth/search`

@@ -14,15 +14,15 @@ It is the highest-leverage observability item given how the operator actually wo
 - **Event log `.laps/log.jsonl`** — append-only JSONL, **native** to each task/claim-mutating command
   (not a user hook, so it cannot be disabled) and **best-effort** (an append failure never
   fails the command). Gitignored via `init`. Logs state transitions plus `claim`, never
-  reads. Line schema `{ts, event, cmd, lap?, title?, assignee?, scope, detail{}, session}`;
-  `session` from the `LAPS_SESSION` env var; `scope` defaults to `root`. Grow-forever (no
-  rotation).
+  reads. Line schema `{ts, event, cmd, file, lap?, title?, assignee?, scope, detail{}, session}`;
+  `session` from the `LAPS_SESSION` env var; `scope` defaults to `root`; `file` is the resolved
+  `.laps`-relative task file. Grow-forever (no rotation).
 - **`laps log`** reader with `-n`, `--lap`, `--session`, `--since`, `--json-output`.
   `laps log --lap <id>` shows one lap's full lifecycle.
 - **`laps status [--json-output]`** — counts, active (claimed) lap, head, assignee
-  breakdown, and a queue state. The current `active | empty | complete` taxonomy needs one
-  product decision before implementation for the common "todo exists, nothing claimed" state.
-- **Structured claim** — the claim file becomes `{lap, claimedAt}` (legacy bare-id read
+  breakdown, selected file, and a queue state of `active | ready | empty | complete`, where
+  `ready` means todo laps exist and nothing is claimed.
+- **Structured claim** — the claim file becomes `{lap, file, claimedAt}` (legacy bare-id read
   back-compatibly). `claimedAt` lets `status` show how long the active lap has been held and
   exposes the data needed for stale-claim handling once that threshold/policy is chosen.
 

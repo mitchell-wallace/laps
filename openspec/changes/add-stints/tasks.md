@@ -26,12 +26,12 @@
 
 - [ ] 4.1 Default `add`/`move`/`edit`/`delete` to the active scope
 - [ ] 4.2 Resolve every id-taking queue command within the selected scope first (`get`, `claim`, `done`, `add after`, `move`, `edit`, `assign`, `delete`); when an id exists in another stint, fail with a message naming that stint
-- [ ] 4.3 Resolve the delete-claimed-lap product call before implementation
-- [ ] 4.4 Tests: `add head` lands in the active stint; `add --root` lands in root; out-of-scope id error names the stint for each id-taking command group
+- [ ] 4.3 Add `delete --force`; default `delete` refuses a claimed lap with a stderr warning, while forced delete removes it and clears the matching claim
+- [ ] 4.4 Tests: `add head` lands in the active stint; `add --root` lands in root; out-of-scope id error names the stint for each id-taking command group; claimed delete refuses; forced claimed delete clears claim
 
 ## 5. Claim scope (preemption-safety)
 
-- [ ] 5.1 Add `scope` to the claim record (`{lap, scope, claimedAt}`); keep back-compat reads
+- [ ] 5.1 Add `scope` to the claim record (`{lap, file, scope, claimedAt}`); keep back-compat reads
 - [ ] 5.2 Bare `done` resolves the claimed lap within its recorded scope, regardless of the current head
 - [ ] 5.3 Enforce the invariant: a claimed, undone lap keeps its stint from draining
 - [ ] 5.4 Ensure claim JSON parsing tolerates future fields added by later changes
@@ -58,17 +58,17 @@
 - [ ] 8.1 `laps stints ls|new <name>|enqueue <name> [pos]|show <name>|rm <name>`; `st` alias for `stints`
 - [ ] 8.2 `stints ls` lists stint files, shows lap counts for each, and shows whether each stint is queued
 - [ ] 8.3 `list --tree` renders the full recursive overview
-- [ ] 8.4 Resolve `stints rm` safety semantics before implementation
+- [ ] 8.4 Add `stints rm --force`; default removal allows unqueued non-archived stints and archived stints (including archived stints with done refs), and refuses non-archived queued/active/claimed stints unless forced
 - [ ] 8.5 Treat unqueued stints as ordinary listed stint files with `queued=false`; no draft/unqueued lifecycle state
 - [ ] 8.6 Update `internal/cmd/hooks.go:isKnownCommand` so `stints` and `st` are treated as built-ins
-- [ ] 8.7 Tests: stints lifecycle commands; `st` alias through `runMBExecute`; `--tree` rendering; `rm` safety behavior; unqueued display/state behavior
+- [ ] 8.7 Tests: stints lifecycle commands; `st` alias through `runMBExecute`; `--tree` rendering; `rm` safety behavior including force, archived with done ref, and claim clearing; unqueued display/state behavior
 
 ## 9. Log & status integration
 
 - [ ] 9.1 Populate the event-log `scope` with the resolved context; add `stint.enqueued`/`completed`/`archived`
 - [ ] 9.2 `status` reports the active stint and per-stint progress
-- [ ] 9.3 Resolve hook `$file`/`$scope` behavior under resolution before implementation
-- [ ] 9.4 Resolve canonical scope string encoding before implementation, including nested stints
+- [ ] 9.3 Hook variables under scoped operations: `$file` is the resolved physical task file and `$scope` is the canonical logical scope
+- [ ] 9.4 Use canonical scope strings everywhere: `root`, root-level stint names, and slash paths for nesting such as `auth/search`
 - [ ] 9.5 Tests: scope reflects the stint; stint events logged; status shows active stint; hook variables under scoped `done`; nested scope encoding
 
 ## 10. Cross-change dependency

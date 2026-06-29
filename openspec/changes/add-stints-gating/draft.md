@@ -11,10 +11,14 @@ stop, wait, or finish.
 
 ## In scope
 
-- **`laps stints hold <name>` / `laps stints release <name>`**: mark a stint held / clear the hold.
-  The hold flag travels with the stint; it only matters when the stint reaches the resolved head.
-- **Gated flow-op behaviour**: when the head resolves to a held stint, `get`/`claim` return
-  **no lap** (agent-facing: nothing to do; the relay stops cleanly rather than erroring).
+- **`laps stints hold <name>` / `laps stints release <name>`**: mark any non-archived stint held
+  / clear the hold, including before enqueue. The hold flag lives on the stint file; it only
+  matters when a ref to that stint reaches the resolved head. Idempotent hold/release does not
+  double-log.
+- **Gated flow-op behaviour**: when the head resolves to a held stint, head `get`/`claim` return
+  **no lap** and warn that the stint is held and should not be implemented yet. Explicit
+  `get <id>` can inspect held work with the same warning; explicit `claim <id>` into held work is
+  blocked.
 - **Gate exit codes** on flow ops (`get`/`claim`), avoiding existing 2/3/4:
   - `0` — lap returned
   - `10` — held / gated (head stint on hold)
@@ -23,7 +27,8 @@ stop, wait, or finish.
 - **`done` under hold**: completing the **claimed** lap still works — hold blocks *starting* the
   next lap (`get`/`claim`), not *finishing* in-flight work.
 - **`status` + `stints ls`** surface the gate: `state: held`, which stint, and the gate message.
-  `status` always exits `0` and reports state in text + `--json-output`.
+  A valid active claim keeps `status.state=active` with gate metadata separately. `status` exits
+  `0` for valid snapshots and reports state in text + `--json-output`.
 - **Log events**: `stint.held`, `stint.released`.
 
 ## Out / deferred
@@ -39,8 +44,4 @@ stop, wait, or finish.
 
 ## Open questions (for formalisation)
 
-- Does `claim` under a held head also return `10` (lean: yes — agents shouldn't claim into a held
-  stint), or is pre-claim allowed?
-- When a `done` drains the active stint **into** a held next stint, anything special? (Lean: normal
-  advance; the next `get` returns `10`.)
 - Exact `status` text + JSON shape for the held state and gate message.

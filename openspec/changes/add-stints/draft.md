@@ -46,11 +46,13 @@ over storage that already works — low risk.
 - **Structure ops** (`add`/`move`/`edit`/`assign`/`delete`) default to active scope; `-r`/`-s` redirect.
   Explicit-id resolution: within scope; if not found in scope but found elsewhere, the error
   **names the stint** ("`a7` is in stint `search` — re-run with `-s search`"). No silent cross-file action.
-- **Claim records scope** (preemption-correctness): claim file becomes `{lap, scope, claimedAt}`.
+- **Claim records scope** (preemption-correctness): claim file becomes `{lap, file, scope, claimedAt}`.
   Bare `done` resolves the claimed lap within its **recorded scope**, not the current head — so it's
   immune to head changes from preemption or another session. Invariant: a claimed *undone* lap keeps
   its stint from draining, so the recorded scope file always still exists when `done` looks.
   (`claimedAt` itself is introduced in change 2; this change adds `scope`.)
+- **Claim-safe deletion**: deleting a claimed lap refuses by default and requires `--force` to
+  remove the lap and clear the matching claim.
 - **Drain → auto-archive**: a stint with no remaining todo laps is drained. Detected inline by the
   `done` that empties it (and at resolution time for robustness). On drain: stint-ref flips to done
   (sets `completedAt`) **and** the stint file auto-moves to `.laps/stints/archive/`. Draining is
@@ -63,6 +65,8 @@ over storage that already works — low risk.
   `enqueue` always targets root (it manages the root pipeline).
 - **Commands**: `laps stints ls | new <name> | enqueue <name> [pos] | show <name> | rm <name>`;
   `st` alias for `stints`. `stints ls` shows each stint's lap counts and whether it is queued.
+  `stints rm` removes unqueued/archived stints by default and requires `--force` for queued,
+  active, or claimed non-archived stints.
   `--tree` render flag on `list` for the full recursive overview.
 - **Log integration** (infra from change 2): events carry `scope`; add `stint.enqueued`,
   `stint.completed`/`stint.archived`.
@@ -87,10 +91,10 @@ over storage that already works — low risk.
 
 ## Open questions (for formalisation)
 
-- Exact claim-file JSON shape + back-compat parsing (shared with change 2's `claimedAt`).
+- Exact remaining claim-file output text/docs (shape is `{lap, file, scope, claimedAt}`).
 - `laps stints ls` columns beyond name, queued flag, and lap counts.
 - Whether `status` extension and `list --tree` fully land here or are minimal.
 - ID generation across stint files: prefix is repo-based (identical across stints), so cross-stint
   collisions are rare-but-possible; confirm generation scans only the target file's ids and that
   scope resolution disambiguates.
-- Behaviour of `delete`/`rm` on a stint-ref that still has todo laps (cascade? refuse?).
+- Exact extra `stints rm` output text for forced removals.

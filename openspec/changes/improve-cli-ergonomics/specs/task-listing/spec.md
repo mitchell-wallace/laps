@@ -2,12 +2,13 @@
 
 ### Requirement: Two-line list output
 The `list` command SHALL render each lap on two lines by default. The first line SHALL
-show the position number, the title, and a marker when the lap is the active (claimed)
+show the position number, the title, and the marker `> ` when the lap is the active (claimed)
 lap. The second line SHALL show the lap id, the assignee (or a placeholder when unset),
 and the lap state. Lap descriptions SHALL NOT be shown. The command SHALL accept a
 `--oneline` flag that renders each lap on a single line in the prior
 `<n>. <id> — <title> (assignee: <a>)` form. Done laps SHALL be struck through under
-`--all` and `--done` in both layouts.
+`--all` and `--done`; two-line mode SHALL strike through only the title, while `--oneline`
+SHALL preserve the prior whole-line strike.
 
 #### Scenario: Default two-line rendering
 - **WHEN** `laps list` runs with todo laps present
@@ -19,7 +20,7 @@ and the lap state. Lap descriptions SHALL NOT be shown. The command SHALL accept
 
 #### Scenario: Done laps struck through
 - **WHEN** `laps list --all` or `laps list --done` runs
-- **THEN** completed laps SHALL be rendered struck through
+- **THEN** completed laps SHALL render title-only strikethrough in two-line mode and prior whole-line strikethrough in `--oneline`
 
 ### Requirement: Active-lap marker
 The `list` command SHALL mark the active lap — the lap returned by the central claim-reader

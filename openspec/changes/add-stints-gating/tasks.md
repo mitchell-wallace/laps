@@ -1,19 +1,19 @@
 ## 1. Hold & release
 
-- [ ] 1.1 Add a held flag to stint references; `laps stints hold <name>` sets it, `laps stints release <name>` clears it
-- [ ] 1.2 Resolve held schema/version ownership before implementation (fold into v3 vs bump to v4; default missing `held:false`)
-- [ ] 1.3 Resolve hold/release target semantics before implementation (pre-enqueue, archived, duplicate refs, idempotency)
-- [ ] 1.4 Append `stint.held` / `stint.released` events to the event log
-- [ ] 1.5 `laps stints ls` shows held as resolved by the product call
-- [ ] 1.6 Tests: hold sets / release clears; default missing held is false; older-version rejection; target semantics; events logged; held shown in `stints ls`
+- [ ] 1.1 Add a held flag to non-archived stint file metadata; missing `held` defaults to `false` and folds into schema v3 before the first v3/0.9.0 binary ships
+- [ ] 1.2 `laps stints hold <name>` / `release <name>` target any non-archived stint, including not-yet-enqueued stints; archived stints are refused
+- [ ] 1.3 Make hold/release idempotent: already-held/already-released operations do not append duplicate events
+- [ ] 1.4 Append `stint.held` / `stint.released` events only when state changes
+- [ ] 1.5 `laps stints ls` shows held as resolved by the remaining rendering product call
+- [ ] 1.6 Tests: hold sets / release clears before and after enqueue; default missing held is false; archived target refused; idempotent operations do not double-log; held shown in `stints ls`
 
 ## 2. Gated flow ops & exit codes
 
 - [ ] 2.1 Implement held detection for `get`/`claim` flow-start resolution and status gate probing: at each context head, a held `kind:"stint"` ref returns held and SHALL NOT descend into the child file
 - [ ] 2.2 Map head/flow `get`/`claim` exit codes: `0` lap, `10` held, `11` empty, `12` complete, while preserving existing explicit-id/store/hook failure codes
-- [ ] 2.3 Resolve clean state output shape before implementation; do not use the generic error helper for `10`/`11`/`12`
-- [ ] 2.4 Resolve non-starting scoped command and explicit-id semantics under hold before implementation
-- [ ] 2.5 Tests: held head → no lap + exit 10; nested held encountered during descent → exit 10; empty → 11; complete → 12; lap present → 0; explicit id not found remains 3; resolved explicit-id held behavior; hook sees exit code
+- [ ] 2.3 For clean state exits, do not use the generic error helper: text mode emits no stdout for `10`/`11`/`12`, held warnings go to stderr, and JSON mode emits a small state object on stdout
+- [ ] 2.4 Allow `get <id>` to inspect a held stint with a warning; block `claim <id>` into a held stint with exit `10`, no claim mutation, and the same warning
+- [ ] 2.5 Tests: held head → no lap + exit 10 + warning; nested held encountered during descent → exit 10; empty → 11; complete → 12; lap present → 0; explicit id not found remains 3; `get <id>` held inspection warns; `claim <id>` held target exits 10 and does not claim; hook sees exit code
 
 ## 3. Finish-under-hold
 
@@ -23,8 +23,8 @@
 
 ## 4. Status
 
-- [ ] 4.1 Resolve status precedence with active claims before implementation
-- [ ] 4.2 `laps status` reports a `held` state, the held stint, and the gate message for valid snapshots with no active-claim precedence conflict; exits 0 for valid snapshots
+- [ ] 4.1 Valid active claims keep `status.state=active`; include gate metadata separately when the next head is held
+- [ ] 4.2 `laps status` reports a primary `held` state, the held stint, and the gate message for valid snapshots only when no valid active claim takes precedence; exits 0 for valid snapshots
 - [ ] 4.3 Reflect `held` in `--json-output` with the resolved clean state shape
 - [ ] 4.4 Tests: status held state in text and JSON; active-claim precedence behavior
 

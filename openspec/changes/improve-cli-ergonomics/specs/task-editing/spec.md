@@ -32,8 +32,11 @@ SHALL advance the moved lap's `updatedAt` timestamp.
 The system SHALL provide `laps edit <id>` with `--title`, `--description`, and
 `--assignee` flags that update the named fields of an existing lap in place and update its
 `updatedAt` timestamp. At least one field flag SHALL be required; an invocation with no
-field flags SHALL fail and leave the lap unchanged. The command SHALL allow editing done laps;
-when it edits a done lap, it SHALL warn on stderr while preserving `isDone` and `completedAt`.
+field flags SHALL fail and leave the lap unchanged. A blank title after trimming SHALL fail;
+`--description ""` and `--assignee ""` SHALL clear those fields; non-empty assignees SHALL be
+trimmed; escaped `\n` in descriptions SHALL match `laps add` behavior. The command SHALL allow
+editing done laps; when it edits a done lap, it SHALL warn on stderr while preserving `isDone`
+and `completedAt`.
 
 #### Scenario: Edit a field
 - **WHEN** `laps edit <id> --assignee SENIOR` runs
@@ -43,22 +46,35 @@ when it edits a done lap, it SHALL warn on stderr while preserving `isDone` and 
 - **WHEN** `laps edit <id>` runs with no field flags
 - **THEN** the command SHALL fail and the lap SHALL be unchanged
 
+#### Scenario: Edit clears fields
+- **WHEN** `laps edit <id> --description "" --assignee ""` runs
+- **THEN** the lap's description and assignee SHALL be cleared
+
+#### Scenario: Blank title fails
+- **WHEN** `laps edit <id> --title "   "` runs
+- **THEN** the command SHALL fail without modifying the lap
+
 #### Scenario: Edit a done lap warns but preserves completion
 - **WHEN** `laps edit <done-id> --title Updated` runs for a done lap
 - **THEN** the command SHALL succeed, warn on stderr, update the title and `updatedAt`, and preserve `isDone` and `completedAt`
 
 ### Requirement: Assign shortcut
 The system SHALL provide `laps assign <id> <role>` as a shortcut equivalent to
-`laps edit <id> --assignee <role>`. Assigning a done lap SHALL follow the same warn-but-allow
-behavior as `edit`.
+`laps edit <id> --assignee <role>`. A blank role SHALL clear the assignee. Assigning a done lap
+SHALL follow the same warn-but-allow behavior as `edit`.
 
 #### Scenario: Assign sets the assignee
 - **WHEN** `laps assign <id> VERIFY` runs
 - **THEN** the lap's assignee SHALL become `VERIFY`
 
+#### Scenario: Blank assign clears assignee
+- **WHEN** `laps assign <id> ""` runs
+- **THEN** the lap's assignee SHALL be cleared
+
 ### Requirement: Structured output for edits
 The `move`, `edit`, and `assign` commands SHALL honor the global `--json-output` flag,
-emitting the affected lap as a `task` object.
+emitting the affected lap as a `task` object. Without `--json-output`, they SHALL print only the
+affected lap id on stdout; warnings and notices SHALL use stderr.
 
 #### Scenario: JSON output for an edit
 - **WHEN** `laps move <id> head --json-output` runs
