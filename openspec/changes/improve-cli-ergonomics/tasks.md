@@ -7,11 +7,12 @@
 - [ ] 1.5 Register `ls` as an alias of `list` (same flags, same output)
 - [ ] 1.6 Update `internal/cmd/hooks.go:isKnownCommand` so `ls` is treated as a built-in and is not intercepted as hook-only
 - [ ] 1.7 Tests: two-line default, `--oneline`, marker present/absent/nonmatching claim, `ls` alias through `runMBExecute`, `--json-output` unchanged
+- [ ] 1.8 Migrate existing `list` assertions in `internal/cmd/cmd_test.go` to the new default: `TestListDefault` (expects N lines for N laps), `TestListOutputUnchangedWithoutAssignee`, `TestListOutputIncludesAssignee`, the `Contains(out, id+" — ...")` check, and the `idxBefore(list, "— A", "— B")` ordering assertions (these rely on the `— <title>` substring that two-line line 1 no longer carries). Re-point the terse-shape assertions at `--oneline` so the legacy one-line format stays under test rather than deleted
 
 ## 2. Move
 
 - [ ] 2.1 Add `move <id> head|tail|after <id>` reusing `store.ComputeInsertOrder`, preserving the lap id
-- [ ] 2.2 Operate on todo laps only; error on unknown or already-done id; `after` a done target falls back to head with a stderr notice (mirror `add after`)
+- [ ] 2.2 Operate on todo laps only; error on unknown or already-done id (exit `1`); `after` a missing target errors via `store.ErrTaskNotFound` (exit `3`, like `add after`); `after` a done target falls back to head with a stderr notice that `move.go` emits itself (copy the `fmt.Fprintf(os.Stderr, …)` from `add.go:164` — `ComputeInsertOrder` only returns `fallbackHead`, it does not print); `move <id> after <id>` (self-reference) errors
 - [ ] 2.3 Honor `--json-output`, returning `{task}`
 - [ ] 2.4 Run before/after hooks with the affected task and populated `$output`/`$exit_code`
 - [ ] 2.5 Update `internal/cmd/hooks.go:isKnownCommand` so `move` is treated as a built-in
@@ -20,7 +21,7 @@
 
 ## 3. Edit & assign
 
-- [ ] 3.1 Add `edit <id> [--title] [--description] [--assignee]` updating set fields and bumping `updatedAt`; require ≥1 field flag
+- [ ] 3.1 Add `edit <id> [--title] [--description] [--assignee]` updating set fields and bumping `updatedAt`; require ≥1 field flag. Gate each field on `cmd.Flags().Changed("<name>")` (mirror `add.go:73`), not on a non-empty value, so `--description ""` (clear) is distinguishable from an unset flag; the ≥1-flag check is `Changed("title") || Changed("description") || Changed("assignee")`
 - [ ] 3.2 Add `assign <id> <role>` as a shortcut for `edit <id> --assignee <role>`
 - [ ] 3.3 Honor `--json-output`, returning `{task}` for both
 - [ ] 3.4 Run before/after hooks with the affected task and populated `$output`/`$exit_code`
@@ -28,6 +29,7 @@
 - [ ] 3.6 Allow `edit`/`assign` on done laps with a stderr warning; preserve done state and `completedAt`
 - [ ] 3.7 Update `internal/cmd/hooks.go:isKnownCommand` so `edit` and `assign` are treated as built-ins
 - [ ] 3.8 Tests: edit each field; no-flags error; field validation/normalization; blank `assign` clears assignee; done-target warning/preservation; assign sets assignee; non-JSON success prints id; `--json-output`; hook context; `runMBExecute` dispatch
+- [ ] 3.9 Extend the `runMB`/`runMBExecute` reset harness in `cmd_test.go`: zero the new package-level vars (`listOneline`, `edit*`, `move*`) and register `editCmd.Flags()`, `moveCmd.Flags()`, `assignCmd.Flags()` (and the `list` flagset for `--oneline`) in the `flag.Changed`-reset loop. Because `edit`'s semantics hinge on `Changed`, a leaked `Changed=true` from one test silently corrupts the next (e.g. a prior `--description ""` clears description in a later title-only edit)
 
 ## 4. Docs & release
 

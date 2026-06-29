@@ -6,7 +6,9 @@ show the position number, the title, and the marker `> ` when the lap is the act
 lap. The second line SHALL show the lap id, the assignee (or a placeholder when unset),
 and the lap state. Lap descriptions SHALL NOT be shown. The command SHALL accept a
 `--oneline` flag that renders each lap on a single line in the prior
-`<n>. <id> — <title> (assignee: <a>)` form. Done laps SHALL be struck through under
+`<n>. <id> — <title>` form, appending ` (assignee: <a>)` only when the assignee is set
+(reusing today's `formatListTask` verbatim — the clause is omitted when the assignee is
+empty). Done laps SHALL be struck through under
 `--all` and `--done`; two-line mode SHALL strike through only the title, while `--oneline`
 SHALL preserve the prior whole-line strike.
 

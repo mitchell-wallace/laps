@@ -25,11 +25,16 @@ breaks its claim/hook/log identity. This change closes both gaps without a schem
 
 - **Two-line layout.** Line 1: `<n>. [marker]<title>` where the active marker is `> ` (title
   struck through when done).
-  Line 2: `   <id> · <assignee|—> · <todo|done>`. Assignee placeholder is an em dash when
+  Line 2: `<indent><id> · <assignee|—> · <todo|done>`. Assignee placeholder is an em dash when
   unset. In the two-line layout, done styling strikes through only the title; `--oneline`
-  preserves the prior whole-line done strike.
-- **`--oneline` preserves** the existing `<n>. <id> — <title> (assignee: X)` form for
-  consumers that parse the terse output. The two-line form is the new default per the
+  preserves the prior whole-line done strike. The line-2 `<indent>` SHALL be padded to the
+  width of the line-1 position prefix (`"<n>. "`) so the id column stays aligned once the queue
+  exceeds 9 laps (a fixed 3-space indent misaligns at position 10+).
+- **`--oneline` preserves** the existing single-line form by reusing today's
+  `formatListTask` (`internal/cmd/list.go:109`) verbatim: `<n>. <id> — <title>` with the
+  ` (assignee: <a>)` clause appended **only when the assignee is non-empty** (the literal
+  `(assignee: <a>)` in the spec is shorthand, not an unconditional clause — matching
+  `TestListOutputUnchangedWithoutAssignee`). The two-line form is the new default per the
   product decision to make `list` slightly more detailed without showing descriptions.
 - **Active marker uses the claim reader.** `list` SHALL call the central claim-reader contract
   (`store.ReadClaim` today) rather than parsing `.laps/claim` in the formatter. Missing claims
@@ -40,11 +45,23 @@ breaks its claim/hook/log identity. This change closes both gaps without a schem
   renumber-on-gap-exhaustion). It operates on todo laps only; an unknown or already-done id
   errors; an `after` target that is done falls back to head with a stderr notice, mirroring
   `add after`. The lap id is never regenerated, and a successful move advances `updatedAt`.
-- **`edit` requires ≥1 field flag** — a no-op edit is rejected. Set fields are updated and
-  `updatedAt` advances. `--title` must be nonblank after trimming; `--description ""` clears the
-  description; `--assignee ""` clears the assignee; non-empty assignees are trimmed; escaped
-  `\n` in descriptions follows `add` behavior. `edit` may target todo or done laps; editing a
-  done lap succeeds with a stderr warning and does not reopen the lap or change `completedAt`.
+  - **Exit codes mirror `add`:** an `after` target that does not exist returns exit `3` (via
+    `store.ErrTaskNotFound`, as `add after` does at `add.go:157`); a moved id that is unknown or
+    already-done, and usage errors, return exit `1`. `move <id> after <id>` (self-reference)
+    SHALL error rather than silently no-op.
+  - **The after-done stderr notice is the command's responsibility.** `store.ComputeInsertOrder`
+    only returns `fallbackHead=true`; it does not print. `move.go` SHALL emit the notice itself
+    when `fallbackHead` is true, copying the `fmt.Fprintf(os.Stderr, …)` pattern from
+    `add.go:164`.
+- **`edit` requires ≥1 field flag** — a no-op edit is rejected. Each field SHALL be gated on
+  `cmd.Flags().Changed("<name>")` (mirroring `add.go:73`), NOT on a non-empty value, so that an
+  explicitly-passed empty flag (`--description ""`) is distinguishable from an unset flag; the
+  ≥1-flag check is `Changed("title") || Changed("description") || Changed("assignee")`. Set
+  fields are updated and `updatedAt` advances. `--title` must be nonblank after trimming;
+  `--description ""` clears the description; `--assignee ""` clears the assignee; non-empty
+  assignees are trimmed; escaped `\n` in descriptions follows `add` behavior. `edit` may target
+  todo or done laps; editing a done lap succeeds with a stderr warning and does not reopen the
+  lap or change `completedAt`.
 - **`assign`** is sugar over `edit --assignee`; it accepts a blank role to clear the assignee and
   follows the same done-lap warning rule.
 - **Text success output.** Non-JSON `move`, `edit`, and `assign` print only the affected lap id on
