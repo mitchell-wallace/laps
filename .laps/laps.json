@@ -28,11 +28,11 @@
       "title": "Implement globally-unique lap ids via stint prefixes",
       "description": "Context: Schema v3 is in. Today store.GenerateID (internal/store/store.go:413) builds `\u003crepo-prefix\u003e-\u003chash\u003e` where repo-prefix is the first 4 lowercase alphanumerics of the repo dir name (normalizePrefix, store.go:429), so ids are unique only within a file. To make a lap id globally unique AND self-identify its owning queue, each stint gets its own 4-char prefix allocated once at creation and recorded in stint file metadata; laps inside a stint use the stint prefix, root laps keep the repo prefix. Implements tasks 1.8 and 1.9 with bundled tests (the prefix surface is narrow enough to bundle).\n\nOutcome: store.GenerateID takes the containing scope's prefix. Stint file metadata records its allocated 4-char prefix. Allocation: first 4 lowercase alphanumerics of the stint name, made unique against the repo prefix and all existing stint prefixes by trying other permutations/substrings of the name chars, then incrementing the last char through 0-9a-z. A lap id's prefix maps directly to its owning stint (or root), so scoped explicit-id resolution and the active-lap marker can identify scope from the id alone.\n\nFiles \u0026 scope: internal/store/store.go (GenerateID signature change to accept scope prefix; normalizePrefix reuse; new AllocateStintPrefix helper; stint metadata prefix field). Update all GenerateID call sites in internal/cmd to pass the correct scope prefix. A minimal stints new skeleton in internal/cmd/stints.go may be needed to exercise allocation (the full command surface lands in lap 16).\n\nDesign: Two subtleties. (1) The GenerateID signature change ripples to every caller: root callers pass normalizePrefix(repoRoot), stint callers pass the stint's recorded prefix. Keep the existing hash + numeric-suffix collision-extension behavior intact. (2) Allocation uniqueness MUST check BOTH the repo prefix AND all existing stint prefixes (read prefix metadata across .laps/stints/). The permutation/substring fallback MUST stay deterministic (sorted candidate list) so the same name + existing set always yields the same prefix. Widening to 6 chars is explicitly a non-goal here.\n\nAcceptance: `just build`, `just test`, `just lint` clean. New tests: stint laps carry the stint prefix; root vs stint ids never collide; a name whose first-4 collides with the repo prefix or an existing stint prefix gets a distinct allocated prefix; allocation is deterministic across runs with identical inputs.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-29T10:09:28.111359782Z",
-      "updatedAt": "2026-06-29T10:09:28.111359782Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T17:39:25.164249917Z",
+      "completedAt": "2026-06-30T17:39:25.164249917Z"
     },
     {
       "id": "laps-b9be",
