@@ -39,11 +39,11 @@
       "title": "Verify structured claim change (high-risk gate)",
       "description": "Context: The structured-claim API change is the high-risk core of this change — it breaks multiple callers and tests. Verify it in isolation before event/status work builds on top of it.\n\nOutcome: Confirmation that the structured claim is correct, complete, and safe to build upon. Check off tasks.md boxes 5.1, 5.1a, 5.2, 5.3, 5.4, 5.5 only if the work is correct and thorough.\n\nProcess: Use the openspec-verify-change skill against add-event-log-and-status. Identify the merge target (ask the operator / read PR metadata / repo docs) before running git diff \u003ctarget\u003e...HEAD; treat any branch work from improve-cli-ergonomics that predates this batch as pre-existing baseline, not scope to remove. Do NOT rewrite git history.\n\nDepth checks beyond \"tests pass\": trace the ReadClaim/WriteClaim signature change at EVERY call site (claim.go write + undo-read, done.go read + re-read-before-clear, list.go active-marker) and confirm none still use a bare string. Confirm the no-claim sentinel is consistent across all callers and that the done.go:51 / claim.go:83 no-claim branches still behave as before. Confirm legacy bare-id read yields {lap, file: \u003cselected\u003e, claimedAt: null} and that file comes from the caller (not invented by the store). Confirm malformed-JSON detection (starts-with-'{' but invalid) errors rather than being treated as legacy. Confirm unknown-field ignoring works. Confirm done.go:92 re-read stays best-effort. Confirm TestClaimCRUD and the cmd_test.go done/claim assertions were actually migrated (not deleted/skipped). Run just test and just lint. If small safe one-liners are missing, fix them; anything larger becomes a new head lap. Report findings.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-29T10:05:27.706342361Z",
-      "updatedAt": "2026-06-29T10:05:27.706342361Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T08:05:44.916590029Z",
+      "completedAt": "2026-06-30T08:05:44.916590029Z"
     },
     {
       "id": "laps-b8cf",
