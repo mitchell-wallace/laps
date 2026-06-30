@@ -28,11 +28,11 @@
       "title": "Add ls alias and list rendering tests",
       "description": "**Context** — Follows the verified two-line formatter. Implements tasks 1.5, 1.6, and the full new test matrix 1.7. `internal/cmd/hooks.go:isKnownCommand` (around line 102) gates the hook-only intercept: names not in that list are treated as hook-only commands and never reach built-in dispatch, so `ls` must be recognized as a built-in.\n\n**Outcome** — `laps ls` works identically to `laps list` (same flags, same output) and dispatches as a built-in; the list formatter is covered by focused tests for the two-line default, `--oneline`, the three marker states, the `ls` alias, and `--json-output`.\n\n**Files \u0026 scope** — `internal/cmd/list.go` (register `ls` as an alias of `listCmd` via cobra's `Aliases` field — flags flow through automatically). `internal/cmd/hooks.go` (add `\"ls\"` to the `isKnownCommand` switch). `internal/cmd/cmd_test.go` (add the 1.7 test matrix).\n\n**Design** — The alias is mechanical: set `listCmd.Aliases = []string{\"ls\"}` and cobra reuses `listCmd`'s flag set and Run. The `isKnownCommand` addition MUST land with the alias or `ls` would be misrouted to the hook-only intercept. For the marker tests, reuse the claim setup pattern from `TestDoneWithClaim` (setupTempRepo + `runMB(\"claim\")`) and cover the three spec scenarios: claimed lap is the only one marked (exactly one `\u003e `); no claim → no marker; a claim for an id outside the rendered result → no marker (e.g., claim a done lap then `list` without `--all`, or claim then delete). Assert `--json-output` is unchanged in structure (still `{\"tasks\":[...]}`). Assert `--oneline` matches the legacy `\u003cn\u003e. \u003cid\u003e — \u003ctitle\u003e` shape. Cover `ls` dispatch through `runMBExecute` (the real argv path) so the alias plus hook recognition is exercised end-to-end.\n\n**Acceptance** — `just test` green with the new tests; `bin/laps ls` and `bin/laps ls --oneline` match `bin/laps list` and `bin/laps list --oneline` byte-for-byte; a hook config that would intercept an unknown command does NOT intercept `ls`.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-29T10:10:35.710098652Z",
-      "updatedAt": "2026-06-29T10:10:35.710098652Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T00:33:31.653413094Z",
+      "completedAt": "2026-06-30T00:33:31.653413094Z"
     },
     {
       "id": "laps-2707",
