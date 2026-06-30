@@ -66,12 +66,26 @@ Get a task by id, or read the head task if no argument is given.
 Output is title, optional assignee, blank line, description.
 
 ### `laps claim [head|<id>]`
-Claim a task for the current session. Writes the claimed task id to
-`.laps/claim` so that a subsequent bare `laps done` knows which task to
-complete. Defaults to the head task.
+Claim a task for the current session. Writes the claim to `.laps/claim` as a structured JSON object so that a subsequent bare `laps done` knows which task to complete and when it was claimed. Defaults to the head task.
 
 After claiming, a hint is printed suggesting `laps claim undo` if the wrong
 task was claimed.
+
+#### Claim File Format
+The claim file `.laps/claim` is stored as a single JSON object:
+```json
+{
+  "lap": "laps-f0f4",
+  "file": "laps.json",
+  "claimedAt": "2026-06-30T10:28:42Z"
+}
+```
+Fields:
+- `lap` — the claimed task ID.
+- `file` — the relative path of the task file containing the lap.
+- `claimedAt` — the UTC timestamp of when the lap was claimed (RFC3339). When the same lap is re-claimed, the original `claimedAt` timestamp is preserved.
+
+**Backward Compatibility**: If `.laps/claim` contains a legacy bare task ID (a plain string token, not JSON), it is successfully parsed as a legacy claim with the lap ID assigned, `file` defaulting to the current selected task file, and `claimedAt` treated as `null`.
 
 ### `laps claim undo`
 Clear the claimed lap stored in `.laps/claim`. Prints the id and title of the
@@ -94,6 +108,102 @@ task id, assignee, and status:
 - `--all` — include done tasks after todo items (struck through).
 - `--done` — show only completed tasks, most recent first.
 - `--oneline` — render each task on a single line (the prior format), e.g. `laps-6b4a — Second task (assignee: JUNIOR)`.
+
+### `laps status`
+Show a snapshot of the lap queue status. Reports the selected task file path, the queue state, todo/done/total task counts, the head (next todo) lap, the active (claimed) lap, and a breakdown of todo tasks by assignee.
+
+Queue state is one of:
+- `active` — a valid todo lap is currently claimed (work in progress).
+- `ready` — todo laps exist but nothing valid is currently claimed.
+- `empty` — no laps exist in the file.
+- `complete` — laps exist and all of them are marked done.
+
+If there is an active claim pointing to a deleted task, a completed task, or a task in a different file, it is considered a "dangling" claim. In this case, the claim is surfaced with `valid: false` (in JSON) or `invalid` (in human-readable output) without being silently/automatically cleared, and the command exits successfully with a degraded status snapshot.
+
+Actual errors, such as a corrupt task file, a malformed claim file (bad JSON syntax or wrong field types), or marshal failures, exit with a normal non-zero error code.
+
+With the global `--json-output` flag, the output is a single JSON object with the following shape (note the explicit absence of any stale flag in this version):
+
+```json
+{
+  "file": "laps.json",
+  "state": "active",
+  "counts": {
+    "todo": 2,
+    "done": 12,
+    "total": 14
+  },
+  "head": {
+    "id": "laps-2ef1",
+    "title": "Document event log, log/status commands, LAPS_SESSION, and structured claim in README",
+    "assignee": "JUNIOR"
+  },
+  "claim": {
+    "valid": true,
+    "lap": "laps-2ef1",
+    "file": "laps.json",
+    "claimedAt": "2026-06-30T10:28:42Z",
+    "ageSeconds": 3600
+  },
+  "assignees": [
+    {
+      "assignee": "JUNIOR",
+      "todo": 1
+    },
+    {
+      "assignee": "VERIFY",
+      "todo": 1
+    }
+  ]
+}
+```
+
+Fields in JSON:
+- `file` — the relative path of the active task file.
+- `state` — the queue state string (`active` | `ready` | `empty` | `complete`).
+- `counts` — object containing `todo`, `done`, and `total` lap counts.
+- `head` — object containing `id`, `title`, and `assignee` of the first todo task (null if none).
+- `claim` — object representing the active claim:
+  - `valid` — boolean indicating if the claim is valid (names a todo lap in the current task file).
+  - `lap` — the claimed task ID.
+  - `file` — the file the claim was made against.
+  - `claimedAt` — nullable RFC3339 UTC timestamp (string) of when the claim was created. This is `null` if no lap is claimed or if the claim file contains a legacy bare-id (no timestamp).
+  - `ageSeconds` — nullable integer representing the seconds elapsed since the claim was made. This is `null` whenever `claimedAt` is `null`.
+- `assignees` — array of `{assignee, todo}` objects summarizing todo counts by assignee role, sorted alphabetically by assignee name (with unassigned tasks grouped under `"unassigned"`).
+
+### `laps log`
+Show recent event log history, newest last (chronological order).
+
+Flags:
+- `-n, --limit <int>` — limit the number of events shown (default 20, must be non-negative).
+- `--lap <string>` — filter events to only those matching the specified lap ID.
+- `--session <string>` — filter events to only those matching the specified session ID.
+- `--since <string>` — filter events since the specified RFC3339 timestamp (inclusive).
+
+#### Behavior
+- **Filter-then-Limit**: The filters (`--lap`, `--session`, `--since`) are applied to the full event log first, and then the limit (`-n`) is applied to the filtered subset.
+- **Newest-Last Order**: Events are printed chronologically, with the most recent event at the bottom of the list.
+- **Malformed Line Handling**: Any malformed JSON lines in the log file are skipped with a warning on `stderr` and do not cause the command to fail.
+- **JSON Output**: When the global `--json-output` flag is requested, the output is a single JSON object containing an `"events"` array of matching events:
+
+```json
+{
+  "events": [
+    {
+      "ts": "2026-06-30T10:28:42Z",
+      "event": "claimed",
+      "cmd": "claim",
+      "file": "laps.json",
+      "lap": "laps-2ef1",
+      "title": "Document event log, log/status commands, LAPS_SESSION, and structured claim in README",
+      "assignee": "JUNIOR",
+      "scope": "root",
+      "detail": {},
+      "session": "session-test-123"
+    }
+  ]
+}
+```
 
 ### `laps move <id> <head|tail|after> [target]`
 Reorder an existing todo task, preserving its id.
@@ -212,15 +322,6 @@ Other names that may conflict with future features in a task-tracking CLI includ
 
 > **Tip:** When in doubt, prefix your hook-only commands with a project-specific namespace (e.g. `myproject-deploy`) to avoid future collisions.
 
-## Versioning
-
-Version is tracked in `VERSION` at the repo root. Pushing a change to `VERSION` on `main` triggers an automated release:
-
-1. `auto-tag` workflow reads the new version from `VERSION`, creates a `vX.Y.Z` git tag, and dispatches `release.yml`.
-2. `release` workflow runs [GoReleaser](https://goreleaser.com) to build binaries for Linux, macOS, and Windows, then publishes a GitHub Release with checksums and the install script.
-
-See `.github/workflows/auto-tag.yml` and `.github/workflows/release.yml` for details.
-
 ### Example `.laps/hooks.json`
 
 See [`examples/hooks.json`](examples/hooks.json) for a working auto-commit example.
@@ -240,3 +341,39 @@ See [`examples/hooks.json`](examples/hooks.json) for a working auto-commit examp
   ]
 }
 ```
+
+## Event Log
+
+Laps features a native, best-effort, append-only event log that records state changes and command executions.
+
+### Characteristics
+- **Native**: Built directly into `laps` commands (not configured as a hook).
+- **Best-Effort**: Log writes are non-blocking and fail-safe. If writing to the event log fails, a one-line warning is printed to `stderr` but the command still completes with its normal exit code.
+- **Append-Only**: Events are appended as JSON lines to `.laps/log.jsonl`.
+- **Gitignored**: The `.laps/log.jsonl` file is automatically appended to `.gitignore` during `laps init` to keep local orchestration events out of git history.
+
+### LAPS_SESSION Attribution
+If the `LAPS_SESSION` environment variable is set, its value is automatically stamped into the `session` field of every event log entry. This allows multiple commands run as part of the same try, build, or agent stint to be grouped and analyzed together.
+
+### Event Schema
+Each line in `.laps/log.jsonl` is a JSON object with the following fields:
+
+- `ts` — UTC timestamp of the event (RFC3339 format).
+- `event` — the event type (e.g. `claimed`, `unclaimed`, `completed`, `added`, `moved`, `edited`).
+- `cmd` — the name of the command that triggered the event (e.g. `claim`, `claim-undo`, `done`, `add`, `move`, `edit`).
+- `file` — the relative path of the task file affected (e.g. `laps.json`).
+- `lap` — the ID of the affected task (omitted if not task-specific).
+- `title` — the title of the affected task (omitted if not task-specific).
+- `assignee` — the assignee role of the task (omitted if none or not task-specific).
+- `scope` — the scope of the log (defaults to `"root"`).
+- `detail` — an object containing additional event-specific details.
+- `session` — the session ID from the `LAPS_SESSION` environment variable (empty string if unset).
+
+## Versioning
+
+Version is tracked in `VERSION` at the repo root. Pushing a change to `VERSION` on `main` triggers an automated release:
+
+1. `auto-tag` workflow reads the new version from `VERSION`, creates a `vX.Y.Z` git tag, and dispatches `release.yml`.
+2. `release` workflow runs [GoReleaser](https://goreleaser.com) to build binaries for Linux, macOS, and Windows, then publishes a GitHub Release with checksums and the install script.
+
+See `.github/workflows/auto-tag.yml` and `.github/workflows/release.yml` for details.
