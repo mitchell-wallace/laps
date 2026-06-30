@@ -32,3 +32,4 @@
 {"run_id":"relay-1-run-2","summary":"Added schema v3 store tests for migrations, missing kind, mixed queues, version-gate decode order, and stint name/archive safety.","updated_at":"2026-06-30T17:34:05Z","laps_completed":["laps-c020"]}
 {"run_id":"relay-1-run-3","summary":"Implemented globally unique lap IDs with per-stint prefix metadata, deterministic prefix allocation, and a minimal stints new command; added regression coverage for allocation and stint-scoped IDs.","updated_at":"2026-06-30T17:39:31Z","laps_completed":["laps-0264"]}
 {"run_id":"relay-1-run-4","summary":"Verified Phase A; found raw stint-file prefix enforcement gap","updated_at":"2026-06-30T17:44:09Z","laps_completed":["laps-b9be"]}
+{"run_id":"relay-1-run-4","summary":"Verified Phase A again; raw stint files without prefix still fall back to repo-prefixed IDs","updated_at":"2026-06-30T17:58:47Z","laps_completed":["work-672b"]}
