@@ -28,10 +28,10 @@
 - [x] 3.5 Implement edit semantics: blank title errors; `--description ""` and `--assignee ""` clear fields; non-empty assignees trim; descriptions handle escaped `\\n` like `add`; blank `assign` role clears assignee
 - [x] 3.6 Allow `edit`/`assign` on done laps with a stderr warning; preserve done state and `completedAt`
 - [x] 3.7 Update `internal/cmd/hooks.go:isKnownCommand` so `edit` and `assign` are treated as built-ins
-- [ ] 3.8 Tests: edit each field; no-flags error; field validation/normalization; blank `assign` clears assignee; done-target warning/preservation; assign sets assignee; non-JSON success prints id; `--json-output`; hook context; `runMBExecute` dispatch
-- [ ] 3.9 Extend the `runMB`/`runMBExecute` reset harness in `cmd_test.go`: zero the new package-level vars (`listOneline`, `edit*`, `move*`) and register `editCmd.Flags()`, `moveCmd.Flags()`, `assignCmd.Flags()` (and the `list` flagset for `--oneline`) in the `flag.Changed`-reset loop. Because `edit`'s semantics hinge on `Changed`, a leaked `Changed=true` from one test silently corrupts the next (e.g. a prior `--description ""` clears description in a later title-only edit)
+- [x] 3.8 Tests: edit each field; no-flags error; field validation/normalization; blank `assign` clears assignee; done-target warning/preservation; assign sets assignee; non-JSON success prints id; `--json-output`; hook context; `runMBExecute` dispatch
+- [x] 3.9 Extend the `runMB`/`runMBExecute` reset harness in `cmd_test.go`: zero the new package-level vars (`listOneline`, `edit*`, `move*`) and register `editCmd.Flags()`, `moveCmd.Flags()`, `assignCmd.Flags()` (and the `list` flagset for `--oneline`) in the `flag.Changed`-reset loop. Because `edit`'s semantics hinge on `Changed`, a leaked `Changed=true` from one test silently corrupts the next (e.g. a prior `--description ""` clears description in a later title-only edit)
 
 ## 4. Docs & release
 
-- [ ] 4.1 Update `README.md` command reference (list two-line / `--oneline`, `ls`, `move`, `edit`, `assign`) and remove those names from any reserved hook-only command-name guidance
+- [x] 4.1 Update `README.md` command reference (list two-line / `--oneline`, `ls`, `move`, `edit`, `assign`) and remove those names from any reserved hook-only command-name guidance
 - [ ] 4.2 Do not bump `VERSION` in this change; `add-stints-gating` owns the final 0.9.0 bump after all four changes land

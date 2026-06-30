@@ -105,11 +105,11 @@
       "title": "Final verification of edit/assign, docs, and the whole change",
       "description": "**Context** — Final VERIFY for `improve-cli-ergonomics`, covering §3 (edit/assign: 3.1–3.9), §4 (docs 4.1 plus the 4.2 no-bump invariant), and the WHOLE-change diff review. Use `openspec-verify-change` against `improve-cli-ergonomics`. Identify the merge target and the first lap in this batch; treat earlier branch work as pre-existing; never rewrite history.\n\n**Outcome** — Whole-change verification report; all remaining `tasks.md` boxes ticked only when verified correct and thorough; `VERSION` confirmed unchanged.\n\n**Trace depth** — `git diff \u003ctarget\u003e...HEAD` (the full change). Confirm: (1) `edit` gates each field on `cmd.Flags().Changed(...)` (not on a non-empty value) and requires ≥1 flag — trace the exact `Changed(\"title\") || Changed(\"description\") || Changed(\"assignee\")` check; (2) `--description \"\"` and `--assignee \"\"` clear, non-empty assignee trims, escaped `\\n` is handled like `add`; (3) a done-lap edit warns on stderr and preserves `IsDone` + `completedAt`; (4) `assign` is sugar over `edit --assignee` and a blank role clears; (5) `edit`/`assign`/`move` print only the id on non-JSON success and `{\"task\":...}` on `--json-output`; (6) `isKnownCommand` includes `ls`, `move`, `edit`, and `assign`; (7) the reset harness in BOTH `runMB` and `runMBExecute` registers all new flagsets and zeroes the new vars (the Changed-leak corruption vector) — confirm `go test -count=2 ./internal/cmd` is stable; (8) the README documents the new surface and `VERSION` is UNCHANGED (4.2 — the 0.9.0 bump belongs to add-stints-gating). Run `just test`, `just lint`, and a `bin/laps` smoke pass across add/move/edit/assign/list/ls/--oneline/--json-output.\n\n**Acceptance** — Report findings first; raise head laps for any gap. If correct and thorough, tick the remaining `tasks.md` boxes: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, and 4.1. For 4.2 there is no box to tick (it is a non-action), but state explicitly in the report that `VERSION` is unchanged.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-29T10:10:35.710104666Z",
-      "updatedAt": "2026-06-29T10:10:35.710104666Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T01:34:33.756342596Z",
+      "completedAt": "2026-06-30T01:34:33.756342596Z"
     }
   ]
 }
