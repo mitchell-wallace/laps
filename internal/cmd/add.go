@@ -134,6 +134,10 @@ Prints each new task id on success.`,
 		}
 
 		file := loadFile(path)
+		scopePrefix := store.RepoPrefix(repoRoot)
+		if file.Prefix != "" {
+			scopePrefix = file.Prefix
+		}
 		existing := make(map[string]struct{}, len(file.Tasks))
 		for _, t := range file.Tasks {
 			existing[t.ID] = struct{}{}
@@ -145,7 +149,7 @@ Prints each new task id on success.`,
 		for _, payloadIndex := range indices {
 			payload := payloads[payloadIndex]
 			now := time.Now().UTC()
-			id, err := store.GenerateID(repoRoot, payload.Title, now, payload.Description, existing)
+			id, err := store.GenerateID(scopePrefix, payload.Title, now, payload.Description, existing)
 			if err != nil {
 				exitCode = 2
 				exit(2, "add: %v", err)

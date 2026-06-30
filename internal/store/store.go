@@ -68,6 +68,7 @@ type Task struct {
 // File is the top-level envelope stored on disk.
 type File struct {
 	Version int    `json:"version"`
+	Prefix  string `json:"prefix,omitempty"`
 	Tasks   []Task `json:"tasks"`
 }
 
@@ -257,6 +258,7 @@ func Load(path string) (*File, error) {
 	dec.DisallowUnknownFields()
 	var raw struct {
 		Version *int   `json:"version"`
+		Prefix  string `json:"prefix,omitempty"`
 		Tasks   []Task `json:"tasks"`
 	}
 	if err := dec.Decode(&raw); err != nil {
@@ -265,11 +267,14 @@ func Load(path string) (*File, error) {
 	if raw.Tasks == nil {
 		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file (missing tasks)", ErrStore, path)
 	}
+	if err := validatePrefix(raw.Prefix); err != nil {
+		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file: %v", ErrStore, path, err)
+	}
 	if err := normalizeTaskKinds(raw.Tasks); err != nil {
 		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file: %v", ErrStore, path, err)
 	}
 
-	return &File{Version: *raw.Version, Tasks: raw.Tasks}, nil
+	return &File{Version: *raw.Version, Prefix: raw.Prefix, Tasks: raw.Tasks}, nil
 }
 
 // Save marshals and writes a task file, creating parent directories if needed.
@@ -280,6 +285,9 @@ func Save(path string, data *File) error {
 	// Normalise nil slices so we write [] instead of null.
 	if data.Tasks == nil {
 		data.Tasks = []Task{}
+	}
+	if err := validatePrefix(data.Prefix); err != nil {
+		return fmt.Errorf("%w: invalid task file: %v", ErrStore, err)
 	}
 	if err := normalizeTaskKinds(data.Tasks); err != nil {
 		return fmt.Errorf("%w: invalid task file: %v", ErrStore, err)
@@ -560,15 +568,15 @@ func CheckDefaultStore(beadsDir string) error {
 	return err
 }
 
-// GenerateID creates a task ID according to the spec.
+// GenerateID creates a task ID using the caller's containing-scope prefix.
 //
-// The prefix is derived from the base name of repoRoot: first 4 lowercase
-// alphanumeric characters, padded with 'x'. The hash is a SHA-256 hex digest
-// of "title|createdAt|description[:200]". If the generated ID collides with
-// an entry in existingIDs, the hash slice is extended by one character until
+// scopePrefix is normalized to the first 4 lowercase alphanumeric characters,
+// padded with 'x'. The hash is a SHA-256 hex digest of
+// "title|createdAt|description[:200]". If the generated ID collides with an
+// entry in existingIDs, the hash slice is extended by one character until
 // unique.
-func GenerateID(repoRoot, title string, createdAt time.Time, description string, existingIDs map[string]struct{}) (string, error) {
-	prefix := normalizePrefix(filepath.Base(repoRoot))
+func GenerateID(scopePrefix, title string, createdAt time.Time, description string, existingIDs map[string]struct{}) (string, error) {
+	prefix := normalizePrefix(scopePrefix)
 	input := title + "|" + createdAt.Format(time.RFC3339) + "|" + truncate(description, 200)
 	sum := sha256.Sum256([]byte(input))
 	hexStr := hex.EncodeToString(sum[:])
@@ -581,6 +589,164 @@ func GenerateID(repoRoot, title string, createdAt time.Time, description string,
 	}
 
 	return "", errors.New("could not generate unique ID")
+}
+
+// RepoPrefix returns the task-id prefix for root laps in repoRoot.
+func RepoPrefix(repoRoot string) string {
+	return normalizePrefix(filepath.Base(repoRoot))
+}
+
+// AllocateStintPrefix returns a deterministic unused 4-character prefix for a
+// new stint name. It checks the repository prefix and prefixes recorded in all
+// active and archived stint files.
+func AllocateStintPrefix(beadsDir, repoRoot, name string) (string, error) {
+	if err := ValidateStintName(name); err != nil {
+		return "", err
+	}
+
+	used, err := ExistingPrefixes(beadsDir, repoRoot)
+	if err != nil {
+		return "", err
+	}
+
+	candidates := stintPrefixCandidates(name)
+	for _, candidate := range candidates {
+		if _, exists := used[candidate]; !exists {
+			return candidate, nil
+		}
+	}
+
+	base := normalizePrefix(name)
+	alphabet := "0123456789abcdefghijklmnopqrstuvwxyz"
+	for _, r := range alphabet {
+		candidate := base[:3] + string(r)
+		if _, exists := used[candidate]; !exists {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("%w: could not allocate unique prefix for stint %q", ErrStore, name)
+}
+
+// ExistingPrefixes returns the reserved id prefixes: the root repository prefix
+// and every prefix recorded in active or archived stint files.
+func ExistingPrefixes(beadsDir, repoRoot string) (map[string]struct{}, error) {
+	used := map[string]struct{}{
+		RepoPrefix(repoRoot): {},
+	}
+
+	stintsDir := StintsDir(beadsDir)
+	if _, err := os.Stat(stintsDir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return used, nil
+		}
+		return nil, fmt.Errorf("%w: stat %s: %v", ErrStore, stintsDir, err)
+	}
+
+	err := filepath.WalkDir(stintsDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("%w: read stint prefix %s: %v", ErrStore, path, err)
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), stintFileSuffix) {
+			return nil
+		}
+		data, err := Load(path)
+		if err != nil {
+			return fmt.Errorf("%w: read stint prefix %s: %v", ErrStore, path, err)
+		}
+		if data.Prefix == "" {
+			return nil
+		}
+		if err := validatePrefix(data.Prefix); err != nil {
+			return fmt.Errorf("%w: read stint prefix %s: %v", ErrStore, path, err)
+		}
+		used[data.Prefix] = struct{}{}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return used, nil
+}
+
+func validatePrefix(prefix string) error {
+	if prefix == "" {
+		return nil
+	}
+	if len(prefix) != 4 {
+		return fmt.Errorf("prefix %q must be 4 lowercase alphanumeric characters", prefix)
+	}
+	for _, r := range prefix {
+		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+			return fmt.Errorf("prefix %q must be 4 lowercase alphanumeric characters", prefix)
+		}
+	}
+	return nil
+}
+
+func stintPrefixCandidates(name string) []string {
+	base := normalizePrefix(name)
+	chars := prefixChars(name)
+	for len(chars) < 4 {
+		chars = append(chars, 'x')
+	}
+
+	candidates := map[string]struct{}{base: {}}
+	for start := 0; start+4 <= len(chars); start++ {
+		candidates[string(chars[start:start+4])] = struct{}{}
+	}
+
+	limit := len(chars)
+	if limit > 16 {
+		limit = 16
+	}
+	for i := 0; i < limit; i++ {
+		for j := 0; j < limit; j++ {
+			if j == i {
+				continue
+			}
+			for k := 0; k < limit; k++ {
+				if k == i || k == j {
+					continue
+				}
+				for l := 0; l < limit; l++ {
+					if l == i || l == j || l == k {
+						continue
+					}
+					candidates[string([]rune{chars[i], chars[j], chars[k], chars[l]})] = struct{}{}
+				}
+			}
+		}
+	}
+
+	out := make([]string, 0, len(candidates))
+	for candidate := range candidates {
+		out = append(out, candidate)
+	}
+	sort.Strings(out)
+
+	if out[0] == base {
+		return out
+	}
+	for i, candidate := range out {
+		if candidate == base {
+			copy(out[1:i+1], out[:i])
+			out[0] = base
+			break
+		}
+	}
+	return out
+}
+
+func prefixChars(name string) []rune {
+	var out []rune
+	for _, r := range strings.ToLower(name) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func normalizePrefix(name string) string {

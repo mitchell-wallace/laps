@@ -204,6 +204,49 @@ func TestAddAfter(t *testing.T) {
 	}
 }
 
+func TestStintsNewAllocatesPrefixAndStintAddUsesIt(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, errStr, code := runMB("stints", "new", "auth")
+	if code != 0 {
+		t.Fatalf("stints new exit %d, stderr: %s", code, errStr)
+	}
+	prefix := strings.TrimSpace(out)
+	if prefix != "auth" {
+		t.Fatalf("stints new prefix = %q, want auth", prefix)
+	}
+
+	stintPath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	stintFile, err := store.Load(stintPath)
+	if err != nil {
+		t.Fatalf("Load stint file: %v", err)
+	}
+	if stintFile.Prefix != prefix {
+		t.Fatalf("stint prefix metadata = %q, want %q", stintFile.Prefix, prefix)
+	}
+
+	rootOut, errStr, code := runMB("add", "head", "--title", "Root")
+	if code != 0 {
+		t.Fatalf("root add exit %d, stderr: %s", code, errStr)
+	}
+	stintOut, errStr, code := runMB("--file", "stints/auth.laps", "add", "head", "--title", "Inside stint")
+	if code != 0 {
+		t.Fatalf("stint add exit %d, stderr: %s", code, errStr)
+	}
+	rootID := strings.TrimSpace(rootOut)
+	stintID := strings.TrimSpace(stintOut)
+	if !strings.HasPrefix(stintID, prefix+"-") {
+		t.Fatalf("stint id %q does not start with prefix %q", stintID, prefix)
+	}
+	if rootID == stintID {
+		t.Fatalf("root and stint ids collided: %q", rootID)
+	}
+	if strings.SplitN(rootID, "-", 2)[0] == strings.SplitN(stintID, "-", 2)[0] {
+		t.Fatalf("root and stint ids used the same prefix: root %q stint %q", rootID, stintID)
+	}
+}
+
 func TestAddMissingPosition(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()

@@ -219,7 +219,7 @@ func TestSave_CreatesDirectories(t *testing.T) {
 
 func TestGenerateID(t *testing.T) {
 	created := time.Date(2026, 4, 28, 10, 15, 0, 0, time.UTC)
-	id, err := GenerateID("MyProject", "Add list command", created, "Multi-line\ndescription supported.", nil)
+	id, err := GenerateID("mypr", "Add list command", created, "Multi-line\ndescription supported.", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestGenerateID(t *testing.T) {
 
 func TestGenerateID_PrefixNormalization(t *testing.T) {
 	tests := []struct {
-		repo       string
+		prefix     string
 		wantPrefix string
 	}{
 		{"ab", "abxx"},
@@ -243,8 +243,8 @@ func TestGenerateID_PrefixNormalization(t *testing.T) {
 	}
 	created := time.Now()
 	for _, tt := range tests {
-		t.Run(tt.repo, func(t *testing.T) {
-			id, err := GenerateID(tt.repo, "t", created, "d", map[string]struct{}{})
+		t.Run(tt.prefix, func(t *testing.T) {
+			id, err := GenerateID(tt.prefix, "t", created, "d", map[string]struct{}{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -256,7 +256,7 @@ func TestGenerateID_PrefixNormalization(t *testing.T) {
 }
 
 func TestGenerateID_CollisionExtension(t *testing.T) {
-	repoRoot := "proj"
+	scopePrefix := "proj"
 	created := time.Date(2026, 4, 28, 10, 15, 0, 0, time.UTC)
 	title := "Task"
 	desc := "Desc"
@@ -266,13 +266,83 @@ func TestGenerateID_CollisionExtension(t *testing.T) {
 		"proj-cfe40": {},
 	}
 
-	id, err := GenerateID(repoRoot, title, created, desc, existing)
+	id, err := GenerateID(scopePrefix, title, created, desc, existing)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	want := "proj-cfe401"
 	if id != want {
 		t.Errorf("GenerateID = %q, want %q", id, want)
+	}
+}
+
+func TestStintFilePrefixRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "stint.laps.json")
+	file := &File{Version: CurrentVersion, Prefix: "auth", Tasks: []Task{}}
+
+	if err := Save(path, file); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.Prefix != "auth" {
+		t.Fatalf("Prefix = %q, want auth", loaded.Prefix)
+	}
+}
+
+func TestAllocateStintPrefixAvoidsRepoAndExistingPrefixes(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "auth")
+	beadsDir := filepath.Join(root, ".laps")
+	if err := os.MkdirAll(StintsDir(beadsDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(filepath.Join(StintsDir(beadsDir), "existing"+stintFileSuffix), &File{
+		Version: CurrentVersion,
+		Prefix:  "uath",
+		Tasks:   []Task{},
+	}); err != nil {
+		t.Fatalf("Save existing stint: %v", err)
+	}
+
+	got, err := AllocateStintPrefix(beadsDir, root, "auth")
+	if err != nil {
+		t.Fatalf("AllocateStintPrefix: %v", err)
+	}
+	if got == RepoPrefix(root) || got == "uath" {
+		t.Fatalf("allocated colliding prefix %q", got)
+	}
+	if got == "" || len(got) != 4 {
+		t.Fatalf("allocated invalid prefix %q", got)
+	}
+}
+
+func TestAllocateStintPrefixDeterministic(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "auth")
+	beadsDir := filepath.Join(root, ".laps")
+	if err := os.MkdirAll(StintsDir(beadsDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(filepath.Join(StintsDir(beadsDir), "existing"+stintFileSuffix), &File{
+		Version: CurrentVersion,
+		Prefix:  "auth",
+		Tasks:   []Task{},
+	}); err != nil {
+		t.Fatalf("Save existing stint: %v", err)
+	}
+
+	first, err := AllocateStintPrefix(beadsDir, root, "auth api")
+	if err != nil {
+		t.Fatalf("first AllocateStintPrefix: %v", err)
+	}
+	second, err := AllocateStintPrefix(beadsDir, root, "auth api")
+	if err != nil {
+		t.Fatalf("second AllocateStintPrefix: %v", err)
+	}
+	if first != second {
+		t.Fatalf("allocation not deterministic: first %q second %q", first, second)
 	}
 }
 
