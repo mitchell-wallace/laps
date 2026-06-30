@@ -2611,3 +2611,360 @@ func TestInitGitignoreAlreadyExists(t *testing.T) {
 		t.Fatalf("should not modify .gitignore, but output: %s", out)
 	}
 }
+
+// --- Move tests ---
+
+func TestMovePositions(t *testing.T) {
+	tests := []struct {
+		name   string
+		move   []string // args after "move"
+		before func(t *testing.T, list string)
+	}{
+		{
+			name: "head",
+			move: []string{"head"},
+			before: func(t *testing.T, list string) {
+				if !idxBefore(list, "— C", "— A") || !idxBefore(list, "— C", "— B") {
+					t.Fatalf("expected C at head, got:\n%s", list)
+				}
+			},
+		},
+		{
+			name: "tail",
+			move: []string{"tail"},
+			before: func(t *testing.T, list string) {
+				if !idxBefore(list, "— B", "— A") || !idxBefore(list, "— C", "— A") {
+					t.Fatalf("expected A at tail, got:\n%s", list)
+				}
+			},
+		},
+		{
+			name: "after",
+			move: []string{"after"},
+			before: func(t *testing.T, list string) {
+				if !idxBefore(list, "— A", "— C") || !idxBefore(list, "— C", "— B") {
+					t.Fatalf("expected C right after A, got:\n%s", list)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, cleanup := setupTempRepo(t)
+			defer cleanup()
+
+			outA, _, _ := runMB("add", "tail", "--title", "A")
+			outB, _, _ := runMB("add", "tail", "--title", "B")
+			outC, _, _ := runMB("add", "tail", "--title", "C")
+			idA := strings.TrimSpace(outA)
+			idB := strings.TrimSpace(outB)
+			idC := strings.TrimSpace(outC)
+
+			args := []string{"move"}
+			moveID := idC
+			if tt.name == "tail" {
+				moveID = idA
+			}
+			args = append(args, moveID)
+			args = append(args, tt.move...)
+			if tt.name == "after" {
+				args = append(args, idA) // move C after A
+			}
+
+			out, errStr, code := runMB(args...)
+			if code != 0 {
+				t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+			}
+			if got := strings.TrimSpace(out); got != moveID {
+				t.Fatalf("expected move to echo moved id %s, got %q", moveID, got)
+			}
+
+			list, _, _ := runMB("list", "--oneline")
+			tt.before(t, list)
+			// No id is lost in the move: A, B, C all remain.
+			for _, id := range []string{idA, idB, idC} {
+				if !strings.Contains(list, id) {
+					t.Fatalf("expected %s to survive move, got:\n%s", id, list)
+				}
+			}
+		})
+	}
+}
+
+func TestMovePreservesID(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Original")
+	id := strings.TrimSpace(out)
+
+	// move prints the moved task id; it must be byte-identical to the original.
+	moveOut, errStr, code := runMB("move", id, "tail")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if moveOut != id+"\n" {
+		t.Fatalf("expected move to preserve id %q, got %q", id, moveOut)
+	}
+
+	// Re-getting by the original id still resolves the same lap.
+	getOut, _, code := runMB("get", id, "--json-output")
+	if code != 0 {
+		t.Fatalf("expected get %s to succeed after move, code %d", id, code)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(getOut)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", getOut)
+	}
+	task, ok := result["task"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected task object, got: %s", getOut)
+	}
+	if task["id"] != id {
+		t.Fatalf("expected preserved id %s, got %v", id, task["id"])
+	}
+}
+
+func TestMoveUnknownIDFails(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("move", "does-not-exist", "head")
+	if code != 1 {
+		t.Fatalf("expected code 1 for unknown moved id, got %d", code)
+	}
+	if !strings.Contains(errStr, "not found") {
+		t.Fatalf("expected not-found error, got: %s", errStr)
+	}
+}
+
+func TestMoveDoneIDFails(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Done one")
+	id := strings.TrimSpace(out)
+	runMB("claim")
+	if _, _, code := runMB("done"); code != 0 {
+		t.Fatalf("setup done failed, code %d", code)
+	}
+
+	_, errStr, code := runMB("move", id, "head")
+	if code != 1 {
+		t.Fatalf("expected code 1 for done moved id, got %d", code)
+	}
+	if !strings.Contains(errStr, "already done") {
+		t.Fatalf("expected already-done error, got: %s", errStr)
+	}
+}
+
+func TestMoveUsageFails(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "no position", args: []string{"someid"}, want: "usage"},
+		{name: "invalid position", args: []string{"someid", "sideways"}, want: "position must be head"},
+		{name: "after without target", args: []string{"someid", "after"}, want: "after requires a target"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, cleanup := setupTempRepo(t)
+			defer cleanup()
+
+			_, errStr, code := runMB(append([]string{"move"}, tt.args...)...)
+			if code != 1 {
+				t.Fatalf("expected code 1, got %d", code)
+			}
+			if !strings.Contains(errStr, tt.want) {
+				t.Fatalf("expected error containing %q, got: %s", tt.want, errStr)
+			}
+		})
+	}
+}
+
+func TestMoveAfterSelfReferenceFails(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Self")
+	id := strings.TrimSpace(out)
+
+	_, errStr, code := runMB("move", id, "after", id)
+	if code != 1 {
+		t.Fatalf("expected code 1 for self-reference, got %d", code)
+	}
+	if !strings.Contains(errStr, "cannot move a lap after itself") {
+		t.Fatalf("expected self-reference error, got: %s", errStr)
+	}
+}
+
+func TestMoveAfterMissingTargetFails(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Mover")
+	id := strings.TrimSpace(out)
+
+	_, errStr, code := runMB("move", id, "after", "ghost-id")
+	if code != 3 {
+		t.Fatalf("expected code 3 for missing after target, got %d", code)
+	}
+	if !strings.Contains(errStr, "not found") {
+		t.Fatalf("expected not-found error, got: %s", errStr)
+	}
+}
+
+func TestMoveAfterDoneFallsBackToHead(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "A")
+	out, _, _ := runMB("add", "head", "--title", "Done target")
+	doneID := strings.TrimSpace(out)
+	runMB("claim")
+	if _, _, code := runMB("done"); code != 0 {
+		t.Fatalf("setup done failed, code %d", code)
+	}
+
+	out, _, _ = runMB("add", "tail", "--title", "Mover")
+	moveID := strings.TrimSpace(out)
+
+	_, errStr, code := runMB("move", moveID, "after", doneID)
+	if code != 0 {
+		t.Fatalf("expected code 0 for after-done fallback, got %d, stderr: %s", code, errStr)
+	}
+	// The after-done fallback notice is emitted on stderr by move.go itself.
+	if !strings.Contains(errStr, "already complete") || !strings.Contains(errStr, "head") {
+		t.Fatalf("expected fallback-to-head stderr notice, got: %q", errStr)
+	}
+
+	list, _, _ := runMB("list", "--oneline")
+	// Mover lands at the head of the todo queue, ahead of A.
+	if !idxBefore(list, "— Mover", "— A") {
+		t.Fatalf("expected mover at head after fallback, got:\n%s", list)
+	}
+}
+
+func TestMoveJSONOutput(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "A")
+	out, _, _ := runMB("add", "tail", "--title", "Mover")
+	id := strings.TrimSpace(out)
+
+	out, errStr, code := runMB("move", id, "head", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	task, ok := result["task"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected task object in JSON, got: %s", out)
+	}
+	// The JSON payload carries the preserved id.
+	if task["id"] != id {
+		t.Fatalf("expected preserved id %s, got %v", id, task["id"])
+	}
+	if task["title"] != "Mover" {
+		t.Fatalf("expected title 'Mover', got %v", task["title"])
+	}
+}
+
+func TestMoveAdvancesUpdatedAt(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Mover", "--description", "desc")
+	id := strings.TrimSpace(out)
+	runMB("add", "tail", "--title", "Other")
+
+	// Seed a known-old UpdatedAt so the advance is deterministic regardless of
+	// clock resolution between the two time.Now() calls.
+	path := filepath.Join(beadsDir, "laps.json")
+	data, _ := store.Load(path)
+	old := time.Now().UTC().Add(-6 * time.Minute)
+	for i := range data.Tasks {
+		if data.Tasks[i].ID == id {
+			data.Tasks[i].UpdatedAt = old
+		}
+	}
+	if err := store.Save(path, data); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, code := runMB("move", id, "tail"); code != 0 {
+		t.Fatalf("expected move code 0")
+	}
+
+	after, _ := store.Load(path)
+	for _, task := range after.Tasks {
+		if task.ID == id {
+			if !task.UpdatedAt.After(old) {
+				t.Fatalf("expected updatedAt to advance past %v, got %v", old, task.UpdatedAt)
+			}
+			return
+		}
+	}
+	t.Fatalf("moved task %s not found after move", id)
+}
+
+func TestMoveDispatchThroughExecute(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "A")
+	out, _, _ := runMB("add", "tail", "--title", "Mover")
+	id := strings.TrimSpace(out)
+
+	// move is a registered built-in (isKnownCommand), so Execute must dispatch
+	// to moveCmd rather than the hook-only intercept path.
+	execOut, errStr, err := runMBExecute("move", id, "head")
+	if err != nil {
+		t.Fatalf("expected nil error dispatching move, got %v, stderr: %s", err, errStr)
+	}
+	if got := strings.TrimSpace(execOut); got != id {
+		t.Fatalf("expected dispatched move to echo id %s, got %q", id, got)
+	}
+
+	list, _, _ := runMB("list", "--oneline")
+	if !idxBefore(list, "— Mover", "— A") {
+		t.Fatalf("expected mover at head after Execute dispatch, got:\n%s", list)
+	}
+}
+
+func TestMoveHookContext(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "Anchor")
+	out, _, _ := runMB("add", "tail", "--title", "Mover")
+	id := strings.TrimSpace(out)
+
+	// before and after hooks for "move" must both receive the affected lap's
+	// id and title in the standard hook variables.
+	hooks := `{"version":1,"hooks":[` +
+		`{"title":"beforeMove","command":"move","when":"before","run":"echo BEFORE:$id:$title","passback":true},` +
+		`{"title":"afterMove","command":"move","when":"after","run":"echo AFTER:$id:$title","passback":true}` +
+		`]}`
+	if err := os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errStr, code := runMB("move", id, "head")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "BEFORE:"+id+":Mover") {
+		t.Fatalf("expected before hook with task context, got: %s", out)
+	}
+	if !strings.Contains(out, "AFTER:"+id+":Mover") {
+		t.Fatalf("expected after hook with task context, got: %s", out)
+	}
+}
