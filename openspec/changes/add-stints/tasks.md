@@ -1,11 +1,11 @@
 ## 1. Schema v3 & stint files
 
-- [ ] 1.1 Add `kind` to queue entries (`lap` default, `stint`); treat a missing `kind` as `lap`
-- [ ] 1.2 Add the stint-ref shape (`kind:"stint"`, `ref`, order key, state, timestamps)
-- [ ] 1.3 Decode/check the top-level version before strict entry-field decoding so newer files still fail with the clear version-gate message
-- [ ] 1.4 Migrate v2→v3 after v1→v2 ordering migration: stamp `kind:"lap"` on every entry, bump version; keep the version-gate rejection for newer files
-- [ ] 1.5 Stint files at `.laps/stints/<name>.laps.json` (same `File` schema); archive dir `.laps/stints/archive/`
-- [ ] 1.6 Enforce stint-name safety and archive no-overwrite behavior
+- [x] 1.1 Add `kind` to queue entries (`lap` default, `stint`); treat a missing `kind` as `lap`
+- [x] 1.2 Add the stint-ref shape (`kind:"stint"`, `ref`, order key, state, timestamps)
+- [x] 1.3 Decode/check the top-level version before strict entry-field decoding so newer files still fail with the clear version-gate message
+- [x] 1.4 Migrate v2→v3 after v1→v2 ordering migration: stamp `kind:"lap"` on every entry, bump version; keep the version-gate rejection for newer files
+- [x] 1.5 Stint files at `.laps/stints/<name>.laps.json` (same `File` schema); archive dir `.laps/stints/archive/`
+- [x] 1.6 Enforce stint-name safety and archive no-overwrite behavior
 - [ ] 1.7 Tests: v2 migrates; missing `kind` ⇒ lap; mixed queue round-trips; newer files with new fields get a version-gate error; unsafe/colliding names rejected
 - [ ] 1.8 Globally-unique ids: record an allocated 4-char `prefix` in stint file metadata; make `store.GenerateID` (store.go:413) take the containing scope's prefix — repo prefix (`normalizePrefix(repoRoot)`) for root laps, the stint's prefix for stint laps — so a lap id is unique across all files and its prefix identifies its owning queue
 - [ ] 1.9 Allocate a stint prefix at `stints new`: first 4 lowercase alphanumerics of the stint name, made unique against the repo prefix and all existing stint prefixes by trying other permutations/substrings of the name chars, then incrementing the last char through `0-9a-z`; widening to 6 chars is a future option. Tests: stint laps carry the stint prefix; root vs stint ids never collide; a name colliding with the repo/another stint prefix gets a distinct prefix

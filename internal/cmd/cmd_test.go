@@ -1533,11 +1533,14 @@ func TestAutoMigrateV1File(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := string(b)
-	if !strings.Contains(got, `"version": 2`) {
-		t.Fatalf("expected version 2 after migration, got:\n%s", got)
+	if !strings.Contains(got, `"version": 3`) {
+		t.Fatalf("expected version 3 after migration, got:\n%s", got)
 	}
 	if !strings.Contains(got, `"order"`) {
 		t.Fatalf("expected order keys after migration, got:\n%s", got)
+	}
+	if !strings.Contains(got, `"kind": "lap"`) {
+		t.Fatalf("expected kind after migration, got:\n%s", got)
 	}
 }
 

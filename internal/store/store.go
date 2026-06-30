@@ -31,7 +31,19 @@ const defaultFileName = "laps.json"
 
 // CurrentVersion is the latest on-disk schema version. Files with a lower
 // version are migrated automatically; files with a higher version are rejected.
-const CurrentVersion = 2
+const CurrentVersion = 3
+
+const (
+	// KindLap is the default queue-entry kind. Missing kind values are treated
+	// as laps for backward compatibility with schema v1/v2 files.
+	KindLap = "lap"
+	// KindStint identifies a queue entry that references a stint file.
+	KindStint = "stint"
+
+	stintsDirName       = "stints"
+	stintArchiveDirName = "archive"
+	stintFileSuffix     = ".laps.json"
+)
 
 // orderStep is the gap between adjacent todo order keys. New head/tail laps step
 // by this amount and "after" inserts take the midpoint of the surrounding gap.
@@ -40,7 +52,9 @@ const orderStep = 1 << 16
 
 // Task represents a single task record.
 type Task struct {
+	Kind        string     `json:"kind,omitempty"`
 	ID          string     `json:"id"`
+	Ref         string     `json:"ref,omitempty"`
 	Title       string     `json:"title"`
 	Description string     `json:"description"`
 	Assignee    string     `json:"assignee,omitempty"`
@@ -108,6 +122,106 @@ func ResolveFile(f string) string {
 	return f + ".json"
 }
 
+// StintsDir returns the directory containing active stint files.
+func StintsDir(beadsDir string) string {
+	return filepath.Join(beadsDir, stintsDirName)
+}
+
+// StintArchiveDir returns the directory containing archived stint files.
+func StintArchiveDir(beadsDir string) string {
+	return filepath.Join(StintsDir(beadsDir), stintArchiveDirName)
+}
+
+// ValidateStintName rejects names that are paths or otherwise unsafe as file
+// names below .laps/stints/.
+func ValidateStintName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("%w: stint name cannot be blank", ErrStore)
+	}
+	if name == "." || name == ".." {
+		return fmt.Errorf("%w: invalid stint name %q", ErrStore, name)
+	}
+	if strings.ContainsRune(name, os.PathSeparator) || filepath.Base(name) != name {
+		return fmt.Errorf("%w: stint name must be a file name, not a path: %q", ErrStore, name)
+	}
+	return nil
+}
+
+// ResolveStintFile returns the active stint file path for name.
+func ResolveStintFile(beadsDir, name string) (string, error) {
+	if err := ValidateStintName(name); err != nil {
+		return "", err
+	}
+	return filepath.Join(StintsDir(beadsDir), name+stintFileSuffix), nil
+}
+
+// ResolveArchivedStintFile returns the archived stint file path for name.
+func ResolveArchivedStintFile(beadsDir, name string) (string, error) {
+	if err := ValidateStintName(name); err != nil {
+		return "", err
+	}
+	return filepath.Join(StintArchiveDir(beadsDir), name+stintFileSuffix), nil
+}
+
+// CheckStintNameAvailable rejects a name that already exists as either an
+// active or archived stint file.
+func CheckStintNameAvailable(beadsDir, name string) error {
+	active, err := ResolveStintFile(beadsDir, name)
+	if err != nil {
+		return err
+	}
+	if err := rejectExistingFile(active, "active stint"); err != nil {
+		return err
+	}
+
+	archived, err := ResolveArchivedStintFile(beadsDir, name)
+	if err != nil {
+		return err
+	}
+	if err := rejectExistingFile(archived, "archived stint"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func rejectExistingFile(path, label string) error {
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("%w: %s file already exists: %s", ErrStore, label, path)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%w: stat %s: %v", ErrStore, path, err)
+	}
+	return nil
+}
+
+// ArchiveStint moves an active stint file into the archive directory without
+// overwriting an existing archived file.
+func ArchiveStint(beadsDir, name string) error {
+	src, err := ResolveStintFile(beadsDir, name)
+	if err != nil {
+		return err
+	}
+	dst, err := ResolveArchivedStintFile(beadsDir, name)
+	if err != nil {
+		return err
+	}
+	return ArchiveStintFile(src, dst)
+}
+
+// ArchiveStintFile moves src to dst, creating dst's parent directory and
+// refusing to overwrite an existing file.
+func ArchiveStintFile(src, dst string) error {
+	if err := rejectExistingFile(dst, "archived stint"); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("%w: create stint archive directory: %v", ErrStore, err)
+	}
+	if err := os.Rename(src, dst); err != nil {
+		return fmt.Errorf("%w: archive stint %s to %s: %v", ErrStore, src, dst, err)
+	}
+	return nil
+}
+
 // Load reads and unmarshals a task file.
 // It validates that the file contains only the expected fields and structure.
 // Files containing only {} or whitespace are treated as empty.
@@ -125,6 +239,20 @@ func Load(path string) (*File, error) {
 		return nil, ErrEmptyFile
 	}
 
+	var envelope struct {
+		Version *int `json:"version"`
+	}
+	if err := json.Unmarshal(b, &envelope); err != nil {
+		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file: %v", ErrStore, path, err)
+	}
+
+	if envelope.Version == nil {
+		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file (missing version)", ErrStore, path)
+	}
+	if *envelope.Version > CurrentVersion {
+		return nil, fmt.Errorf("file %s was written by a newer version of laps (schema version %d); please update laps", path, *envelope.Version)
+	}
+
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
 	var raw struct {
@@ -134,12 +262,11 @@ func Load(path string) (*File, error) {
 	if err := dec.Decode(&raw); err != nil {
 		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file: %v", ErrStore, path, err)
 	}
-
-	if raw.Version == nil {
-		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file (missing version)", ErrStore, path)
-	}
 	if raw.Tasks == nil {
 		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file (missing tasks)", ErrStore, path)
+	}
+	if err := normalizeTaskKinds(raw.Tasks); err != nil {
+		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file: %v", ErrStore, path, err)
 	}
 
 	return &File{Version: *raw.Version, Tasks: raw.Tasks}, nil
@@ -153,6 +280,9 @@ func Save(path string, data *File) error {
 	// Normalise nil slices so we write [] instead of null.
 	if data.Tasks == nil {
 		data.Tasks = []Task{}
+	}
+	if err := normalizeTaskKinds(data.Tasks); err != nil {
+		return fmt.Errorf("%w: invalid task file: %v", ErrStore, err)
 	}
 	// Apply the canonical ordering invariant on every write: done laps above
 	// todo laps, done by completedAt (oldest first), todos by their order key.
@@ -258,18 +388,45 @@ func doneLess(a, b *Task) bool {
 	return a.ID < b.ID
 }
 
+func normalizeTaskKinds(tasks []Task) error {
+	for i := range tasks {
+		switch tasks[i].Kind {
+		case "":
+			tasks[i].Kind = KindLap
+		case KindLap, KindStint:
+		default:
+			return fmt.Errorf("task %q has invalid kind %q", tasks[i].ID, tasks[i].Kind)
+		}
+	}
+	return nil
+}
+
 // Migrate upgrades an older file in place to CurrentVersion, returning whether
 // any change was made. The version 1 -> 2 step assigns explicit integer order
-// keys to every lap in current array order, preserving today's todo ordering.
+// keys to every entry in current array order, preserving today's todo ordering.
+// The version 2 -> 3 step stamps missing kinds as laps.
 func Migrate(f *File) bool {
 	if f.Version >= CurrentVersion {
 		return false
 	}
-	for i := range f.Tasks {
-		f.Tasks[i].Order = (i + 1) * orderStep
+	changed := false
+	if f.Version < 2 {
+		for i := range f.Tasks {
+			f.Tasks[i].Order = (i + 1) * orderStep
+		}
+		f.Version = 2
+		changed = true
 	}
-	f.Version = CurrentVersion
-	return true
+	if f.Version < 3 {
+		for i := range f.Tasks {
+			if f.Tasks[i].Kind == "" {
+				f.Tasks[i].Kind = KindLap
+			}
+		}
+		f.Version = 3
+		changed = true
+	}
+	return changed
 }
 
 // minTodoOrder returns the smallest order key among todo laps.
