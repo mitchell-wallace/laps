@@ -2274,6 +2274,32 @@ func TestClaimNotFound(t *testing.T) {
 	}
 }
 
+func TestClaimMalformedStructuredClaimErrors(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Task")
+	claimPath := filepath.Join(beadsDir, "claim")
+	if err := os.WriteFile(claimPath, []byte("{"), 0644); err != nil {
+		t.Fatalf("write malformed claim: %v", err)
+	}
+
+	_, errStr, code := runMB("claim")
+	if code != 2 {
+		t.Fatalf("expected code 2, got %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "malformed claim") {
+		t.Fatalf("expected malformed claim error, got: %s", errStr)
+	}
+	data, err := os.ReadFile(claimPath)
+	if err != nil {
+		t.Fatalf("read claim: %v", err)
+	}
+	if string(data) != "{" {
+		t.Fatalf("expected malformed claim to remain untouched, got: %q", data)
+	}
+}
+
 func TestClaimUndo(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
@@ -2470,6 +2496,29 @@ func TestDoneExplicitIDMatchesClaim(t *testing.T) {
 	claim, _ := store.ReadClaim(beadsDir, store.ResolveFile(""))
 	if claim.Lap != "" {
 		t.Fatal("expected claim cleared when completing matching task")
+	}
+}
+
+func TestDoneExplicitIDDoesNotClearWrongFileClaim(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Default file task")
+	id := strings.TrimSpace(out)
+	if err := store.WriteClaim(beadsDir, store.Claim{Lap: id, File: "auth.json"}); err != nil {
+		t.Fatalf("write wrong-file claim: %v", err)
+	}
+
+	_, _, code := runMB("done", id)
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	claim, err := store.ReadClaim(beadsDir, "laps.json")
+	if err != nil {
+		t.Fatalf("read claim: %v", err)
+	}
+	if claim.Lap != id || claim.File != "auth.json" {
+		t.Fatalf("expected wrong-file claim to remain, got %+v", claim)
 	}
 }
 
@@ -3915,6 +3964,36 @@ func TestLogMalformed(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "laps: log: skipping malformed line") {
 		t.Errorf("expected stderr note, got: %q", stderr)
+	}
+}
+
+func TestLogReadsLongJSONLLine(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	line, err := json.Marshal(map[string]interface{}{
+		"ts":       "2026-01-01T12:00:00Z",
+		"event":    "created",
+		"cmd":      "add",
+		"file":     "laps.json",
+		"lap":      "laps-long",
+		"title":    strings.Repeat("x", 70*1024),
+		"assignee": "JUNIOR",
+		"scope":    "root",
+		"session":  "s1",
+		"detail":   map[string]interface{}{},
+	})
+	if err != nil {
+		t.Fatalf("marshal long log line: %v", err)
+	}
+	writeTestLog(t, beadsDir, []string{string(line)})
+
+	stdout, stderr, code := runMB("log", "--session", "no-match")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("expected no matching output, got: %q", stdout)
 	}
 }
 

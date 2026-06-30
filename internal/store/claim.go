@@ -97,10 +97,12 @@ func WriteClaim(beadsDir string, c Claim) error {
 		return err
 	}
 
-	// Preserve the original claim time on same-claim re-claim. A malformed or
-	// legacy existing file simply yields no time to preserve.
-	if existing, err := ReadClaim(beadsDir, c.File); err == nil &&
-		existing.Lap == c.Lap && existing.File == c.File && existing.ClaimedAt != nil {
+	// Preserve the original claim time on same-claim re-claim. A legacy existing
+	// file simply yields no time to preserve; a malformed structured claim is
+	// surfaced rather than overwritten.
+	if existing, err := ReadClaim(beadsDir, c.File); err != nil {
+		return err
+	} else if existing.Lap == c.Lap && existing.File == c.File && existing.ClaimedAt != nil {
 		c.ClaimedAt = existing.ClaimedAt
 	} else if c.ClaimedAt == nil {
 		now := time.Now().UTC()

@@ -68,6 +68,7 @@ var logCmd = &cobra.Command{
 
 		var events []logEventLine
 		scanner := bufio.NewScanner(f)
+		scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
 		for scanner.Scan() {
 			lineBytes := scanner.Bytes()
 			if len(bytes.TrimSpace(lineBytes)) == 0 {

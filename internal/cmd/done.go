@@ -28,6 +28,7 @@ When a claimed task is completed, .laps/claim is cleared.`,
 		file := loadFile(path)
 
 		var task *store.Task
+		selectedFile := store.ResolveFile(fileFlag)
 
 		if len(args) > 0 {
 			id := args[0]
@@ -44,7 +45,7 @@ When a claimed task is completed, .laps/claim is cleared.`,
 				exit(3, "task %s (%s) is already done", task.ID, task.Title)
 			}
 		} else {
-			claim, err := store.ReadClaim(beadsDir, store.ResolveFile(fileFlag))
+			claim, err := store.ReadClaim(beadsDir, selectedFile)
 			if err != nil {
 				exit(2, "read claim: %v", err)
 			}
@@ -102,7 +103,7 @@ When a claimed task is completed, .laps/claim is cleared.`,
 		// claim is actually removed, emit a SEPARATE unclaimed event tagged
 		// reason "completed", immediately after completed, for log uniformity with
 		// the replaced reason. A failed remove emits no unclaimed event.
-		if claim, err := store.ReadClaim(beadsDir, store.ResolveFile(fileFlag)); err == nil && claim.Lap == task.ID {
+		if claim, err := store.ReadClaim(beadsDir, selectedFile); err == nil && claim.Lap == task.ID && claim.File == selectedFile {
 			if err := store.RemoveClaim(beadsDir); err == nil {
 				logEvent(beadsDir, &eventlog.Entry{
 					Event:    "unclaimed",
