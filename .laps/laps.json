@@ -83,11 +83,11 @@
       "title": "Add edit and assign tests and extend flag-reset harness",
       "description": "**Context** — Implements tasks 3.8 (tests) and 3.9 (reset harness). This lap is load-bearing for the whole test suite's correctness because `edit`'s semantics hinge on `cmd.Flags().Changed`. The existing reset harness in `internal/cmd/cmd_test.go` — `runMB` (around line 33) and `runMBExecute` (around line 89) — zeroes package-level vars and resets `flag.Changed` via a `pflag.FlagSet` loop. That loop currently registers `rootCmd.PersistentFlags()`, `addCmd.Flags()`, `listCmd.Flags()`, `updateCmd.Flags()`, `doneUndoCmd.Flags()`.\n\n**Outcome** — `edit`/`assign` are fully tested and the reset harness registers the new flagsets so no `Changed=true` leaks between tests.\n\n**Files \u0026 scope** — `internal/cmd/cmd_test.go` only.\n\n**Design** — 3.9 (critical): in BOTH `runMB` and `runMBExecute`, add `editCmd.Flags()`, `moveCmd.Flags()`, and `assignCmd.Flags()` to the `pflag.FlagSet` loop, and zero the new package-level vars (`listOneline`, the `edit*` vars, the `move*` vars) alongside the existing `addTitle`/`addDescription`/etc. The `list` flagset (already in the loop) covers `--oneline` automatically. Why this matters: a leaked `Changed=true` — e.g. a prior test's `--description \"\"` — makes a later title-only edit silently clear the description; a single missing registration corrupts unrelated tests. 3.8 tests: edit each field independently; no-flags → exit 1; field validation (blank title errors, `--description \"\"` clears, `--assignee \"\"` clears, non-empty assignee trims, escaped `\\n` in description); blank `assign` clears assignee; done-target warns on stderr AND preserves `IsDone`/`completedAt`; `assign` sets assignee; non-JSON success prints only the id; `--json-output` returns `{\"task\":...}`; hook context fires with the affected task; a `runMBExecute(\"edit\"/\"assign\", ...)` dispatch test.\n\n**Acceptance** — `just test` green and stable across `go test -count=2 ./internal/cmd` (the repeat run confirms no `Changed`-leak flakiness). Every edit/assign branch asserted.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-29T10:10:35.710102522Z",
-      "updatedAt": "2026-06-29T10:10:35.710102522Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T01:23:10.184334131Z",
+      "completedAt": "2026-06-30T01:23:10.184334131Z"
     },
     {
       "id": "laps-bbea",
