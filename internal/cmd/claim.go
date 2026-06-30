@@ -76,17 +76,15 @@ task to complete.`,
 		// emits unclaimed(replaced) for the prior lap, then claimed for the new.
 		if !sameLapReclaim {
 			if existing.Lap != "" {
-				var prevTitle, prevAssignee string
-				for i := range file.Tasks {
-					if file.Tasks[i].ID == existing.Lap {
-						prevTitle = file.Tasks[i].Title
-						prevAssignee = file.Tasks[i].Assignee
-						break
-					}
-				}
+				// The retired claim may belong to a DIFFERENT task file than the
+				// one currently selected, so stamp its own file and denormalize
+				// its title/assignee from that file rather than the loaded
+				// (selected) file, which need not even contain the prior lap.
+				prevTitle, prevAssignee := lapMeta(beadsDir, existing.File, existing.Lap)
 				logEvent(beadsDir, &eventlog.Entry{
 					Event:    "unclaimed",
 					Cmd:      "claim",
+					File:     existing.File,
 					Lap:      existing.Lap,
 					Title:    prevTitle,
 					Assignee: prevAssignee,
@@ -96,6 +94,7 @@ task to complete.`,
 			logEvent(beadsDir, &eventlog.Entry{
 				Event:    "claimed",
 				Cmd:      "claim",
+				File:     newClaim.File,
 				Lap:      task.ID,
 				Title:    task.Title,
 				Assignee: task.Assignee,
@@ -133,15 +132,12 @@ var claimUndoCmd = &cobra.Command{
 		defer runAfterHooksDeferred(hookCommandName(cmd), beadsDir, path, nil, &output, &exitCode, args)()
 		runBeforeHooks(hookCommandName(cmd), beadsDir, path, nil, args)
 
-		title := claimedID
-		file, err := store.Load(path)
-		if err == nil {
-			for i := range file.Tasks {
-				if file.Tasks[i].ID == claimedID {
-					title = file.Tasks[i].Title
-					break
-				}
-			}
+		// Denormalize title/assignee from the CLAIM's own file, which may differ
+		// from the currently selected file. Fall back to the id when the lap can
+		// no longer be resolved so the event still carries an identity.
+		title, assignee := lapMeta(beadsDir, claim.File, claimedID)
+		if title == "" {
+			title = claimedID
 		}
 
 		if err := store.RemoveClaim(beadsDir); err != nil {
@@ -149,11 +145,15 @@ var claimUndoCmd = &cobra.Command{
 			exit(2, "claim undo: %v", err)
 		}
 		// Append only after RemoveClaim succeeds; a failed remove emits no event.
+		// Stamp the claim's own file, not the selected one, so a cross-file undo
+		// records where the claim actually lived.
 		logEvent(beadsDir, &eventlog.Entry{
-			Event: "unclaimed",
-			Cmd:   "claim-undo",
-			Lap:   claimedID,
-			Title: title,
+			Event:    "unclaimed",
+			Cmd:      "claim-undo",
+			File:     claim.File,
+			Lap:      claimedID,
+			Title:    title,
+			Assignee: assignee,
 		})
 
 		output = claimedID

@@ -667,3 +667,98 @@ func TestEventLog_BestEffortDoesNotChangeExitCode(t *testing.T) {
 		t.Fatal("expected the task to persist despite the log-write failure")
 	}
 }
+
+// TestEventLog_CrossFileReplacementStampsClaimFile verifies that when a claim in
+// one --file is replaced by claiming a lap in a DIFFERENT file, the
+// unclaimed(replaced) event stamps the retired claim's own file, lap, title, and
+// assignee — not the currently selected file (which need not even contain the
+// prior lap). Regression for cross-file claim event identity/metadata.
+func TestEventLog_CrossFileReplacementStampsClaimFile(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+	assertNoLAPS_SESSION(t)
+
+	// Alpha lives in auth.json; Beta lives in the default laps.json.
+	outA, _, _ := runMB("add", "tail", "--file", "auth", "--title", "Alpha", "--assignee", "SENIOR")
+	idA := strings.TrimSpace(outA)
+	outB, _, _ := runMB("add", "tail", "--title", "Beta", "--assignee", "JUNIOR")
+	idB := strings.TrimSpace(outB)
+
+	// Claim Alpha while auth is selected, then replace it by claiming Beta on the
+	// default file. The retired claim (Alpha) belongs to auth.json.
+	if _, _, code := runMB("claim", idA, "--file", "auth"); code != 0 {
+		t.Fatalf("claim A failed: code %d", code)
+	}
+	if _, _, code := runMB("claim", idB); code != 0 {
+		t.Fatalf("claim B failed: code %d", code)
+	}
+
+	lines := readEventLog(t, beadsDir)
+	got := eventsOf(lines)
+	// created A (auth), created B (laps), claimed A (auth),
+	// unclaimed(replaced) A (auth), claimed B (laps)
+	if len(got) != 5 || got[3] != "unclaimed" || got[4] != "claimed" {
+		t.Fatalf("expected [..., unclaimed, claimed], got %v", got)
+	}
+	replaced := lines[3]
+	if replaced["cmd"] != "claim" || lastDetailReason(t, replaced) != "replaced" {
+		t.Fatalf("expected unclaimed(replaced) from claim, got %v", replaced)
+	}
+	if replaced["file"] != "auth.json" {
+		t.Errorf("retired-claim file = %v, want auth.json", replaced["file"])
+	}
+	if replaced["lap"] != idA {
+		t.Errorf("retired-claim lap = %v, want %s", replaced["lap"], idA)
+	}
+	if replaced["title"] != "Alpha" {
+		t.Errorf("retired-claim title = %v, want Alpha (lost across files)", replaced["title"])
+	}
+	if replaced["assignee"] != "SENIOR" {
+		t.Errorf("retired-claim assignee = %v, want SENIOR (lost across files)", replaced["assignee"])
+	}
+	// The replacing claim still records the newly selected file.
+	if newClaim := lines[4]; newClaim["lap"] != idB || newClaim["file"] != "laps.json" {
+		t.Errorf("replacing claim line = %v, want lap %s file laps.json", newClaim, idB)
+	}
+}
+
+// TestEventLog_CrossFileClaimUndoStampsClaimFile verifies that clearing (undo) a
+// claim that lives in a different --file than the currently selected one stamps
+// the unclaimed event with the claim's own file, title, and assignee rather than
+// the selected file. Regression for cross-file claim event identity/metadata.
+func TestEventLog_CrossFileClaimUndoStampsClaimFile(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+	assertNoLAPS_SESSION(t)
+
+	// The lap being claimed lives only in auth.json.
+	outA, _, _ := runMB("add", "head", "--file", "auth", "--title", "Cross", "--assignee", "SENIOR")
+	idA := strings.TrimSpace(outA)
+	if _, _, code := runMB("claim", idA, "--file", "auth"); code != 0 {
+		t.Fatalf("claim failed: code %d", code)
+	}
+
+	// Undo on the default file: the claim still points into auth.json.
+	if _, _, code := runMB("claim", "undo"); code != 0 {
+		t.Fatalf("claim undo failed: code %d", code)
+	}
+
+	lines := readEventLog(t, beadsDir)
+	got := eventsOf(lines)
+	if len(got) != 3 || got[2] != "unclaimed" {
+		t.Fatalf("expected last event unclaimed, got %v", got)
+	}
+	last := lines[len(lines)-1]
+	if last["cmd"] != "claim-undo" || last["lap"] != idA {
+		t.Fatalf("unclaimed line = %v", last)
+	}
+	if last["file"] != "auth.json" {
+		t.Errorf("claim-undo file = %v, want auth.json", last["file"])
+	}
+	if last["title"] != "Cross" {
+		t.Errorf("claim-undo title = %v, want Cross (lost across files)", last["title"])
+	}
+	if last["assignee"] != "SENIOR" {
+		t.Errorf("claim-undo assignee = %v, want SENIOR (lost across files)", last["assignee"])
+	}
+}
