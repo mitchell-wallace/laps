@@ -50,11 +50,11 @@
       "title": "Add move command tests",
       "description": "**Context** — Implements task 2.7. The `move` command (previous lap) reuses `store.ComputeInsertOrder` with `add`-style exit codes. Follow the existing test patterns in `internal/cmd/cmd_test.go` (`runMB` for in-process, `runMBExecute` for the real argv dispatch path).\n\n**Outcome** — `move` is covered for every branch: positions, id preservation, error exits, after-done fallback, hook context, dispatch, and updatedAt.\n\n**Files \u0026 scope** — `internal/cmd/cmd_test.go` only.\n\n**Design** — One focused test per scenario family: move to head/tail/after and confirm resulting order via `list --oneline` + `idxBefore`; id is byte-identical before/after (capture id, move, re-get); done moved id → exit 1; unknown moved id → exit 1; missing `after` target → exit 3; after-done target → fallback to head AND the stderr notice is present (assert on stderr); `move \u003cid\u003e after \u003cid\u003e` self-reference → error; `--json-output` returns `{\"task\":...}` with the preserved id; `updatedAt` strictly advances (seed the task, capture UpdatedAt via `get --json-output` or `store.Load`, move, confirm advancement); a `runMBExecute(\"move\", ...)` test so the built-in dispatch + `isKnownCommand` path is exercised. Add a move hook-context test mirroring the existing hook-context test pattern (before/after fire with the affected task's id/title in vars), if such a helper exists.\n\n**Acceptance** — `just test` green; every exit-code branch has a dedicated assertion.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-29T10:10:35.710100135Z",
-      "updatedAt": "2026-06-29T10:10:35.710100135Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T00:59:44.913612573Z",
+      "completedAt": "2026-06-30T00:59:44.913612573Z"
     },
     {
       "id": "laps-3f5f",
