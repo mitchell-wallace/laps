@@ -116,11 +116,11 @@
       "title": "Build laps status snapshot with state taxonomy and failure-mode classification",
       "description": "Context: The structured claim (lap 3) exposes claimedAt, which status now surfaces. This is the second added capability and has subtle failure-mode and JSON-shape decisions. Tasks 4.1, 4.2, 4.3, 4.4, 4.5.\n\nOutcome: A laps status command reporting todo/done counts, the active (claimed) lap, the head lap, the assignee breakdown of todo laps, the selected file identity, and a queue state of active|ready|empty|complete, with correct failure-mode classification and the DECIDED JSON shape.\n\nFiles \u0026 scope: New internal/cmd/status.go (cobra command + snapshot assembly); register via init(). Consume store.ReadClaim (structured, from lap 3) for claimedAt. Add tests to internal/cmd/cmd_test.go.\n\nDesign: State taxonomy — active (a valid todo lap is claimed / work in progress), ready (todo laps exist and nothing valid is claimed), empty (no laps), complete (laps exist, all done). JSON shape DECIDED: expose claimedAt as a nullable RFC3339 UTC timestamp (null when no lap is claimed) and ageSeconds as an integer count of seconds since claimedAt (null when claimedAt is null). DO NOT add a stale boolean in this change (deferred until a threshold/policy is chosen). Failure modes: valid snapshots exit 0; corrupt/unreadable task store, malformed claim JSON, and JSON serialization failures use the NORMAL error path (non-zero), not a hidden healthy snapshot. Dangling claims (claim points at a deleted/pruned/done/wrong-file lap) produce a VALID exit-0 degraded snapshot with claim.valid=false; the system MUST NOT auto-clear such claims silently. Honor --json-output with a stable shape Rally can consume, including the selected file identity.\n\nAcceptance: Tests covering task 4.5 — counts + head reported; empty -\u003e state empty; all done -\u003e complete; todo laps no claim -\u003e ready; claimed valid todo -\u003e active; JSON shape includes file identity and nullable claimedAt/ageSeconds (null when no claim); corrupt store -\u003e error path non-zero; malformed claim -\u003e error path; dangling/non-todo/wrong-file claim -\u003e exit 0 with claim.valid=false and no auto-clear. go test ./... passes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-29T10:05:27.706348987Z",
-      "updatedAt": "2026-06-29T10:05:27.706348987Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T10:05:29.241588066Z",
+      "completedAt": "2026-06-30T10:05:29.241588066Z"
     },
     {
       "id": "laps-a888",
