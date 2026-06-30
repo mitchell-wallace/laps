@@ -78,11 +78,49 @@ Clear the claimed lap stored in `.laps/claim`. Prints the id and title of the
 un-claimed lap.
 
 ### `laps list [--all | --done]`
-List tasks as a markdown numbered list.
+List tasks as a markdown numbered list. `ls` is an alias for `list`.
+
+The default format renders each task across two lines: the title, then the
+task id, assignee, and status:
+
+```
+1. First task
+   laps-f0f4 · JUNIOR · todo
+2. Second task
+   laps-6b4a · — · todo
+```
 
 - Default: todo tasks only, head first.
 - `--all` — include done tasks after todo items (struck through).
 - `--done` — show only completed tasks, most recent first.
+- `--oneline` — render each task on a single line (the prior format), e.g. `laps-6b4a — Second task (assignee: JUNIOR)`.
+
+### `laps move <id> <head|tail|after> [target]`
+Reorder an existing todo task, preserving its id.
+
+- `head` — move to the front of the queue.
+- `tail` — move to the end of the queue.
+- `after <id>` — move to immediately after the specified task id.
+
+Prints the moved task id on success.
+
+### `laps edit <id> [--title] [--description] [--assignee]`
+Edit fields of an existing task in place, preserving its id and order. At
+least one of the flags must be provided. Each field is updated only when its
+flag is set, so passing an empty string (`""`) clears that field.
+
+- `--title <string>` — set a new (non-blank) title.
+- `--description <string>` — set the description; pass `""` to clear it.
+- `--assignee <string>` — set the assignee; pass `""` to clear it.
+
+Editing a completed lap succeeds with a warning and does not reopen it.
+Prints the affected task id on success.
+
+### `laps assign <id> <role>`
+Assign a task to a role. A shortcut for `edit <id> --assignee <role>`.
+
+A blank role clears the assignee. Assigning a completed lap succeeds with a
+warning and does not reopen it. Prints the affected task id on success.
 
 ### `laps done [<id>]`
 Complete a task. When called with a task id, completes that task directly.
@@ -167,10 +205,10 @@ laps will fire every matching `before` and `after` hook and nothing else.
 
 The following names are reserved for potential future built-in commands and should be avoided for hook-only commands:
 
-`init`, `tui`, `view`, `edit`, `sync`, `project`, `graph`, `tree`, `ready`, `blocked`
+`init`, `tui`, `view`, `sync`, `project`, `graph`, `tree`, `ready`, `blocked`
 
 Other names that may conflict with future features in a task-tracking CLI include:
-`start`, `stop`, `pause`, `resume`, `move`, `reorder`, `search`, `filter`, `tag`, `untag`, `assign`, `unassign`, `note`, `log`, `status`, `priority`, `label`, `archive`, `unarchive`, `import`, `export`, `backup`, `restore`, `template`, `config`, `setting`
+`start`, `stop`, `pause`, `resume`, `reorder`, `search`, `filter`, `tag`, `untag`, `unassign`, `note`, `log`, `status`, `priority`, `label`, `archive`, `unarchive`, `import`, `export`, `backup`, `restore`, `template`, `config`, `setting`
 
 > **Tip:** When in doubt, prefix your hook-only commands with a project-specific namespace (e.g. `myproject-deploy`) to avoid future collisions.
 
