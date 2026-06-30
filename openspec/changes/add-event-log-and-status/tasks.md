@@ -1,11 +1,11 @@
 ## 1. Event-log infrastructure
 
-- [ ] 1.1 Add a best-effort append-only JSONL writer for `.laps/log.jsonl` (append failure warns on stderr, never changes exit code)
+- [x] 1.1 Add a best-effort append-only JSONL writer for `.laps/log.jsonl` (append failure warns on stderr, never changes exit code)
 - [ ] 1.2 Define the line schema `{ts, event, cmd, file, lap?, title?, assignee?, scope, detail{}, session}`; default `scope` to `root`; `file` is the resolved `.laps`-relative task file
-- [ ] 1.3 Read `LAPS_SESSION` and stamp `session` (empty when unset)
-- [ ] 1.4 `init` appends `.laps/log.jsonl` to `.gitignore` (idempotent), alongside `.laps/claim`, while preserving the full existing file. Replace today's early-`break` scan (`init.go:46-48` stops at the first `.laps/claim` match and then never appends a second entry, so `log.jsonl` is missed when `claim` is already present): scan the complete file, collect which of the two entries are missing, and append only those. Update the success message (`init.go:75` currently hard-codes "Added .laps/claim to .gitignore") to reflect whichever entries were actually added
+- [x] 1.3 Read `LAPS_SESSION` and stamp `session` (empty when unset)
+- [x] 1.4 `init` appends `.laps/log.jsonl` to `.gitignore` (idempotent), alongside `.laps/claim`, while preserving the full existing file. Replace today's early-`break` scan (`init.go:46-48` stops at the first `.laps/claim` match and then never appends a second entry, so `log.jsonl` is missed when `claim` is already present): scan the complete file, collect which of the two entries are missing, and append only those. Update the success message (`init.go:75` currently hard-codes "Added .laps/claim to .gitignore") to reflect whichever entries were actually added
 - [ ] 1.5 Include required `file` identity in event log entries, status JSON, and structured claims
-- [ ] 1.6 Update `internal/cmd/hooks.go:isKnownCommand` so `log` and `status` are treated as built-ins
+- [x] 1.6 Update `internal/cmd/hooks.go:isKnownCommand` so `log` and `status` are treated as built-ins
 
 ## 2. Wire events into commands
 
@@ -13,8 +13,8 @@
 - [x] 2.2 `done` clearing a claim SHALL emit `unclaimed` with `detail.reason:"completed"` immediately after the `completed` event (DECIDED: separate `unclaimed` event for log uniformity with the `replaced` reason)
 - [x] 2.3 Preserve `claimedAt` and do not duplicate events for same-lap reclaims; for different-lap replacement emit `unclaimed` with `detail.reason:"replaced"` followed by `claimed`
 - [x] 2.4 For claim-only mutations, append events only after `WriteClaim`/`RemoveClaim` succeeds and do not emit events on failed claim writes/removes
-- [ ] 2.5 Emit `moved` for `move` and `edited` for `edit`/`assign` (there is no `assigned` event — `assign` is an `edit` shortcut, so it logs `edited`) with `detail` payloads (pos, from/to) after `improve-cli-ergonomics` lands, or route them to that change
-- [ ] 2.6 Do not log read/admin commands (`get`, `list`, `count`, `status`, `log`, `version`, `help`, hook-only commands, `init`, `on`, `off`, `update`)
+- [x] 2.5 Emit `moved` for `move` and `edited` for `edit`/`assign` (there is no `assigned` event — `assign` is an `edit` shortcut, so it logs `edited`) with `detail` payloads (pos, from/to) after `improve-cli-ergonomics` lands, or route them to that change
+- [x] 2.6 Do not log read/admin commands (`get`, `list`, `count`, `status`, `log`, `version`, `help`, hook-only commands, `init`, `on`, `off`, `update`)
 
 ## 3. Log reader
 

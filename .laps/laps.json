@@ -72,10 +72,32 @@
       "title": "Verify event-log capability slice (infra, wiring, reader prerequisites)",
       "description": "Context: Natural slice boundary — the event-log capability is now fully built (writer + init fix + full wiring) but not yet read back or surfaced via status. Verify the slice before the reader and status laps build on it.\n\nOutcome: Confirmation that event-log infrastructure and wiring are correct and complete. Check off tasks.md boxes 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6 only if correct and thorough.\n\nProcess: Use the openspec-verify-change skill against add-event-log-and-status. Identify the merge target first; treat improve-cli-ergonomics branch work as pre-existing baseline. Do NOT rewrite git history.\n\nDepth checks: trace the writer's best-effort contract end to end (a real append failure must not change a command's exit code). Verify schema completeness (ts/event/cmd/file/scope/session + lap/title/assignee/detail where applicable) and that file is the resolved .laps-relative file (e.g. --file auth -\u003e auth.json). Verify session stamping from LAPS_SESSION. Verify the init gitignore fix actually appends log.jsonl when claim is already present. Verify isKnownCommand covers log and status. Trace EACH mutating command's event: created (incl. per-lap in batch), completed, reopened, claimed, unclaimed(replaced) + claimed on replacement, unclaimed(completed) after done, unclaimed on claim-undo, deleted, pruned (per lap), moved, edited (incl. assign). Confirm same-lap reclaim preserves claimedAt with no duplicate. Confirm reads/admin commands are silent. Confirm claim events only fire after successful claim writes/removes. Run just test and just lint. Fix only tiny safe one-liners; escalate anything larger to a head lap.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-29T10:05:27.70634662Z",
-      "updatedAt": "2026-06-29T10:05:27.70634662Z",
+      "updatedAt": "2026-06-30T09:30:36.801275854Z",
+      "completedAt": "2026-06-30T09:30:36.801275854Z"
+    },
+    {
+      "id": "work-27c7",
+      "title": "Fix cross-file claim event file identity and metadata",
+      "description": "When claim replacement or claim undo clears a claim from another --file, the event log currently stamps the current selected file instead of claim.File and loses prior title/assignee. Update event logging to preserve per-event file identity and denormalized metadata across files, and add regression tests for replacement and undo across different task files.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-06-30T09:30:05.851481354Z",
+      "updatedAt": "2026-06-30T09:30:05.851481354Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-ad4d",
+      "title": "Verify cross-file claim event logging",
+      "description": "Re-check add-event-log-and-status event-log tasks after the file-identity fix: unclaimed(replaced) and claim-undo must stamp the cleared claim's file/title/assignee correctly across task files, then rerun go test ./... and golangci-lint run ./....",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 425984,
+      "createdAt": "2026-06-30T09:30:12.81016091Z",
+      "updatedAt": "2026-06-30T09:30:12.81016091Z",
       "completedAt": null
     },
     {
