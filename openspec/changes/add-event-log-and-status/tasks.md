@@ -18,11 +18,11 @@
 
 ## 3. Log reader
 
-- [ ] 3.1 Add `laps log` printing recent events (human-readable), newest last
-- [ ] 3.2 Support `-n <count>`, `--lap <id>`, `--session <id>`, `--since <time>`, `--json-output`
-- [ ] 3.3 `laps log --lap <id>` shows that lap's full lifecycle
-- [ ] 3.4 `laps log` semantics (DECIDED): filter first (`--lap`/`--session`/`--since`), then limit to `-n` (default `20`); print newest-last (chronological); `--since` takes an RFC3339 timestamp and is inclusive of the exact timestamp; skip malformed JSONL lines with a one-line stderr note per line (never abort the read); `--json-output` emits a single `{ "events": [ ... ] }` object
-- [ ] 3.5 Tests: event appended per affected lap/transition; best-effort (write failure doesn't fail command); reads don't log; `--lap` filter; `--json-output`; missing log behavior; malformed JSONL behavior
+- [x] 3.1 Add `laps log` printing recent events (human-readable), newest last
+- [x] 3.2 Support `-n <count>`, `--lap <id>`, `--session <id>`, `--since <time>`, `--json-output`
+- [x] 3.3 `laps log --lap <id>` shows that lap's full lifecycle
+- [x] 3.4 `laps log` semantics (DECIDED): filter first (`--lap`/`--session`/`--since`), then limit to `-n` (default `20`); print newest-last (chronological); `--since` takes an RFC3339 timestamp and is inclusive of the exact timestamp; skip malformed JSONL lines with a one-line stderr note per line (never abort the read); `--json-output` emits a single `{ "events": [ ... ] }` object
+- [x] 3.5 Tests: event appended per affected lap/transition; best-effort (write failure doesn't fail command); reads don't log; `--lap` filter; `--json-output`; missing log behavior; malformed JSONL behavior
 
 ## 4. Status
 

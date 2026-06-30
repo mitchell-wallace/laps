@@ -140,7 +140,7 @@ snapshot with claim.valid=false; it is reported, never silently cleared.`,
 			sc.AgeSeconds = &age
 		}
 
-		state := "empty"
+		state := "ready"
 		switch {
 		case claimValid:
 			state = "active"
@@ -148,8 +148,6 @@ snapshot with claim.valid=false; it is reported, never silently cleared.`,
 			state = "empty"
 		case counts.Todo == 0:
 			state = "complete"
-		default:
-			state = "ready"
 		}
 
 		assignees := make([]statusAssignee, 0, len(assigneeTodos))
@@ -169,7 +167,7 @@ snapshot with claim.valid=false; it is reported, never silently cleared.`,
 			Assignees: assignees,
 		}
 
-		output = formatStatusHuman(snapshot)
+		output = formatStatusHuman(&snapshot)
 		if jsonOutput {
 			printJSON(snapshot)
 		} else {
@@ -178,7 +176,7 @@ snapshot with claim.valid=false; it is reported, never silently cleared.`,
 	},
 }
 
-func formatStatusHuman(s statusSnapshot) string {
+func formatStatusHuman(s *statusSnapshot) string {
 	var lines []string
 	lines = append(lines, fmt.Sprintf("File: %s", s.File))
 	lines = append(lines, fmt.Sprintf("State: %s", s.State))
@@ -190,8 +188,8 @@ func formatStatusHuman(s statusSnapshot) string {
 		lines = append(lines, "Head: none")
 	}
 
-	switch {
-	case s.Claim.Lap == "":
+	switch s.Claim.Lap {
+	case "":
 		lines = append(lines, "Claim: none")
 	default:
 		validity := "invalid"

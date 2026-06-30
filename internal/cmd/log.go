@@ -62,7 +62,9 @@ var logCmd = &cobra.Command{
 			exitCode = 2
 			exit(2, "failed to open log file: %v", err)
 		}
-		defer f.Close()
+		defer func() {
+			_ = f.Close()
+		}()
 
 		var events []logEventLine
 		scanner := bufio.NewScanner(f)
@@ -122,7 +124,7 @@ var logCmd = &cobra.Command{
 
 		var lines []string
 		for _, ev := range filtered {
-			lines = append(lines, formatEventHuman(ev))
+			lines = append(lines, formatEventHuman(&ev))
 		}
 		output = strings.Join(lines, "\n")
 
@@ -137,7 +139,7 @@ var logCmd = &cobra.Command{
 	},
 }
 
-func formatEventHuman(ev logEventLine) string {
+func formatEventHuman(ev *logEventLine) string {
 	tsStr := ev.TS.UTC().Format(time.RFC3339)
 	var parts []string
 	parts = append(parts, tsStr)
