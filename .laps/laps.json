@@ -105,11 +105,11 @@
       "title": "Build laps log reader with filter-then-limit semantics",
       "description": "Context: Events now flow into .laps/log.jsonl (laps 5-6). Build the reader so operators and Rally can inspect history. Tasks 3.1, 3.2, 3.3, 3.4, 3.5.\n\nOutcome: A laps log command printing recent events human-readable, newest last, with -n, --lap, --session, --since, and --json-output per the DECIDED semantics.\n\nFiles \u0026 scope: New internal/cmd/log.go (cobra command + reader logic); register it via init(). Add tests to internal/cmd/cmd_test.go. The reader consumes .laps/log.jsonl written by the writer from lap 1.\n\nDesign: DECIDED semantics — apply ALL filters first (--lap, --session, --since), THEN truncate to -n (filter-then-limit, so the limit bounds matching events shown, not lines scanned). Default -n is 20. Output is newest-last (chronological order). --since takes an RFC3339 timestamp and is INCLUSIVE of the exact timestamp. Malformed JSONL lines are SKIPPED with a one-line stderr note per offending line and NEVER abort the read (best-effort applied to the reader). --json-output emits a SINGLE object {\"events\":[...]} (not a bare array). A missing .laps/log.jsonl behaves as an empty log (no error). --lap \u003cid\u003e filters to that lap's full lifecycle. Honor --file to read the log for the selected task file's context as appropriate.\n\nAcceptance: Tests covering task 3.5 — recent events readable; default limit 20 with \u003e20 events; filter-then-limit (--lap \u003cid\u003e -n 5 yields the 5 most recent matching, newest-last); --since RFC3339 inclusive (event whose ts equals the --since value is included); malformed JSONL skipped with a stderr note and reading continues; --json-output emits a single {\"events\":[...]} object; --lap filters to one lap's lifecycle; missing log is empty not error. go test ./... passes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-29T10:05:27.706347913Z",
-      "updatedAt": "2026-06-29T10:05:27.706347913Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T09:59:50.93000586Z",
+      "completedAt": "2026-06-30T09:59:50.93000586Z"
     },
     {
       "id": "laps-e078",
