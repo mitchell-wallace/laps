@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/pflag"
 )
@@ -54,6 +55,10 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	editTitle = ""
 	editDescription = ""
 	editAssignee = ""
+	logLimit = 20
+	lapFlag = ""
+	sessionFlag = ""
+	sinceFlag = ""
 	for _, f := range []*pflag.FlagSet{
 		rootCmd.PersistentFlags(),
 		addCmd.Flags(),
@@ -63,6 +68,7 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 		editCmd.Flags(),
 		moveCmd.Flags(),
 		assignCmd.Flags(),
+		logCmd.Flags(),
 	} {
 		f.VisitAll(func(flag *pflag.Flag) {
 			flag.Changed = false
@@ -125,6 +131,10 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	editTitle = ""
 	editDescription = ""
 	editAssignee = ""
+	logLimit = 20
+	lapFlag = ""
+	sessionFlag = ""
+	sinceFlag = ""
 	for _, f := range []*pflag.FlagSet{
 		rootCmd.PersistentFlags(),
 		addCmd.Flags(),
@@ -134,6 +144,7 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 		editCmd.Flags(),
 		moveCmd.Flags(),
 		assignCmd.Flags(),
+		logCmd.Flags(),
 	} {
 		f.VisitAll(func(flag *pflag.Flag) {
 			flag.Changed = false
@@ -3718,5 +3729,287 @@ func TestEditAndAssignDispatchThroughExecute(t *testing.T) {
 	}
 	if got := strings.TrimSpace(assignOut); got != id {
 		t.Fatalf("expected dispatched assign to echo id %s, got %q", id, got)
+	}
+}
+
+func writeTestLog(t *testing.T, beadsDir string, lines []string) {
+	t.Helper()
+	path := filepath.Join(beadsDir, eventlog.LogFileName)
+	content := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test log: %v", err)
+	}
+}
+
+func TestLogBasic(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	lines := []string{
+		`{"ts":"2026-01-01T12:00:00Z","event":"created","cmd":"add","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+		`{"ts":"2026-01-01T12:05:00Z","event":"claimed","cmd":"claim","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+	}
+	writeTestLog(t, beadsDir, lines)
+
+	stdout, stderr, code := runMB("log")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, stderr)
+	}
+
+	if !strings.Contains(stdout, "2026-01-01T12:00:00Z") || !strings.Contains(stdout, "created") {
+		t.Errorf("stdout missing first event: %q", stdout)
+	}
+	if !strings.Contains(stdout, "2026-01-01T12:05:00Z") || !strings.Contains(stdout, "claimed") {
+		t.Errorf("stdout missing second event: %q", stdout)
+	}
+
+	// Verify newest-last ordering
+	idx1 := strings.Index(stdout, "2026-01-01T12:00:00Z")
+	idx2 := strings.Index(stdout, "2026-01-01T12:05:00Z")
+	if idx1 == -1 || idx2 == -1 || idx1 > idx2 {
+		t.Errorf("expected newest-last order (2026-01-01T12:00:00Z before 2026-01-01T12:05:00Z), got index order: %d, %d", idx1, idx2)
+	}
+}
+
+func TestLogLimit(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	var lines []string
+	for i := 1; i <= 25; i++ {
+		lines = append(lines, fmt.Sprintf(
+			`{"ts":"2026-01-01T12:%02d:00Z","event":"created","cmd":"add","file":"laps.json","lap":"laps-%d","title":"T","assignee":"JUNIOR","scope":"root","session":"s","detail":{}}`,
+			i, i,
+		))
+	}
+	writeTestLog(t, beadsDir, lines)
+
+	// Default limit is 20
+	stdout, _, code := runMB("log")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	outLines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(outLines) != 20 {
+		t.Errorf("expected 20 events by default, got %d", len(outLines))
+	}
+	// Verify that the 20 events shown are the most recent ones (laps-6 to laps-25)
+	if !strings.Contains(outLines[0], "laps-6") {
+		t.Errorf("expected oldest of the 20 to be laps-6, got: %q", outLines[0])
+	}
+	if !strings.Contains(outLines[19], "laps-25") {
+		t.Errorf("expected newest of the 20 to be laps-25, got: %q", outLines[19])
+	}
+
+	// Custom limit via -n
+	stdout, _, code = runMB("log", "-n", "5")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	outLines = strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(outLines) != 5 {
+		t.Errorf("expected 5 events, got %d", len(outLines))
+	}
+	if !strings.Contains(outLines[0], "laps-21") {
+		t.Errorf("expected oldest of the 5 to be laps-21, got: %q", outLines[0])
+	}
+	if !strings.Contains(outLines[4], "laps-25") {
+		t.Errorf("expected newest of the 5 to be laps-25, got: %q", outLines[4])
+	}
+}
+
+func TestLogFilters(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	lines := []string{
+		`{"ts":"2026-01-01T12:00:00Z","event":"created","cmd":"add","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+		`{"ts":"2026-01-01T12:01:00Z","event":"created","cmd":"add","file":"laps.json","lap":"laps-2","title":"T2","assignee":"JUNIOR","scope":"root","session":"s2","detail":{}}`,
+		`{"ts":"2026-01-01T12:02:00Z","event":"completed","cmd":"done","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+		`{"ts":"2026-01-01T12:03:00Z","event":"claimed","cmd":"claim","file":"laps.json","lap":"laps-2","title":"T2","assignee":"JUNIOR","scope":"root","session":"s2","detail":{}}`,
+		`{"ts":"2026-01-01T12:04:00Z","event":"completed","cmd":"done","file":"laps.json","lap":"laps-2","title":"T2","assignee":"JUNIOR","scope":"root","session":"s2","detail":{}}`,
+	}
+	writeTestLog(t, beadsDir, lines)
+
+	// Filter by --lap
+	stdout, _, code := runMB("log", "--lap", "laps-1")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	outLines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(outLines) != 2 {
+		t.Fatalf("expected 2 matching lap events, got %d", len(outLines))
+	}
+	if !strings.Contains(outLines[0], "created") || !strings.Contains(outLines[1], "completed") {
+		t.Errorf("unexpected output for lap filter: %v", outLines)
+	}
+
+	// Filter by --session
+	stdout, _, code = runMB("log", "--session", "s2")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	outLines = strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(outLines) != 3 {
+		t.Fatalf("expected 3 matching session events, got %d", len(outLines))
+	}
+
+	// Filter-then-limit: filter by lap AND limit
+	stdout, _, code = runMB("log", "--lap", "laps-2", "-n", "2")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	outLines = strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(outLines) != 2 {
+		t.Fatalf("expected 2 matching limited events, got %d", len(outLines))
+	}
+	if !strings.Contains(outLines[0], "claimed") || !strings.Contains(outLines[1], "completed") {
+		t.Errorf("expected most recent matching: claimed then completed, got: %v", outLines)
+	}
+}
+
+func TestLogSinceInclusive(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	lines := []string{
+		`{"ts":"2026-01-01T12:00:00Z","event":"created","cmd":"add","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+		`{"ts":"2026-01-01T12:01:00Z","event":"claimed","cmd":"claim","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+		`{"ts":"2026-01-01T12:02:00Z","event":"completed","cmd":"done","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+	}
+	writeTestLog(t, beadsDir, lines)
+
+	// Since 12:01:00Z (inclusive)
+	stdout, _, code := runMB("log", "--since", "2026-01-01T12:01:00Z")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	outLines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(outLines) != 2 {
+		t.Fatalf("expected 2 events since 12:01:00Z, got %d", len(outLines))
+	}
+	if !strings.Contains(outLines[0], "claimed") || !strings.Contains(outLines[1], "completed") {
+		t.Errorf("expected claimed and completed, got: %v", outLines)
+	}
+}
+
+func TestLogMalformed(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	lines := []string{
+		`{"ts":"2026-01-01T12:00:00Z","event":"created","cmd":"add","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+		`not valid JSON at all`,
+		`{"ts":"2026-01-01T12:02:00Z","event":"completed","cmd":"done","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+	}
+	writeTestLog(t, beadsDir, lines)
+
+	stdout, stderr, code := runMB("log")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, stderr)
+	}
+
+	outLines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(outLines) != 2 {
+		t.Errorf("expected 2 output lines after skipping malformed line, got %d: %q", len(outLines), stdout)
+	}
+	if !strings.Contains(stderr, "laps: log: skipping malformed line") {
+		t.Errorf("expected stderr note, got: %q", stderr)
+	}
+}
+
+func TestLogJSONOutput(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	lines := []string{
+		`{"ts":"2026-01-01T12:00:00Z","event":"created","cmd":"add","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+	}
+	writeTestLog(t, beadsDir, lines)
+
+	stdout, _, code := runMB("log", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+		t.Fatalf("failed to unmarshal JSON output: %v, output: %q", err, stdout)
+	}
+
+	evs, ok := parsed["events"]
+	if !ok {
+		t.Fatalf("JSON output missing 'events' field: %q", stdout)
+	}
+	evList, ok := evs.([]interface{})
+	if !ok || len(evList) != 1 {
+		t.Fatalf("expected events to be array of size 1, got: %v", evs)
+	}
+	firstEv, ok := evList[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected event to be an object, got: %T", evList[0])
+	}
+	if firstEv["lap"] != "laps-1" || firstEv["event"] != "created" {
+		t.Errorf("event fields mismatch, got: %v", firstEv)
+	}
+}
+
+func TestLogMissingLog(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	// .laps/log.jsonl does not exist. Should exit 0 and be empty.
+	stdout, stderr, code := runMB("log")
+	if code != 0 {
+		t.Fatalf("expected code 0 for missing log, got %d, stderr: %s", code, stderr)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Errorf("expected empty stdout for missing log, got: %q", stdout)
+	}
+
+	// JSON output mode
+	stdout, _, code = runMB("log", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+		t.Fatalf("failed to unmarshal JSON: %v", err)
+	}
+	evs, ok := parsed["events"]
+	if !ok {
+		t.Fatalf("missing events key: %q", stdout)
+	}
+	if len(evs.([]interface{})) != 0 {
+		t.Errorf("expected empty events list, got: %v", evs)
+	}
+}
+
+func TestLogFileFilter(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	lines := []string{
+		`{"ts":"2026-01-01T12:00:00Z","event":"created","cmd":"add","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+		`{"ts":"2026-01-01T12:01:00Z","event":"created","cmd":"add","file":"auth.json","lap":"laps-2","title":"T2","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+	}
+	writeTestLog(t, beadsDir, lines)
+
+	// Default file filter: laps.json
+	stdout, _, code := runMB("log")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(stdout, "laps-1") || strings.Contains(stdout, "laps-2") {
+		t.Errorf("default log output file filter failed, got: %q", stdout)
+	}
+
+	// Filter by --file auth
+	stdout, _, code = runMB("log", "--file", "auth")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if strings.Contains(stdout, "laps-1") || !strings.Contains(stdout, "laps-2") {
+		t.Errorf("explicit log output --file filter failed, got: %q", stdout)
 	}
 }
