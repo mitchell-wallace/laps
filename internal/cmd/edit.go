@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -115,6 +116,25 @@ func runEdit(cmd *cobra.Command, args []string, fields editFields) {
 		exitCode = 2
 		exit(2, "%s: %v", name, err)
 	}
+
+	var changedFields []string
+	if fields.setTitle {
+		changedFields = append(changedFields, "title")
+	}
+	if fields.setDescription {
+		changedFields = append(changedFields, "description")
+	}
+	if fields.setAssignee {
+		changedFields = append(changedFields, "assignee")
+	}
+	logEvent(beadsDir, &eventlog.Entry{
+		Event:    "edited",
+		Cmd:      name,
+		Lap:      task.ID,
+		Title:    task.Title,
+		Assignee: task.Assignee,
+		Detail:   map[string]interface{}{"fields": changedFields},
+	})
 
 	output = task.ID
 	if jsonOutput {

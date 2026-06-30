@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -89,6 +90,13 @@ When a claimed task is completed, .laps/claim is cleared.`,
 			exitCode = 2
 			exit(2, "done: %v", err)
 		}
+		logEvent(beadsDir, &eventlog.Entry{
+			Event:    "completed",
+			Cmd:      "done",
+			Lap:      task.ID,
+			Title:    task.Title,
+			Assignee: task.Assignee,
+		})
 
 		// Best-effort: clearing the claim must not block a completed done.
 		if claim, err := store.ReadClaim(beadsDir, store.ResolveFile(fileFlag)); err == nil && claim.Lap == task.ID {
@@ -146,6 +154,13 @@ var doneUndoCmd = &cobra.Command{
 			exitCode = 2
 			exit(2, "done undo: %v", err)
 		}
+		logEvent(beadsDir, &eventlog.Entry{
+			Event:    "reopened",
+			Cmd:      "done-undo",
+			Lap:      latest.ID,
+			Title:    latest.Title,
+			Assignee: latest.Assignee,
+		})
 
 		output = latest.ID
 		if jsonOutput {

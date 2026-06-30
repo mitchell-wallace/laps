@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -67,7 +68,11 @@ Prints the number of tasks removed.`,
 			keepDone = append(keepDone, file.Tasks[done[i]])
 		}
 
-		removed := len(done) - len(keepDone)
+		var pruned []store.Task
+		for i := n; i < len(done); i++ {
+			pruned = append(pruned, file.Tasks[done[i]])
+		}
+		removed := len(pruned)
 		var result []store.Task
 		result = append(result, todo...)
 		result = append(result, keepDone...)
@@ -76,6 +81,15 @@ Prints the number of tasks removed.`,
 		if err := store.Save(path, file); err != nil {
 			exitCode = 2
 			exit(2, "prune: %v", err)
+		}
+		for i := range pruned {
+			logEvent(beadsDir, &eventlog.Entry{
+				Event:    "pruned",
+				Cmd:      "prune",
+				Lap:      pruned[i].ID,
+				Title:    pruned[i].Title,
+				Assignee: pruned[i].Assignee,
+			})
 		}
 		output = fmt.Sprintf("%d", removed)
 		if jsonOutput {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -185,6 +186,17 @@ Prints each new task id on success.`,
 		if err := store.Save(path, file); err != nil {
 			exitCode = 2
 			exit(2, "add: %v", err)
+		}
+
+		for i := range tasks {
+			logEvent(beadsDir, &eventlog.Entry{
+				Event:    "created",
+				Cmd:      "add",
+				Lap:      tasks[i].ID,
+				Title:    tasks[i].Title,
+				Assignee: tasks[i].Assignee,
+				Detail:   map[string]interface{}{"position": position},
+			})
 		}
 
 		ids := make([]string, len(tasks))

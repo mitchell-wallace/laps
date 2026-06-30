@@ -50,11 +50,11 @@
       "title": "Wire non-claim state-change events into mutating commands",
       "description": "Context: The event-log writer exists (lap 1) and the structured claim exists (lap 3). Now wire the straightforward state-change events. This is broad but mechanical; the subtler claim-event semantics are a separate SENIOR lap.\n\nOutcome: Each non-claim mutating command appends the correct event(s) after its store save succeeds; read/admin commands emit nothing.\n\nFiles \u0026 scope: internal/cmd/add.go (created — one event per new lap, including one per lap in a batch --json add), internal/cmd/done.go (completed), internal/cmd/done.go done-undo (reopened), internal/cmd/delete.go (deleted), internal/cmd/prune.go (pruned — one event per pruned lap), and the move/edit/assign commands from improve-cli-ergonomics (moved for move; edited for both edit and assign — there is no assigned event, assign is an edit shortcut, with detail payloads like pos/from/to).\n\nDesign: Emit exactly one event per applied state change, and only AFTER store.Save succeeds. Batch commands emit one line per affected lap (batch add -\u003e one created per new lap; prune -\u003e one pruned per removed lap). The writer is best-effort by contract: an append failure warns on stderr and never changes the exit code. Do NOT log read-only or admin commands under any circumstance: get, list, count, status, log, version, help, hook-only commands, init, on, off, update. Stamp cmd, file (resolved .laps-relative file), lap, title, assignee, scope (root), and detail as applicable.\n\nAcceptance: Tests proving: created appended per lap on add (and N created events for a batch of N); completed on done; reopened on done-undo; deleted on delete; one pruned per removed lap; moved/edited with detail on move/edit/assign; reads/admin commands append nothing; a forced log-write failure does not change the command exit code. go test ./... passes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-29T10:05:27.706343906Z",
-      "updatedAt": "2026-06-29T10:05:27.706343906Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T09:02:53.868421769Z",
+      "completedAt": "2026-06-30T09:02:53.868421769Z"
     },
     {
       "id": "laps-fc9b",

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -49,6 +50,13 @@ var deleteCmd = &cobra.Command{
 			exitCode = 2
 			exit(2, "delete: %v", err)
 		}
+		logEvent(beadsDir, &eventlog.Entry{
+			Event:    "deleted",
+			Cmd:      "delete",
+			Lap:      task.ID,
+			Title:    task.Title,
+			Assignee: task.Assignee,
+		})
 		if jsonOutput {
 			printJSON(map[string]interface{}{"deleted": id})
 		}

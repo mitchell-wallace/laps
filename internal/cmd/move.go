@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -85,12 +86,30 @@ Prints the moved task id on success.`,
 			fmt.Fprintf(os.Stderr, "laps: lap %s already complete; added to next available spot (head).\n", afterID)
 		}
 
+		oldOrder := task.Order
 		task.Order = order
 		task.UpdatedAt = time.Now().UTC()
 		if err := store.Save(path, file); err != nil {
 			exitCode = 2
 			exit(2, "move: %v", err)
 		}
+
+		detail := map[string]interface{}{
+			"position": position,
+			"from":     oldOrder,
+			"to":       task.Order,
+		}
+		if position == "after" {
+			detail["after"] = afterID
+		}
+		logEvent(beadsDir, &eventlog.Entry{
+			Event:    "moved",
+			Cmd:      "move",
+			Lap:      task.ID,
+			Title:    task.Title,
+			Assignee: task.Assignee,
+			Detail:   detail,
+		})
 
 		output = task.ID
 		if jsonOutput {
