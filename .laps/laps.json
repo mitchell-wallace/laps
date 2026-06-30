@@ -6,11 +6,11 @@
       "title": "Implement schema v3: kind discriminator, stint refs, v2 to v3 migration, stint files",
       "description": "Context: Foundational schema change for add-stints, change #3 of 4. Post-merge state ASSUMES improve-cli-ergonomics (scoped move/edit/assign) and add-event-log-and-status (event log, status, structured claim with claimedAt) are merged and working. Current schema is v2; store.Load (internal/store/store.go:128-145) decodes version+tasks in one DisallowUnknownFields pass, so the clear version-gate message becomes unreachable once unknown fields like kind/ref appear. Implements openspec tasks 1.1-1.6; the dedicated test suite is a separate follow-up lap (task 1.7).\n\nOutcome: Queue entries carry a `kind` discriminator (`lap` default, `stint`); a stint-ref entry reuses the envelope plus `ref` and orders by the same order key. CurrentVersion becomes 3. v2 files migrate by stamping kind:\"lap\" on every entry and bumping version, AFTER the existing v1-\u003ev2 ordering migration. Future-version files surface the clear version-gate message (not a generic unknown-field error). Stints live at .laps/stints/\u003cname\u003e.laps.json; archive dir at .laps/stints/archive/. Stint names are file-safe; archive moves are no-overwrite.\n\nFiles \u0026 scope: internal/store/store.go (Task +kind; stint-ref shape or kind switch on Task; CurrentVersion=3; Load decode-order; migrate extended to v2-\u003ev3; stint-name validation; archive path + no-overwrite helpers). Do not touch internal/cmd command surface (later laps) or claim.go structured fields (lap 11).\n\nDesign: Three subtleties. (1) Decode order is the core of task 1.3: do a LENIENT first decode of just the version envelope, run the version gate, THEN strict-decode entries. Otherwise a future v4 file fails with the generic unknown-field error instead of the clear update-laps message (design.md Risks). (2) Migration ordering: v1-\u003ev2 ordering migration THEN v2-\u003ev3 kind stamping, in that order, both idempotent; a no-kind entry is a lap by default. (3) Stint names are file names not paths: reject blank, os.PathSeparator, `.`, `..`, and collisions with active OR archived stint files. Archive moves MUST check target absence before os.Rename. Preserve Save's Normalize invariant.\n\nAcceptance: `just build` and `just lint` clean. Existing internal/store/store_test.go and ordering_test.go pass UNCHANGED (the migration/version-gate behavior they pin down is preserved, not regressed). Smoke: hand-craft a v2 file, load it, observe version=3 with kind:\"lap\" stamped on every entry.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-29T10:09:28.111355047Z",
-      "updatedAt": "2026-06-29T10:09:28.111355047Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T17:30:23.379860665Z",
+      "completedAt": "2026-06-30T17:30:23.379860665Z"
     },
     {
       "id": "laps-c020",

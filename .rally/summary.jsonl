@@ -28,3 +28,4 @@
 {"run_id":"relay-2-run-14","summary":"Documented event log, status/log commands, LAPS_SESSION, and structured claim format in README.md","updated_at":"2026-06-30T10:29:48Z","laps_completed":["laps-2ef1"]}
 {"run_id":"relay-2-run-15","summary":"Verified add-event-log-and-status end to end, fixed small README inaccuracies, completed all 30 tasks, and confirmed VERSION stayed at 0.8.1.","updated_at":"2026-06-30T10:35:30Z","laps_completed":["laps-0598"]}
 {"run_id":"relay-2-run-15","summary":"Verified add-event-log-and-status end to end, fixed small README inaccuracies, completed all 30 tasks, and confirmed VERSION stayed at 0.8.1.","updated_at":"2026-06-30T10:55:13Z","laps_completed":"none"}
+{"run_id":"relay-1-run-1","summary":"Implemented schema v3 store primitives: kind/ref entries, v2 migration, version-gated decode, and stint path/archive helpers.","updated_at":"2026-06-30T17:30:30Z","laps_completed":["laps-4267"]}
