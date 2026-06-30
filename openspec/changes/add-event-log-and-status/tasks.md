@@ -9,10 +9,10 @@
 
 ## 2. Wire events into commands
 
-- [ ] 2.1 Emit one event per applied state change: `created` (add, incl. one line per batch `--json` lap), `completed` (done), `reopened` (done undo), `claimed`/`unclaimed` (claim / claim undo), `deleted` (delete), `pruned` (one line per pruned lap)
-- [ ] 2.2 `done` clearing a claim SHALL emit `unclaimed` with `detail.reason:"completed"` immediately after the `completed` event (DECIDED: separate `unclaimed` event for log uniformity with the `replaced` reason)
-- [ ] 2.3 Preserve `claimedAt` and do not duplicate events for same-lap reclaims; for different-lap replacement emit `unclaimed` with `detail.reason:"replaced"` followed by `claimed`
-- [ ] 2.4 For claim-only mutations, append events only after `WriteClaim`/`RemoveClaim` succeeds and do not emit events on failed claim writes/removes
+- [x] 2.1 Emit one event per applied state change: `created` (add, incl. one line per batch `--json` lap), `completed` (done), `reopened` (done undo), `claimed`/`unclaimed` (claim / claim undo), `deleted` (delete), `pruned` (one line per pruned lap)
+- [x] 2.2 `done` clearing a claim SHALL emit `unclaimed` with `detail.reason:"completed"` immediately after the `completed` event (DECIDED: separate `unclaimed` event for log uniformity with the `replaced` reason)
+- [x] 2.3 Preserve `claimedAt` and do not duplicate events for same-lap reclaims; for different-lap replacement emit `unclaimed` with `detail.reason:"replaced"` followed by `claimed`
+- [x] 2.4 For claim-only mutations, append events only after `WriteClaim`/`RemoveClaim` succeeds and do not emit events on failed claim writes/removes
 - [ ] 2.5 Emit `moved` for `move` and `edited` for `edit`/`assign` (there is no `assigned` event — `assign` is an `edit` shortcut, so it logs `edited`) with `detail` payloads (pos, from/to) after `improve-cli-ergonomics` lands, or route them to that change
 - [ ] 2.6 Do not log read/admin commands (`get`, `list`, `count`, `status`, `log`, `version`, `help`, hook-only commands, `init`, `on`, `off`, `update`)
 

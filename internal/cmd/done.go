@@ -98,9 +98,21 @@ When a claimed task is completed, .laps/claim is cleared.`,
 			Assignee: task.Assignee,
 		})
 
-		// Best-effort: clearing the claim must not block a completed done.
+		// Best-effort: clearing the claim must not block a completed done. When the
+		// claim is actually removed, emit a SEPARATE unclaimed event tagged
+		// reason "completed", immediately after completed, for log uniformity with
+		// the replaced reason. A failed remove emits no unclaimed event.
 		if claim, err := store.ReadClaim(beadsDir, store.ResolveFile(fileFlag)); err == nil && claim.Lap == task.ID {
-			_ = store.RemoveClaim(beadsDir)
+			if err := store.RemoveClaim(beadsDir); err == nil {
+				logEvent(beadsDir, &eventlog.Entry{
+					Event:    "unclaimed",
+					Cmd:      "done",
+					Lap:      task.ID,
+					Title:    task.Title,
+					Assignee: task.Assignee,
+					Detail:   map[string]interface{}{"reason": "completed"},
+				})
+			}
 		}
 
 		output = task.ID

@@ -403,6 +403,236 @@ func TestEventLog_ReadsAppendNothing(t *testing.T) {
 	}
 }
 
+// lastDetailReason returns the detail.reason string of a parsed log line.
+func lastDetailReason(t *testing.T, line map[string]interface{}) string {
+	t.Helper()
+	detail, _ := line["detail"].(map[string]interface{})
+	r, _ := detail["reason"].(string)
+	return r
+}
+
+// TestEventLog_ClaimedOnClaim verifies a fresh claim appends exactly one
+// 'claimed' event for the claimed lap.
+func TestEventLog_ClaimedOnClaim(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+	assertNoLAPS_SESSION(t)
+
+	out, _, _ := runMB("add", "head", "--title", "Claim me", "--assignee", "SENIOR")
+	id := strings.TrimSpace(out)
+
+	if _, _, code := runMB("claim", id); code != 0 {
+		t.Fatalf("claim failed: code %d", code)
+	}
+
+	lines := readEventLog(t, beadsDir)
+	got := eventsOf(lines)
+	if len(got) != 2 || got[0] != "created" || got[1] != "claimed" {
+		t.Fatalf("expected [created, claimed], got %v", got)
+	}
+	last := lines[len(lines)-1]
+	if last["cmd"] != "claim" || last["lap"] != id || last["title"] != "Claim me" || last["assignee"] != "SENIOR" {
+		t.Errorf("claimed line = %v", last)
+	}
+}
+
+// TestEventLog_SameLapReclaimPreservesAndNoDuplicate verifies re-claiming the
+// already-claimed lap preserves claimedAt exactly and emits no second 'claimed'.
+func TestEventLog_SameLapReclaimPreservesAndNoDuplicate(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+	assertNoLAPS_SESSION(t)
+
+	out, _, _ := runMB("add", "head", "--title", "Sticky")
+	id := strings.TrimSpace(out)
+
+	if _, _, code := runMB("claim", id); code != 0 {
+		t.Fatalf("first claim failed: code %d", code)
+	}
+	first, err := store.ReadClaim(beadsDir, "laps.json")
+	if err != nil {
+		t.Fatalf("read claim: %v", err)
+	}
+	if first.ClaimedAt == nil {
+		t.Fatal("expected claimedAt to be recorded on first claim")
+	}
+
+	if _, _, code := runMB("claim", id); code != 0 {
+		t.Fatalf("reclaim failed: code %d", code)
+	}
+	second, err := store.ReadClaim(beadsDir, "laps.json")
+	if err != nil {
+		t.Fatalf("read claim after reclaim: %v", err)
+	}
+	if second.ClaimedAt == nil || !second.ClaimedAt.Equal(*first.ClaimedAt) {
+		t.Errorf("claimedAt not preserved on same-lap reclaim: first=%v second=%v", first.ClaimedAt, second.ClaimedAt)
+	}
+
+	// Exactly one 'claimed' event across both claims.
+	claimed := 0
+	for _, ev := range eventsOf(readEventLog(t, beadsDir)) {
+		if ev == "claimed" {
+			claimed++
+		}
+	}
+	if claimed != 1 {
+		t.Fatalf("expected exactly one claimed event after same-lap reclaim, got %d", claimed)
+	}
+}
+
+// TestEventLog_DifferentLapReplacement verifies replacing a claimed lap with a
+// different lap emits unclaimed(replaced) for the prior lap immediately before
+// claimed for the new lap.
+func TestEventLog_DifferentLapReplacement(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+	assertNoLAPS_SESSION(t)
+
+	outA, _, _ := runMB("add", "tail", "--title", "Alpha")
+	idA := strings.TrimSpace(outA)
+	outB, _, _ := runMB("add", "tail", "--title", "Beta")
+	idB := strings.TrimSpace(outB)
+
+	if _, _, code := runMB("claim", idA); code != 0 {
+		t.Fatalf("claim A failed: code %d", code)
+	}
+	if _, _, code := runMB("claim", idB); code != 0 {
+		t.Fatalf("claim B failed: code %d", code)
+	}
+
+	lines := readEventLog(t, beadsDir)
+	got := eventsOf(lines)
+	// created A, created B, claimed A, unclaimed(replaced) A, claimed B
+	if len(got) != 5 {
+		t.Fatalf("expected 5 events, got %v", got)
+	}
+	if got[2] != "claimed" || got[3] != "unclaimed" || got[4] != "claimed" {
+		t.Fatalf("expected [...claimed, unclaimed, claimed], got %v", got)
+	}
+	replaced := lines[3]
+	if replaced["lap"] != idA || lastDetailReason(t, replaced) != "replaced" {
+		t.Errorf("expected unclaimed(replaced) for %s, got %v", idA, replaced)
+	}
+	newClaim := lines[4]
+	if newClaim["lap"] != idB {
+		t.Errorf("expected claimed for %s, got %v", idB, newClaim)
+	}
+}
+
+// TestEventLog_DoneClaimedEmitsCompletedThenUnclaimed verifies completing a
+// claimed lap emits completed immediately followed by unclaimed(completed).
+func TestEventLog_DoneClaimedEmitsCompletedThenUnclaimed(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+	assertNoLAPS_SESSION(t)
+
+	out, _, _ := runMB("add", "head", "--title", "Work")
+	id := strings.TrimSpace(out)
+	if _, _, code := runMB("claim", id); code != 0 {
+		t.Fatalf("claim failed: code %d", code)
+	}
+	if _, _, code := runMB("done"); code != 0 {
+		t.Fatalf("done failed: code %d", code)
+	}
+
+	lines := readEventLog(t, beadsDir)
+	got := eventsOf(lines)
+	// created, claimed, completed, unclaimed(completed)
+	if len(got) != 4 || got[2] != "completed" || got[3] != "unclaimed" {
+		t.Fatalf("expected [..., completed, unclaimed], got %v", got)
+	}
+	unclaimed := lines[3]
+	if unclaimed["cmd"] != "done" || unclaimed["lap"] != id || lastDetailReason(t, unclaimed) != "completed" {
+		t.Errorf("expected unclaimed(completed) for %s on done, got %v", id, unclaimed)
+	}
+}
+
+// TestEventLog_ClaimUndoEmitsUnclaimed verifies 'claim undo' appends an
+// 'unclaimed' event after the claim is removed.
+func TestEventLog_ClaimUndoEmitsUnclaimed(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+	assertNoLAPS_SESSION(t)
+
+	out, _, _ := runMB("add", "head", "--title", "Undo me")
+	id := strings.TrimSpace(out)
+	if _, _, code := runMB("claim", id); code != 0 {
+		t.Fatalf("claim failed: code %d", code)
+	}
+	if _, _, code := runMB("claim", "undo"); code != 0 {
+		t.Fatalf("claim undo failed: code %d", code)
+	}
+
+	lines := readEventLog(t, beadsDir)
+	got := eventsOf(lines)
+	if len(got) != 3 || got[2] != "unclaimed" {
+		t.Fatalf("expected last event unclaimed, got %v", got)
+	}
+	last := lines[len(lines)-1]
+	if last["cmd"] != "claim-undo" || last["lap"] != id {
+		t.Errorf("unclaimed line = %v", last)
+	}
+}
+
+// TestEventLog_FailedClaimWriteEmitsNoEvent verifies a failed WriteClaim leaves
+// the log untouched (no 'claimed' event).
+func TestEventLog_FailedClaimWriteEmitsNoEvent(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+	assertNoLAPS_SESSION(t)
+
+	out, _, _ := runMB("add", "head", "--title", "No write")
+	id := strings.TrimSpace(out)
+
+	// Turn the claim path into a directory so WriteClaim's rename fails.
+	if err := os.Mkdir(store.ClaimPath(beadsDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, code := runMB("claim", id); code != 2 {
+		t.Fatalf("expected claim to fail with code 2, got %d", code)
+	}
+
+	for _, ev := range eventsOf(readEventLog(t, beadsDir)) {
+		if ev == "claimed" || ev == "unclaimed" {
+			t.Fatalf("a failed claim write must emit no claim event, found %q", ev)
+		}
+	}
+}
+
+// TestEventLog_FailedClaimRemoveEmitsNoEvent verifies a failed RemoveClaim
+// leaves the log untouched (no 'unclaimed' event).
+func TestEventLog_FailedClaimRemoveEmitsNoEvent(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+	assertNoLAPS_SESSION(t)
+
+	out, _, _ := runMB("add", "head", "--title", "No remove")
+	id := strings.TrimSpace(out)
+	if _, _, code := runMB("claim", id); code != 0 {
+		t.Fatalf("claim failed: code %d", code)
+	}
+
+	before := len(readEventLog(t, beadsDir))
+
+	// Make the .laps dir non-writable so os.Remove of the claim file fails while
+	// the file itself remains readable. Restored before TempDir cleanup.
+	if err := os.Chmod(beadsDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(beadsDir, 0o755)
+
+	if _, _, code := runMB("claim", "undo"); code != 2 {
+		t.Fatalf("expected claim undo to fail with code 2, got %d", code)
+	}
+
+	os.Chmod(beadsDir, 0o755)
+	after := readEventLog(t, beadsDir)
+	if len(after) != before {
+		t.Fatalf("a failed claim remove must emit no event: before=%d after=%d (%v)", before, len(after), eventsOf(after))
+	}
+}
+
 // TestEventLog_BestEffortDoesNotChangeExitCode verifies a forced log-write
 // failure leaves the command's exit code unchanged (0) and the mutation still
 // applies. (The one-line stderr warning contract itself is locked by the

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -54,9 +55,51 @@ task to complete.`,
 			exit(3, "task not found")
 		}
 
-		if err := store.WriteClaim(beadsDir, store.Claim{Lap: task.ID, File: store.ResolveFile(fileFlag)}); err != nil {
+		selectedFile := store.ResolveFile(fileFlag)
+		// Read the existing claim before overwriting it so we can tell a same-lap
+		// reclaim (a log no-op that preserves claimedAt) from a different-lap
+		// replacement (which retires the prior claim). A read error simply yields
+		// the zero claim, treated as "no prior claim".
+		existing, _ := store.ReadClaim(beadsDir, selectedFile)
+		newClaim := store.Claim{Lap: task.ID, File: selectedFile}
+		// A same-lap reclaim is exactly the case WriteClaim preserves claimedAt
+		// for: same lap and same file. Anything else is a new/replacing claim.
+		sameLapReclaim := existing.Lap == newClaim.Lap && existing.File == newClaim.File
+
+		if err := store.WriteClaim(beadsDir, newClaim); err != nil {
 			exitCode = 2
 			exit(2, "claim: %v", err)
+		}
+
+		// Events are appended ONLY after WriteClaim succeeds. A same-lap reclaim
+		// emits nothing (no duplicate claimed). Replacing a different claimed lap
+		// emits unclaimed(replaced) for the prior lap, then claimed for the new.
+		if !sameLapReclaim {
+			if existing.Lap != "" {
+				var prevTitle, prevAssignee string
+				for i := range file.Tasks {
+					if file.Tasks[i].ID == existing.Lap {
+						prevTitle = file.Tasks[i].Title
+						prevAssignee = file.Tasks[i].Assignee
+						break
+					}
+				}
+				logEvent(beadsDir, &eventlog.Entry{
+					Event:    "unclaimed",
+					Cmd:      "claim",
+					Lap:      existing.Lap,
+					Title:    prevTitle,
+					Assignee: prevAssignee,
+					Detail:   map[string]interface{}{"reason": "replaced"},
+				})
+			}
+			logEvent(beadsDir, &eventlog.Entry{
+				Event:    "claimed",
+				Cmd:      "claim",
+				Lap:      task.ID,
+				Title:    task.Title,
+				Assignee: task.Assignee,
+			})
 		}
 
 		output = task.ID
@@ -105,6 +148,13 @@ var claimUndoCmd = &cobra.Command{
 			exitCode = 2
 			exit(2, "claim undo: %v", err)
 		}
+		// Append only after RemoveClaim succeeds; a failed remove emits no event.
+		logEvent(beadsDir, &eventlog.Entry{
+			Event: "unclaimed",
+			Cmd:   "claim-undo",
+			Lap:   claimedID,
+			Title: title,
+		})
 
 		output = claimedID
 		if jsonOutput {
