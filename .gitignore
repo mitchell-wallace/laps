@@ -5,3 +5,4 @@ laps
 
 # Claim file created by `laps claim` - tracks which task is active
 .laps/claim
+.laps/log.jsonl
