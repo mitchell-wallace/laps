@@ -127,11 +127,11 @@
       "title": "Verify log reader and status snapshot slice",
       "description": "Context: The two user-facing commands (laps log, laps status) are now built on top of the event-log infra and structured claim. Verify them together against their specs before docs and final verification.\n\nOutcome: Confirmation that laps log and laps status behave per their DECIDED semantics and SHALL requirements. Check off tasks.md boxes 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 4.4, 4.5 only if correct and thorough.\n\nProcess: Use the openspec-verify-change skill against add-event-log-and-status. Identify the merge target first; treat improve-cli-ergonomics branch work as pre-existing baseline. Do NOT rewrite git history.\n\nDepth checks: For laps log — confirm filter-then-limit (not limit-then-filter), newest-last ordering, default -n 20, --since RFC3339 inclusive of the exact ts, malformed JSONL skipped (not fatal) with a per-line stderr note, --json-output emits a single {\"events\":[...]} object (not a bare array), missing log is empty. For laps status — walk each state transition (empty/complete/ready/active); confirm claimedAt is nullable RFC3339 UTC and ageSeconds is an integer that is null when claimedAt is null; confirm NO stale boolean exists; confirm corrupt store and malformed claim JSON take the error path (non-zero) while dangling/non-todo/wrong-file claims yield exit-0 with claim.valid=false and the claim is NOT auto-cleared; confirm --json-output shape is stable and includes file identity. Cross-check the status spec's active-lap-timestamp scenarios against the structured claim from lap 3. Run just test and just lint. Fix only tiny safe one-liners; escalate larger gaps to a head lap.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-29T10:05:27.706352513Z",
-      "updatedAt": "2026-06-29T10:05:27.706352513Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T10:12:23.569042072Z",
+      "completedAt": "2026-06-30T10:12:23.569042072Z"
     },
     {
       "id": "laps-2ef1",
