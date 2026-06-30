@@ -1885,6 +1885,31 @@ func TestJSONOutputOnOff(t *testing.T) {
 	}
 }
 
+func TestIsKnownCommand(t *testing.T) {
+	known := []string{
+		"add", "count", "get", "list", "ls", "move", "edit", "assign", "done",
+		"delete", "prune", "on", "off", "update", "version", "help", "--version",
+		"claim", "init", "log", "status",
+	}
+	for _, name := range known {
+		if !isKnownCommand(name) {
+			t.Fatalf("expected isKnownCommand(%q) = true", name)
+		}
+	}
+	// log and status are the newly-registered built-ins; assert them explicitly
+	// since they back the new reader/status commands and must not fall through to
+	// the hook-only intercept path.
+	if !isKnownCommand("log") {
+		t.Fatal("expected isKnownCommand(\"log\") = true")
+	}
+	if !isKnownCommand("status") {
+		t.Fatal("expected isKnownCommand(\"status\") = true")
+	}
+	if isKnownCommand("not-a-real-command") {
+		t.Fatal("expected unknown command to return false")
+	}
+}
+
 func TestIsJSONOutput(t *testing.T) {
 	if !isJSONOutput([]string{"list", "--json-output"}) {
 		t.Fatal("expected true for --json-output")
@@ -2642,8 +2667,9 @@ func TestInit(t *testing.T) {
 	if !strings.Contains(out, "Created .laps/laps.json") {
 		t.Fatalf("expected created message, got: %s", out)
 	}
-	if !strings.Contains(out, "Added .laps/claim to .gitignore") {
-		t.Fatalf("expected gitignore message, got: %s", out)
+	// Both target entries are missing, so the message must name both.
+	if !strings.Contains(out, "Added .laps/claim and .laps/log.jsonl to .gitignore") {
+		t.Fatalf("expected both-entries gitignore message, got: %s", out)
 	}
 
 	if _, err := os.Stat(filepath.Join(beadsDir, "laps.json")); err != nil {
@@ -2653,6 +2679,13 @@ func TestInit(t *testing.T) {
 	gitignoreData, _ := os.ReadFile(".gitignore")
 	if !strings.Contains(string(gitignoreData), ".laps/claim") {
 		t.Fatal("expected .laps/claim in .gitignore")
+	}
+	if !strings.Contains(string(gitignoreData), ".laps/log.jsonl") {
+		t.Fatal("expected .laps/log.jsonl in .gitignore")
+	}
+	// Pre-existing arbitrary content must survive verbatim.
+	if !strings.Contains(string(gitignoreData), "/bin/") {
+		t.Fatal("expected pre-existing /bin/ line preserved in .gitignore")
 	}
 
 	// Run again - should say Already initialized
@@ -2669,7 +2702,11 @@ func TestInitGitignoreAlreadyExists(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
 
-	os.WriteFile(".gitignore", []byte("/bin/\n.laps/claim\n"), 0644)
+	// Regression: the old scan broke at the first .laps/claim match, so it never
+	// noticed .laps/log.jsonl was missing. With the fix, init scans the complete
+	// file and appends only the missing entry while preserving the rest verbatim.
+	orig := []byte("/bin/\n.laps/claim\n# keep me\n")
+	os.WriteFile(".gitignore", orig, 0644)
 
 	out, _, code := runMB("init")
 	if code != 0 {
@@ -2678,8 +2715,73 @@ func TestInitGitignoreAlreadyExists(t *testing.T) {
 	if !strings.Contains(out, "Created .laps/laps.json") {
 		t.Fatalf("expected created message, got: %s", out)
 	}
-	if strings.Contains(out, ".gitignore") {
-		t.Fatalf("should not modify .gitignore, but output: %s", out)
+	// Only the log entry was missing, so the message names just it.
+	if !strings.Contains(out, "Added .laps/log.jsonl to .gitignore") {
+		t.Fatalf("expected log-only gitignore message, got: %s", out)
+	}
+	if strings.Contains(out, ".laps/claim and") {
+		t.Fatalf("should not claim to add .laps/claim (already present), got: %s", out)
+	}
+
+	data, _ := os.ReadFile(".gitignore")
+	got := string(data)
+	// .laps/log.jsonl must now be appended...
+	if !strings.Contains(got, ".laps/log.jsonl") {
+		t.Fatalf("expected .laps/log.jsonl appended to .gitignore, got: %s", got)
+	}
+	// ...and every pre-existing line preserved verbatim and in order.
+	for _, line := range []string{"/bin/", ".laps/claim", "# keep me"} {
+		if !strings.Contains(got, line) {
+			t.Fatalf("expected pre-existing line %q preserved, got: %s", line, got)
+		}
+	}
+	if c := strings.Count(got, ".laps/claim"); c != 1 {
+		t.Fatalf("expected .laps/claim exactly once, got %d: %s", c, got)
+	}
+}
+
+func TestInitGitignoreBothPresentNoChange(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	orig := []byte("/bin/\n.laps/claim\n.laps/log.jsonl\n")
+	os.WriteFile(".gitignore", orig, 0644)
+
+	out, _, code := runMB("init")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if strings.Contains(out, "Added") {
+		t.Fatalf("should not modify .gitignore when both entries present, got: %s", out)
+	}
+
+	// File must be byte-for-byte unchanged.
+	data, _ := os.ReadFile(".gitignore")
+	if string(data) != string(orig) {
+		t.Fatalf("expected .gitignore unchanged, got: %s", string(data))
+	}
+}
+
+func TestInitPreservesArbitraryGitignoreContent(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	orig := "/build/\n*.tmp\n\n# trailing comment\n"
+	os.WriteFile(".gitignore", []byte(orig), 0644)
+
+	if _, _, code := runMB("init"); code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+
+	data, _ := os.ReadFile(".gitignore")
+	got := string(data)
+	// Original content (including the blank line and comment) is preserved, and
+	// the two laps entries are appended at the end in their canonical order.
+	if !strings.HasPrefix(got, "/build/\n*.tmp\n\n# trailing comment\n") {
+		t.Fatalf("expected original .gitignore content preserved verbatim at top, got: %s", got)
+	}
+	if !strings.HasSuffix(got, ".laps/claim\n.laps/log.jsonl\n") {
+		t.Fatalf("expected both laps entries appended in order at end, got: %s", got)
 	}
 }
 

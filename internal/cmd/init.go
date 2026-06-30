@@ -33,31 +33,39 @@ var initCmd = &cobra.Command{
 			createdDefault = true
 		}
 
-		modifiedGitignore := false
 		gitignorePath := filepath.Join(repoRoot, ".gitignore")
-		claimLine := ".laps/claim"
+		gitignoreEntries := []string{".laps/claim", ".laps/log.jsonl"}
 
 		var lines []string
-		found := false
+		found := map[string]bool{}
 		if data, err := os.ReadFile(gitignorePath); err == nil {
 			scanner := bufio.NewScanner(bytes.NewReader(data))
 			for scanner.Scan() {
 				text := scanner.Text()
-				if strings.TrimSpace(text) == claimLine {
-					found = true
-					break
-				}
 				lines = append(lines, text)
+				trimmed := strings.TrimSpace(text)
+				for _, e := range gitignoreEntries {
+					if trimmed == e {
+						found[e] = true
+					}
+				}
 			}
 		}
 
-		if !found {
-			lines = append(lines, claimLine)
+		var added []string
+		for _, e := range gitignoreEntries {
+			if !found[e] {
+				added = append(added, e)
+				lines = append(lines, e)
+			}
+		}
+
+		modifiedGitignore := len(added) > 0
+		if modifiedGitignore {
 			data := []byte(strings.Join(lines, "\n") + "\n")
 			if err := os.WriteFile(gitignorePath, data, 0o644); err != nil {
 				exit(2, "update .gitignore: %v", err)
 			}
-			modifiedGitignore = true
 		}
 
 		if jsonOutput {
@@ -72,7 +80,7 @@ var initCmd = &cobra.Command{
 			fmt.Println("Created .laps/laps.json")
 		}
 		if modifiedGitignore {
-			fmt.Println("Added .laps/claim to .gitignore")
+			fmt.Printf("Added %s to .gitignore\n", joinGitignoreEntries(added))
 		}
 		if !createdDefault && !modifiedGitignore {
 			fmt.Println("Already initialized")
@@ -105,4 +113,20 @@ var initCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(initCmd)
+}
+
+// joinGitignoreEntries renders the list of entries added to .gitignore as a
+// human-readable phrase for the success message. The expected set is fixed at
+// two entries; ordering is preserved from the caller.
+func joinGitignoreEntries(entries []string) string {
+	switch len(entries) {
+	case 0:
+		return ""
+	case 1:
+		return entries[0]
+	case 2:
+		return entries[0] + " and " + entries[1]
+	default:
+		return strings.Join(entries[:len(entries)-1], ", ") + ", and " + entries[len(entries)-1]
+	}
 }

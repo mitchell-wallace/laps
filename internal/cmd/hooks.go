@@ -101,7 +101,7 @@ func getOptionalHookContext() (path, beadsDir string, ok bool) {
 
 func isKnownCommand(name string) bool {
 	switch name {
-	case "add", "count", "get", "list", "ls", "move", "edit", "assign", "done", "delete", "prune", "on", "off", "update", "version", "help", "--version", "claim", "init":
+	case "add", "count", "get", "list", "ls", "move", "edit", "assign", "done", "delete", "prune", "on", "off", "update", "version", "help", "--version", "claim", "init", "log", "status":
 		return true
 	}
 	return false

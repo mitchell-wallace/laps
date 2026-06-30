@@ -17,11 +17,11 @@
       "title": "Fix init gitignore scan to append all missing entries and register log/status commands",
       "description": "Context: Today internal/cmd/init.go:46-48 breaks out of its scan at the first .laps/claim match, so when .laps/claim is already gitignored the loop never reaches a check for .laps/log.jsonl and the log never gets ignored. Also, the new log and status subcommands must be recognized as built-in commands by the hook dispatcher.\n\nOutcome: laps init scans the COMPLETE .gitignore, appends only the missing entries among {.laps/claim, .laps/log.jsonl}, preserves every existing line, and prints a success message reflecting whichever entries were actually added. log and status are treated as built-in commands.\n\nFiles \u0026 scope: internal/cmd/init.go (the scan loop around :42-52, the modifiedGitignore decision, and the hardcoded success message at :75), and internal/cmd/hooks.go isKnownCommand switch (add \"log\" and \"status\"). Update TestInit / TestInitGitignoreAlreadyExists in internal/cmd/cmd_test.go if their assertions depend on the old single-entry behavior.\n\nDesign: Scan the entire file once, collect which of the two target entries are absent, and append exactly those (preserving all original lines and ordering). Replace the hardcoded \"Added .laps/claim to .gitignore\" message with one that names the entries actually added (e.g. both, just claim, or just log). When neither is missing, keep the existing \"Already initialized\" path. The isKnownCommand change is a two-token addition to the switch.\n\nAcceptance: A regression test proving the bug is fixed: a .gitignore that already contains .laps/claim still gets .laps/log.jsonl appended by a subsequent laps init. Also: both missing -\u003e both appended; both present -\u003e no change/\"Already initialized\"; existing arbitrary .gitignore content preserved verbatim. isKnownCommand(\"log\") and isKnownCommand(\"status\") return true. go test ./... passes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-29T10:05:27.706338145Z",
-      "updatedAt": "2026-06-29T10:05:27.706338145Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T07:52:10.698259913Z",
+      "completedAt": "2026-06-30T07:52:10.698259913Z"
     },
     {
       "id": "laps-6787",
