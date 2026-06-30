@@ -57,8 +57,9 @@ Prints each new task id on success. With `--json-output`, object input returns a
 
 ### `laps init`
 Initialize laps in the current repository. Creates `.laps/laps.json` (if absent)
-and appends `.laps/claim` to `.gitignore` (if not already present). When changes
-are made, attempts to auto-commit them as `chore: laps init`.
+and appends `.laps/claim` and `.laps/log.jsonl` to `.gitignore` (if either is
+not already present). When changes are made, attempts to auto-commit them as
+`chore: laps init`.
 
 ### `laps get [head|<id>]`
 Get a task by id, or read the head task if no argument is given.
@@ -344,7 +345,8 @@ See [`examples/hooks.json`](examples/hooks.json) for a working auto-commit examp
 
 ## Event Log
 
-Laps features a native, best-effort, append-only event log that records state changes and command executions.
+Laps features a native, best-effort, append-only event log that records state
+changes from mutating commands.
 
 ### Characteristics
 - **Native**: Built directly into `laps` commands (not configured as a hook).
@@ -359,7 +361,7 @@ If the `LAPS_SESSION` environment variable is set, its value is automatically st
 Each line in `.laps/log.jsonl` is a JSON object with the following fields:
 
 - `ts` — UTC timestamp of the event (RFC3339 format).
-- `event` — the event type (e.g. `claimed`, `unclaimed`, `completed`, `added`, `moved`, `edited`).
+- `event` — the event type (e.g. `claimed`, `unclaimed`, `completed`, `created`, `moved`, `edited`).
 - `cmd` — the name of the command that triggered the event (e.g. `claim`, `claim-undo`, `done`, `add`, `move`, `edit`).
 - `file` — the relative path of the task file affected (e.g. `laps.json`).
 - `lap` — the ID of the affected task (omitted if not task-specific).
