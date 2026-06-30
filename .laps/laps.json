@@ -83,11 +83,11 @@
       "title": "Fix cross-file claim event file identity and metadata",
       "description": "When claim replacement or claim undo clears a claim from another --file, the event log currently stamps the current selected file instead of claim.File and loses prior title/assignee. Update event logging to preserve per-event file identity and denormalized metadata across files, and add regression tests for replacement and undo across different task files.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-30T09:30:05.851481354Z",
-      "updatedAt": "2026-06-30T09:30:05.851481354Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T09:36:54.956398382Z",
+      "completedAt": "2026-06-30T09:36:54.956398382Z"
     },
     {
       "id": "work-ad4d",
