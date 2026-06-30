@@ -47,7 +47,7 @@ func TestAppend_WritesValidLine(t *testing.T) {
 	beadsDir := t.TempDir()
 	os.Unsetenv("LAPS_SESSION")
 
-	Append(beadsDir, Entry{
+	Append(beadsDir, &Entry{
 		Event:    "created",
 		Cmd:      "add",
 		File:     "laps.json",
@@ -100,7 +100,7 @@ func TestAppend_WritesValidLine(t *testing.T) {
 func TestAppend_OmitsEmptyOptionalFields(t *testing.T) {
 	beadsDir := t.TempDir()
 
-	Append(beadsDir, Entry{Event: "completed", Cmd: "done", File: "laps.json"})
+	Append(beadsDir, &Entry{Event: "completed", Cmd: "done", File: "laps.json"})
 
 	m := lastLine(t, beadsDir)
 	for _, k := range []string{"lap", "title", "assignee"} {
@@ -122,13 +122,13 @@ func TestAppend_Session(t *testing.T) {
 	beadsDir := t.TempDir()
 
 	t.Setenv("LAPS_SESSION", "run-42")
-	Append(beadsDir, Entry{Event: "created", Cmd: "add", File: "laps.json"})
+	Append(beadsDir, &Entry{Event: "created", Cmd: "add", File: "laps.json"})
 	if got := lastLine(t, beadsDir)["session"]; got != "run-42" {
 		t.Errorf("session = %v, want run-42", got)
 	}
 
 	os.Unsetenv("LAPS_SESSION")
-	Append(beadsDir, Entry{Event: "completed", Cmd: "done", File: "laps.json"})
+	Append(beadsDir, &Entry{Event: "completed", Cmd: "done", File: "laps.json"})
 	m := lastLine(t, beadsDir)
 	if got, ok := m["session"]; !ok || got != "" {
 		t.Errorf("session = %v (ok=%v), want present empty string", got, ok)
@@ -140,12 +140,12 @@ func TestAppend_Session(t *testing.T) {
 func TestAppend_ScopeDefaultsRoot(t *testing.T) {
 	beadsDir := t.TempDir()
 
-	Append(beadsDir, Entry{Event: "created", Cmd: "add", File: "laps.json"})
+	Append(beadsDir, &Entry{Event: "created", Cmd: "add", File: "laps.json"})
 	if got := lastLine(t, beadsDir)["scope"]; got != "root" {
 		t.Errorf("scope = %v, want root", got)
 	}
 
-	Append(beadsDir, Entry{Event: "created", Cmd: "add", File: "auth.json", Scope: "stint-auth"})
+	Append(beadsDir, &Entry{Event: "created", Cmd: "add", File: "auth.json", Scope: "stint-auth"})
 	if got := lastLine(t, beadsDir)["scope"]; got != "stint-auth" {
 		t.Errorf("scope = %v, want stint-auth", got)
 	}
@@ -166,7 +166,7 @@ func TestAppend_BestEffortOnFailure(t *testing.T) {
 	t.Cleanup(func() { stderr = prev })
 
 	// Must not panic and returns nothing (caller unaffected by contract).
-	Append(beadsDir, Entry{Event: "created", Cmd: "add", File: "laps.json"})
+	Append(beadsDir, &Entry{Event: "created", Cmd: "add", File: "laps.json"})
 
 	if buf.Len() == 0 {
 		t.Fatal("expected a one-line stderr warning on write failure, got none")
@@ -186,7 +186,7 @@ func TestAppend_Additive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	Append(beadsDir, Entry{Event: "completed", Cmd: "done", File: "laps.json"})
+	Append(beadsDir, &Entry{Event: "completed", Cmd: "done", File: "laps.json"})
 
 	lines := readLines(t, beadsDir)
 	if len(lines) != 2 {

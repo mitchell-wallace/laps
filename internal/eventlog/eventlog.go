@@ -74,25 +74,27 @@ type Entry struct {
 // Append writes one event line to .laps/log.jsonl under beadsDir. It is
 // best-effort: a failure is reported as a one-line warning on stderr and is
 // never returned to the caller or reflected in an exit code.
-func Append(beadsDir string, e Entry) {
+func Append(beadsDir string, e *Entry) {
 	if err := write(beadsDir, e); err != nil {
-		fmt.Fprintf(stderr, "laps: event log: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "laps: event log: %v\n", err)
 	}
 }
 
 // write builds, marshals, and appends a single line. It returns any error so
 // Append can report it on stderr without surfacing it to the caller.
-func write(beadsDir string, e Entry) error {
+func write(beadsDir string, e *Entry) error {
 	path := filepath.Join(beadsDir, LogFileName)
 	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", beadsDir, err)
 	}
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	b, err := json.Marshal(buildLine(e))
 	if err != nil {
@@ -107,7 +109,7 @@ func write(beadsDir string, e Entry) error {
 
 // buildLine turns caller input into a full schema Line, stamping TS and Session
 // and defaulting Scope/Detail.
-func buildLine(e Entry) Line {
+func buildLine(e *Entry) Line {
 	scope := e.Scope
 	if scope == "" {
 		scope = defaultScope
