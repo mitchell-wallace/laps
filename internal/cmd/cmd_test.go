@@ -51,12 +51,18 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	addStdin = false
 	updateYes = false
 	forceUndo = false
+	editTitle = ""
+	editDescription = ""
+	editAssignee = ""
 	for _, f := range []*pflag.FlagSet{
 		rootCmd.PersistentFlags(),
 		addCmd.Flags(),
 		listCmd.Flags(),
 		updateCmd.Flags(),
 		doneUndoCmd.Flags(),
+		editCmd.Flags(),
+		moveCmd.Flags(),
+		assignCmd.Flags(),
 	} {
 		f.VisitAll(func(flag *pflag.Flag) {
 			flag.Changed = false
@@ -116,12 +122,18 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	addStdin = false
 	updateYes = false
 	forceUndo = false
+	editTitle = ""
+	editDescription = ""
+	editAssignee = ""
 	for _, f := range []*pflag.FlagSet{
 		rootCmd.PersistentFlags(),
 		addCmd.Flags(),
 		listCmd.Flags(),
 		updateCmd.Flags(),
 		doneUndoCmd.Flags(),
+		editCmd.Flags(),
+		moveCmd.Flags(),
+		assignCmd.Flags(),
 	} {
 		f.VisitAll(func(flag *pflag.Flag) {
 			flag.Changed = false
@@ -1481,6 +1493,23 @@ func idxBefore(s, a, b string) bool {
 	ia := strings.Index(s, a)
 	ib := strings.Index(s, b)
 	return ia >= 0 && ib >= 0 && ia < ib
+}
+
+// taskByID loads the laps store under beadsDir and returns the task with the
+// given id, failing the test if it is absent.
+func taskByID(t *testing.T, beadsDir, id string) *store.Task {
+	t.Helper()
+	data, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("load store: %v", err)
+	}
+	for i := range data.Tasks {
+		if data.Tasks[i].ID == id {
+			return &data.Tasks[i]
+		}
+	}
+	t.Fatalf("task %s not found in store", id)
+	return nil
 }
 
 func TestJSONOutputAdd(t *testing.T) {
@@ -2966,5 +2995,415 @@ func TestMoveHookContext(t *testing.T) {
 	}
 	if !strings.Contains(out, "AFTER:"+id+":Mover") {
 		t.Fatalf("expected after hook with task context, got: %s", out)
+	}
+}
+
+// --- Edit / Assign tests ---
+
+// TestEditTitleOnlyDoesNotLeakFieldClears is the regression guard for the
+// flag-reset harness. edit's semantics hinge on cmd.Flags().Changed: a cleared
+// description/assignee is encoded as "flag set, empty value". If the reset
+// harness fails to clear editCmd's Changed state, a title-only edit following
+// a clear-edit would silently wipe the other fields. Clearing fields on one
+// task must NOT affect a later title-only edit of a different task.
+func TestEditTitleOnlyDoesNotLeakFieldClears(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	outA, _, _ := runMB("add", "tail", "--title", "A", "--description", "descA", "--assignee", "alA")
+	outB, _, _ := runMB("add", "tail", "--title", "B", "--description", "descB", "--assignee", "alB")
+	idA := strings.TrimSpace(outA)
+	idB := strings.TrimSpace(outB)
+
+	// Clear both flagged fields on A. This sets description/assignee Changed=true
+	// and leaves editDescription/editAssignee at "". Without a reset, those leak.
+	if _, _, code := runMB("edit", idA, "--description", "", "--assignee", ""); code != 0 {
+		t.Fatalf("clear-edit on A failed, code %d", code)
+	}
+
+	// Now edit only B's title. description/assignee must be untouched.
+	out, errStr, code := runMB("edit", idB, "--title", "B2")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if got := strings.TrimSpace(out); got != idB {
+		t.Fatalf("expected edit to echo id %s, got %q", idB, got)
+	}
+
+	task := taskByID(t, beadsDir, idB)
+	if task.Title != "B2" {
+		t.Fatalf("expected title B2, got %q", task.Title)
+	}
+	if task.Description != "descB" {
+		t.Fatalf("title-only edit leaked a description clear; got %q", task.Description)
+	}
+	if task.Assignee != "alB" {
+		t.Fatalf("title-only edit leaked an assignee clear; got %q", task.Assignee)
+	}
+}
+
+func TestEditTitleField(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Old", "--description", "keep", "--assignee", "al")
+	id := strings.TrimSpace(out)
+
+	if _, errStr, code := runMB("edit", id, "--title", "New Title"); code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	task := taskByID(t, beadsDir, id)
+	if task.Title != "New Title" {
+		t.Fatalf("expected title 'New Title', got %q", task.Title)
+	}
+	if task.Description != "keep" || task.Assignee != "al" {
+		t.Fatalf("title edit must not touch other fields; desc=%q assignee=%q", task.Description, task.Assignee)
+	}
+}
+
+func TestEditDescriptionField(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	if _, errStr, code := runMB("edit", id, "--description", "fresh desc"); code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if task := taskByID(t, beadsDir, id); task.Description != "fresh desc" {
+		t.Fatalf("expected description 'fresh desc', got %q", task.Description)
+	}
+}
+
+func TestEditDescriptionUnescapesNewlines(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	// The literal two-character sequence backslash-n is converted to a newline.
+	if _, errStr, code := runMB("edit", id, "--description", "line1\\nline2"); code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	task := taskByID(t, beadsDir, id)
+	if task.Description != "line1\nline2" {
+		t.Fatalf("expected escaped newline expansion to %q, got %q", "line1\nline2", task.Description)
+	}
+}
+
+func TestEditClearsDescription(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T", "--description", "to clear")
+	id := strings.TrimSpace(out)
+
+	if _, errStr, code := runMB("edit", id, "--description", ""); code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if task := taskByID(t, beadsDir, id); task.Description != "" {
+		t.Fatalf("expected description cleared, got %q", task.Description)
+	}
+}
+
+func TestEditAssigneeTrims(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	if _, errStr, code := runMB("edit", id, "--assignee", "  carol  "); code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if task := taskByID(t, beadsDir, id); task.Assignee != "carol" {
+		t.Fatalf("expected trimmed assignee 'carol', got %q", task.Assignee)
+	}
+}
+
+func TestEditClearsAssignee(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T", "--assignee", "al")
+	id := strings.TrimSpace(out)
+
+	if _, errStr, code := runMB("edit", id, "--assignee", ""); code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if task := taskByID(t, beadsDir, id); task.Assignee != "" {
+		t.Fatalf("expected assignee cleared, got %q", task.Assignee)
+	}
+}
+
+func TestEditBlankTitleErrors(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	_, errStr, code := runMB("edit", id, "--title", "   ")
+	if code != 1 {
+		t.Fatalf("expected code 1 for blank title, got %d", code)
+	}
+	if !strings.Contains(errStr, "title must not be blank") {
+		t.Fatalf("expected blank-title error, got: %s", errStr)
+	}
+}
+
+func TestEditNoFieldFlagsExitsOne(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	_, errStr, code := runMB("edit", id)
+	if code != 1 {
+		t.Fatalf("expected code 1 with no field flags, got %d", code)
+	}
+	if !strings.Contains(errStr, "at least one of") {
+		t.Fatalf("expected field-required error, got: %s", errStr)
+	}
+}
+
+func TestEditRequiresID(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	// A field flag is set so the field-required check passes, but no id is given.
+	_, errStr, code := runMB("edit", "--title", "X")
+	if code != 1 {
+		t.Fatalf("expected code 1 with no id, got %d", code)
+	}
+	if !strings.Contains(errStr, "a task id is required") {
+		t.Fatalf("expected id-required error, got: %s", errStr)
+	}
+}
+
+func TestEditNotFound(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("edit", "ghost-id", "--title", "X")
+	if code != 1 {
+		t.Fatalf("expected code 1 for unknown id, got %d", code)
+	}
+	if !strings.Contains(errStr, "not found") {
+		t.Fatalf("expected not-found error, got: %s", errStr)
+	}
+}
+
+func TestEditSuccessPrintsOnlyID(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	out, errStr, code := runMB("edit", id, "--title", "T2")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if out != id+"\n" {
+		t.Fatalf("expected stdout to be only the id %q, got %q", id, out)
+	}
+}
+
+func TestEditJSONOutput(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	out, errStr, code := runMB("edit", id, "--title", "T2", "--description", "d", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	task, ok := result["task"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected task object in JSON, got: %s", out)
+	}
+	if task["id"] != id {
+		t.Fatalf("expected preserved id %s, got %v", id, task["id"])
+	}
+	if task["title"] != "T2" {
+		t.Fatalf("expected title 'T2', got %v", task["title"])
+	}
+	if task["description"] != "d" {
+		t.Fatalf("expected description 'd', got %v", task["description"])
+	}
+}
+
+func TestEditDoneLapWarnsAndPreservesCompletion(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Done one", "--description", "d")
+	id := strings.TrimSpace(out)
+	runMB("claim")
+	if _, _, code := runMB("done"); code != 0 {
+		t.Fatalf("setup done failed, code %d", code)
+	}
+
+	_, errStr, code := runMB("edit", id, "--title", "Renamed")
+	if code != 0 {
+		t.Fatalf("expected code 0 editing a done lap, got %d, stderr: %s", code, errStr)
+	}
+	// The warning is emitted on stderr and must not reopen the lap.
+	if !strings.Contains(errStr, "already complete") || !strings.Contains(errStr, "without reopening") {
+		t.Fatalf("expected done-lap edit warning on stderr, got: %q", errStr)
+	}
+
+	task := taskByID(t, beadsDir, id)
+	if task.Title != "Renamed" {
+		t.Fatalf("expected title applied to done lap, got %q", task.Title)
+	}
+	if !task.IsDone {
+		t.Fatal("editing a done lap must not reopen it (IsDone must stay true)")
+	}
+	if task.CompletedAt == nil {
+		t.Fatal("editing a done lap must preserve completedAt")
+	}
+}
+
+func TestEditHookContext(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "EditMe", "--assignee", "al")
+	id := strings.TrimSpace(out)
+
+	// before and after hooks for "edit" must both receive the affected lap's
+	// id and title in the standard hook variables.
+	hooks := `{"version":1,"hooks":[` +
+		`{"title":"beforeEdit","command":"edit","when":"before","run":"echo BEFORE:$id:$title","passback":true},` +
+		`{"title":"afterEdit","command":"edit","when":"after","run":"echo AFTER:$id:$title","passback":true}` +
+		`]}`
+	if err := os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errStr, code := runMB("edit", id, "--title", "EditMe2")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	// The before hook sees the pre-edit title; the after hook sees the new one.
+	if !strings.Contains(out, "BEFORE:"+id+":EditMe") {
+		t.Fatalf("expected before hook with task context, got: %s", out)
+	}
+	if !strings.Contains(out, "AFTER:"+id+":EditMe2") {
+		t.Fatalf("expected after hook with updated task context, got: %s", out)
+	}
+}
+
+func TestAssignSetsAssignee(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	if _, errStr, code := runMB("assign", id, "reviewer"); code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if task := taskByID(t, beadsDir, id); task.Assignee != "reviewer" {
+		t.Fatalf("expected assignee 'reviewer', got %q", task.Assignee)
+	}
+}
+
+func TestAssignTrimsAssignee(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	if _, errStr, code := runMB("assign", id, "  reviewer  "); code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if task := taskByID(t, beadsDir, id); task.Assignee != "reviewer" {
+		t.Fatalf("expected trimmed assignee 'reviewer', got %q", task.Assignee)
+	}
+}
+
+func TestAssignBlankClearsAssignee(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T", "--assignee", "al")
+	id := strings.TrimSpace(out)
+
+	if _, errStr, code := runMB("assign", id, ""); code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if task := taskByID(t, beadsDir, id); task.Assignee != "" {
+		t.Fatalf("expected blank role to clear assignee, got %q", task.Assignee)
+	}
+}
+
+func TestAssignUsageError(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	_, errStr, code := runMB("assign", id)
+	if code != 1 {
+		t.Fatalf("expected code 1 with missing role, got %d", code)
+	}
+	if !strings.Contains(errStr, "usage") {
+		t.Fatalf("expected usage error, got: %s", errStr)
+	}
+}
+
+func TestAssignSuccessPrintsOnlyID(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	out, errStr, code := runMB("assign", id, "role")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if out != id+"\n" {
+		t.Fatalf("expected stdout to be only the id %q, got %q", id, out)
+	}
+}
+
+func TestEditAndAssignDispatchThroughExecute(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	// edit and assign are registered built-ins (isKnownCommand), so Execute
+	// must dispatch to their cobra commands rather than the hook-only path.
+	editOut, errStr, err := runMBExecute("edit", id, "--title", "ViaExec")
+	if err != nil {
+		t.Fatalf("expected nil error dispatching edit, got %v, stderr: %s", err, errStr)
+	}
+	if got := strings.TrimSpace(editOut); got != id {
+		t.Fatalf("expected dispatched edit to echo id %s, got %q", id, got)
+	}
+
+	assignOut, errStr, err := runMBExecute("assign", id, "executor")
+	if err != nil {
+		t.Fatalf("expected nil error dispatching assign, got %v, stderr: %s", err, errStr)
+	}
+	if got := strings.TrimSpace(assignOut); got != id {
+		t.Fatalf("expected dispatched assign to echo id %s, got %q", id, got)
 	}
 }
