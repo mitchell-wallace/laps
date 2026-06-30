@@ -94,11 +94,11 @@
       "title": "Update README command reference for new commands",
       "description": "**Context** — Implements task 4.1 (docs). All new commands (`ls`, `move`, `edit`, `assign`) and the `list` two-line/`--oneline` behavior now exist and are verified. Task 4.2 is a non-action — do NOT bump `VERSION`; the 0.9.0 bump belongs to the `add-stints-gating` change.\n\n**Outcome** — `README.md` command reference documents the new surface accurately and no longer lists these names as reserved hook-only command names.\n\n**Files \u0026 scope** — `README.md` only. Do NOT touch `VERSION` (4.2). Do NOT touch `openspec/` or source.\n\n**Design** — Mirror the existing README command-reference tone and format. Document: `list` two-line default + `--oneline` for the prior shape; `ls` as an alias of `list`; `move \u003cid\u003e head|tail|after \u003cid\u003e` (note the id is preserved); `edit \u003cid\u003e [--title] [--description] [--assignee]` (≥1 flag required; `\"\"` clears a field); `assign \u003cid\u003e \u003crole\u003e`. If the README lists reserved/hook-only command names anywhere, remove `ls`/`move`/`edit`/`assign` from that list (they are now built-ins). Keep it scoped to user-visible behavior — no internal implementation detail.\n\n**Acceptance** — README renders; commands and flags match the actual binary (`bin/laps list --help`, `bin/laps move --help`, `bin/laps edit --help`, `bin/laps assign --help`); the `VERSION` file is unchanged.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-29T10:10:35.710103127Z",
-      "updatedAt": "2026-06-29T10:10:35.710103127Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T01:26:48.287356109Z",
+      "completedAt": "2026-06-30T01:26:48.287356109Z"
     },
     {
       "id": "laps-5476",
