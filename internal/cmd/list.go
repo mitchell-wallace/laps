@@ -35,10 +35,11 @@ Default shows todo tasks only, head first.
 		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
 		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
 
-		activeID, err := store.ReadClaim(beadsDir)
+		claim, err := store.ReadClaim(beadsDir, store.ResolveFile(fileFlag))
 		if err != nil {
 			exit(2, "read claim: %v", err)
 		}
+		activeID := claim.Lap
 
 		var lines []string
 		var jsonTasks []store.Task

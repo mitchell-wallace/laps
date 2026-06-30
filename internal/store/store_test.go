@@ -446,16 +446,22 @@ func TestClaimCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := WriteClaim(beadsDir, "test-id-123"); err != nil {
+	if err := WriteClaim(beadsDir, Claim{Lap: "test-id-123", File: "laps.json"}); err != nil {
 		t.Fatalf("WriteClaim: %v", err)
 	}
 
-	id, err := ReadClaim(beadsDir)
+	claim, err := ReadClaim(beadsDir, "laps.json")
 	if err != nil {
 		t.Fatalf("ReadClaim: %v", err)
 	}
-	if id != "test-id-123" {
-		t.Fatalf("expected 'test-id-123', got %q", id)
+	if claim.Lap != "test-id-123" {
+		t.Fatalf("expected lap 'test-id-123', got %q", claim.Lap)
+	}
+	if claim.File != "laps.json" {
+		t.Fatalf("expected file 'laps.json', got %q", claim.File)
+	}
+	if claim.ClaimedAt == nil {
+		t.Fatalf("expected claimedAt to be recorded, got nil")
 	}
 
 	cp := ClaimPath(beadsDir)
@@ -467,12 +473,12 @@ func TestClaimCRUD(t *testing.T) {
 		t.Fatalf("RemoveClaim: %v", err)
 	}
 
-	id, err = ReadClaim(beadsDir)
+	claim, err = ReadClaim(beadsDir, "laps.json")
 	if err != nil {
 		t.Fatalf("ReadClaim after remove: %v", err)
 	}
-	if id != "" {
-		t.Fatalf("expected empty claim after remove, got %q", id)
+	if !claim.IsZero() {
+		t.Fatalf("expected no claim after remove, got %+v", claim)
 	}
 
 	// Remove when already gone should not error
@@ -481,11 +487,149 @@ func TestClaimCRUD(t *testing.T) {
 	}
 
 	// ReadClaim on missing file
-	id, err = ReadClaim(beadsDir)
+	claim, err = ReadClaim(beadsDir, "laps.json")
 	if err != nil {
 		t.Fatalf("ReadClaim on empty: %v", err)
 	}
-	if id != "" {
-		t.Fatalf("expected empty claim, got %q", id)
+	if !claim.IsZero() {
+		t.Fatalf("expected no claim, got %+v", claim)
+	}
+}
+
+func TestClaimRecordsClaimedAt(t *testing.T) {
+	dir := t.TempDir()
+	beadsDir := filepath.Join(dir, ".laps")
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	before := time.Now().UTC().Add(-time.Second)
+	if err := WriteClaim(beadsDir, Claim{Lap: "lap-1", File: "laps.json"}); err != nil {
+		t.Fatalf("WriteClaim: %v", err)
+	}
+
+	claim, err := ReadClaim(beadsDir, "laps.json")
+	if err != nil {
+		t.Fatalf("ReadClaim: %v", err)
+	}
+	if claim.ClaimedAt == nil {
+		t.Fatal("expected claimedAt to be set")
+	}
+	if claim.ClaimedAt.Before(before) {
+		t.Fatalf("claimedAt %v is before write time %v", claim.ClaimedAt, before)
+	}
+	original := *claim.ClaimedAt
+
+	// Re-claiming the same lap preserves the original claimedAt.
+	if err := WriteClaim(beadsDir, Claim{Lap: "lap-1", File: "laps.json"}); err != nil {
+		t.Fatalf("WriteClaim (re-claim): %v", err)
+	}
+	claim, err = ReadClaim(beadsDir, "laps.json")
+	if err != nil {
+		t.Fatalf("ReadClaim (re-claim): %v", err)
+	}
+	if claim.ClaimedAt == nil || !claim.ClaimedAt.Equal(original) {
+		t.Fatalf("expected preserved claimedAt %v, got %v", original, claim.ClaimedAt)
+	}
+
+	// Claiming a different lap records a fresh claimedAt.
+	if err := WriteClaim(beadsDir, Claim{Lap: "lap-2", File: "laps.json"}); err != nil {
+		t.Fatalf("WriteClaim (new lap): %v", err)
+	}
+	claim, err = ReadClaim(beadsDir, "laps.json")
+	if err != nil {
+		t.Fatalf("ReadClaim (new lap): %v", err)
+	}
+	if claim.Lap != "lap-2" {
+		t.Fatalf("expected lap 'lap-2', got %q", claim.Lap)
+	}
+}
+
+func TestReadClaimLegacyBareID(t *testing.T) {
+	dir := t.TempDir()
+	beadsDir := filepath.Join(dir, ".laps")
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Legacy format: a bare id with trailing newline.
+	if err := os.WriteFile(ClaimPath(beadsDir), []byte("legacy-id-7\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	claim, err := ReadClaim(beadsDir, "selected.json")
+	if err != nil {
+		t.Fatalf("ReadClaim: %v", err)
+	}
+	if claim.Lap != "legacy-id-7" {
+		t.Fatalf("expected lap 'legacy-id-7', got %q", claim.Lap)
+	}
+	if claim.File != "selected.json" {
+		t.Fatalf("expected file to be the selected file 'selected.json', got %q", claim.File)
+	}
+	if claim.ClaimedAt != nil {
+		t.Fatalf("expected nil claimedAt for legacy claim, got %v", claim.ClaimedAt)
+	}
+}
+
+func TestReadClaimIgnoresUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	beadsDir := filepath.Join(dir, ".laps")
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// A future writer adds a "scope" field that this reader does not know.
+	body := `{"lap":"lap-9","file":"laps.json","scope":"root","claimedAt":null}`
+	if err := os.WriteFile(ClaimPath(beadsDir), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	claim, err := ReadClaim(beadsDir, "laps.json")
+	if err != nil {
+		t.Fatalf("ReadClaim with unknown field should not error: %v", err)
+	}
+	if claim.Lap != "lap-9" || claim.File != "laps.json" {
+		t.Fatalf("unexpected claim: %+v", claim)
+	}
+}
+
+func TestReadClaimMalformedStructured(t *testing.T) {
+	dir := t.TempDir()
+	beadsDir := filepath.Join(dir, ".laps")
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]string{
+		"truncated":      `{"lap":"x",`,
+		"wrong-type-lap": `{"lap":123}`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(ClaimPath(beadsDir), []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, err := ReadClaim(beadsDir, "laps.json")
+			if !errors.Is(err, ErrMalformedClaim) {
+				t.Fatalf("expected ErrMalformedClaim, got %v", err)
+			}
+		})
+	}
+}
+
+func TestReadClaimWhitespaceIsNoClaim(t *testing.T) {
+	dir := t.TempDir()
+	beadsDir := filepath.Join(dir, ".laps")
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ClaimPath(beadsDir), []byte("   \n\t  \n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	claim, err := ReadClaim(beadsDir, "laps.json")
+	if err != nil {
+		t.Fatalf("whitespace claim should not error: %v", err)
+	}
+	if !claim.IsZero() {
+		t.Fatalf("expected no claim for whitespace file, got %+v", claim)
 	}
 }

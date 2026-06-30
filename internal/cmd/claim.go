@@ -54,7 +54,7 @@ task to complete.`,
 			exit(3, "task not found")
 		}
 
-		if err := store.WriteClaim(beadsDir, task.ID); err != nil {
+		if err := store.WriteClaim(beadsDir, store.Claim{Lap: task.ID, File: store.ResolveFile(fileFlag)}); err != nil {
 			exitCode = 2
 			exit(2, "claim: %v", err)
 		}
@@ -76,10 +76,11 @@ var claimUndoCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		path, _, beadsDir := getStorePath()
 
-		claimedID, err := store.ReadClaim(beadsDir)
+		claim, err := store.ReadClaim(beadsDir, store.ResolveFile(fileFlag))
 		if err != nil {
 			exit(2, "read claim: %v", err)
 		}
+		claimedID := claim.Lap
 		if claimedID == "" {
 			exit(3, "no claimed lap to clear")
 		}

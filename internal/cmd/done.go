@@ -43,10 +43,11 @@ When a claimed task is completed, .laps/claim is cleared.`,
 				exit(3, "task %s (%s) is already done", task.ID, task.Title)
 			}
 		} else {
-			claimedID, err := store.ReadClaim(beadsDir)
+			claim, err := store.ReadClaim(beadsDir, store.ResolveFile(fileFlag))
 			if err != nil {
 				exit(2, "read claim: %v", err)
 			}
+			claimedID := claim.Lap
 
 			if claimedID == "" {
 				for i := range file.Tasks {
@@ -89,8 +90,8 @@ When a claimed task is completed, .laps/claim is cleared.`,
 			exit(2, "done: %v", err)
 		}
 
-		claimedID, _ := store.ReadClaim(beadsDir)
-		if claimedID == task.ID {
+		// Best-effort: clearing the claim must not block a completed done.
+		if claim, err := store.ReadClaim(beadsDir, store.ResolveFile(fileFlag)); err == nil && claim.Lap == task.ID {
 			_ = store.RemoveClaim(beadsDir)
 		}
 

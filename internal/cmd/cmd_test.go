@@ -2431,8 +2431,8 @@ func TestDoneExplicitIDWithClaim(t *testing.T) {
 	}
 
 	// Claim should still exist (we completed a different task)
-	claimedID, _ := store.ReadClaim(beadsDir)
-	if claimedID == "" {
+	claim, _ := store.ReadClaim(beadsDir, store.ResolveFile(""))
+	if claim.Lap == "" {
 		t.Fatal("expected claim to persist after completing different task")
 	}
 }
@@ -2456,8 +2456,8 @@ func TestDoneExplicitIDMatchesClaim(t *testing.T) {
 	}
 
 	// Claim should be cleared
-	claimedID, _ := store.ReadClaim(beadsDir)
-	if claimedID != "" {
+	claim, _ := store.ReadClaim(beadsDir, store.ResolveFile(""))
+	if claim.Lap != "" {
 		t.Fatal("expected claim cleared when completing matching task")
 	}
 }
