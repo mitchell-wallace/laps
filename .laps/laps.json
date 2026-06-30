@@ -61,11 +61,11 @@
       "title": "Wire claim events with reclaim, replacement, and completion-clear semantics",
       "description": "Context: Claim events have subtle ordering and preservation rules that the structured-claim API (lap 3) now makes possible. Tasks 2.1 (claimed/unclaimed), 2.2, 2.3, 2.4.\n\nOutcome: claim, claim-undo, and done's claim-clear each emit correctly-ordered events with reasons; same-lap reclaim preserves claimedAt and emits no duplicate; a different-lap replacement emits unclaimed(replaced) then claimed; done emits completed then unclaimed(completed); no event is emitted when a claim write/remove fails.\n\nFiles \u0026 scope: internal/cmd/claim.go (claimed event; same-lap reclaim preservation; different-lap replacement ordering), internal/cmd/claim.go claim-undo (unclaimed event after RemoveClaim succeeds), internal/cmd/done.go (when done clears a claim: emit completed, then immediately unclaimed with detail.reason \"completed\").\n\nDesign: Same-lap reclaim: read the existing claim first; if the target lap is already the claimed lap, preserve the existing claimedAt (do NOT overwrite it) and do NOT emit a second claimed event. Different-lap replacement: emit unclaimed with detail.reason \"replaced\" for the previously-claimed lap, followed by claimed for the new lap. done clearing a claimed lap: emit completed, then a SEPARATE unclaimed event with detail.reason \"completed\" (DECIDED: separate event for log uniformity with the replaced reason — one unclaimed per applied claim removal, tagged with the reason). claim-undo: emit unclaimed after RemoveClaim succeeds. For all claim-only mutations, append the event ONLY after WriteClaim/RemoveClaim succeeds; a failed claim write or remove emits no event. All appends remain best-effort.\n\nAcceptance: Tests proving each scenario in the event-log spec: same-lap reclaim preserves claimedAt and emits no duplicate claimed; replacement emits unclaimed(replaced) then claimed in that order; done on a claimed lap emits completed immediately followed by unclaimed(completed); claim-undo emits unclaimed; a failed claim write/remove emits no event. go test ./... passes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-29T10:05:27.706345401Z",
-      "updatedAt": "2026-06-29T10:05:27.706345401Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T09:22:50.938714183Z",
+      "completedAt": "2026-06-30T09:22:50.938714183Z"
     },
     {
       "id": "laps-d8fc",
