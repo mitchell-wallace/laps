@@ -44,6 +44,12 @@ Prints the affected task id on success.`,
 		if !fields.setTitle && !fields.setDescription && !fields.setAssignee {
 			exit(1, "edit: at least one of --title, --description, or --assignee is required")
 		}
+		if len(args) < 1 {
+			exit(1, "edit: a task id is required")
+		}
+		if len(args) > 1 {
+			exit(1, "edit: usage: edit <id> [--title] [--description] [--assignee]")
+		}
 		runEdit(cmd, args, fields)
 	},
 }

@@ -671,6 +671,48 @@ func TestListOnelineOmitsMarker(t *testing.T) {
 	}
 }
 
+func TestListStrikesDoneTitleOnlyInTwoLineMode(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Done one")
+	id := strings.TrimSpace(out)
+	runMB("claim", id)
+	if _, _, code := runMB("done"); code != 0 {
+		t.Fatalf("setup done failed, code %d", code)
+	}
+
+	out, _, code := runMB("list", "--done")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	want := fmt.Sprintf("1. ~~Done one~~\n   %s · — · done\n", id)
+	if out != want {
+		t.Fatalf("expected title-only strike %q, got %q", want, out)
+	}
+}
+
+func TestListOnelineStrikesWholeDoneLine(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Done one", "--assignee", "al")
+	id := strings.TrimSpace(out)
+	runMB("claim", id)
+	if _, _, code := runMB("done"); code != 0 {
+		t.Fatalf("setup done failed, code %d", code)
+	}
+
+	out, _, code := runMB("list", "--done", "--oneline")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	want := fmt.Sprintf("1. ~~%s — Done one (assignee: al)~~\n", id)
+	if out != want {
+		t.Fatalf("expected whole-line strike %q, got %q", want, out)
+	}
+}
+
 func TestLSAliasMatchesList(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
@@ -2797,6 +2839,8 @@ func TestMoveUsageFails(t *testing.T) {
 		{name: "no position", args: []string{"someid"}, want: "usage"},
 		{name: "invalid position", args: []string{"someid", "sideways"}, want: "position must be head"},
 		{name: "after without target", args: []string{"someid", "after"}, want: "after requires a target"},
+		{name: "head with extra arg", args: []string{"someid", "head", "extra"}, want: "usage"},
+		{name: "after with extra arg", args: []string{"someid", "after", "target", "extra"}, want: "exactly one target"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -3061,6 +3105,48 @@ func TestEditTitleField(t *testing.T) {
 	}
 }
 
+func TestEditRejectsExtraArgs(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	_, errStr, code := runMB("edit", id, "extra", "--title", "T2")
+	if code != 1 {
+		t.Fatalf("expected code 1 with extra arg, got %d", code)
+	}
+	if !strings.Contains(errStr, "usage") {
+		t.Fatalf("expected usage error, got: %s", errStr)
+	}
+}
+
+func TestEditAdvancesUpdatedAt(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+	path := filepath.Join(beadsDir, "laps.json")
+	data, _ := store.Load(path)
+	old := time.Now().UTC().Add(-6 * time.Minute)
+	for i := range data.Tasks {
+		if data.Tasks[i].ID == id {
+			data.Tasks[i].UpdatedAt = old
+		}
+	}
+	if err := store.Save(path, data); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, errStr, code := runMB("edit", id, "--title", "T2"); code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if task := taskByID(t, beadsDir, id); !task.UpdatedAt.After(old) {
+		t.Fatalf("expected updatedAt to advance past %v, got %v", old, task.UpdatedAt)
+	}
+}
+
 func TestEditDescriptionField(t *testing.T) {
 	beadsDir, cleanup := setupTempRepo(t)
 	defer cleanup()
@@ -3320,6 +3406,22 @@ func TestAssignSetsAssignee(t *testing.T) {
 	}
 }
 
+func TestAssignRejectsExtraArgs(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	_, errStr, code := runMB("assign", id, "role", "extra")
+	if code != 1 {
+		t.Fatalf("expected code 1 with extra arg, got %d", code)
+	}
+	if !strings.Contains(errStr, "usage") {
+		t.Fatalf("expected usage error, got: %s", errStr)
+	}
+}
+
 func TestAssignTrimsAssignee(t *testing.T) {
 	beadsDir, cleanup := setupTempRepo(t)
 	defer cleanup()
@@ -3379,6 +3481,115 @@ func TestAssignSuccessPrintsOnlyID(t *testing.T) {
 	}
 	if out != id+"\n" {
 		t.Fatalf("expected stdout to be only the id %q, got %q", id, out)
+	}
+}
+
+func TestAssignJSONOutput(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+
+	out, errStr, code := runMB("assign", id, "reviewer", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out)
+	}
+	task, ok := result["task"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected task object in JSON, got: %s", out)
+	}
+	if task["id"] != id {
+		t.Fatalf("expected preserved id %s, got %v", id, task["id"])
+	}
+	if task["assignee"] != "reviewer" {
+		t.Fatalf("expected assignee reviewer, got %v", task["assignee"])
+	}
+}
+
+func TestAssignDoneLapWarnsAndPreservesCompletion(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "Done one")
+	id := strings.TrimSpace(out)
+	runMB("claim", id)
+	if _, _, code := runMB("done"); code != 0 {
+		t.Fatalf("setup done failed, code %d", code)
+	}
+
+	_, errStr, code := runMB("assign", id, "reviewer")
+	if code != 0 {
+		t.Fatalf("expected code 0 assigning done lap, got %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "already complete") || !strings.Contains(errStr, "without reopening") {
+		t.Fatalf("expected done-lap assign warning on stderr, got: %q", errStr)
+	}
+	task := taskByID(t, beadsDir, id)
+	if task.Assignee != "reviewer" {
+		t.Fatalf("expected assignee applied to done lap, got %q", task.Assignee)
+	}
+	if !task.IsDone {
+		t.Fatal("assigning a done lap must not reopen it")
+	}
+	if task.CompletedAt == nil {
+		t.Fatal("assigning a done lap must preserve completedAt")
+	}
+}
+
+func TestAssignAdvancesUpdatedAt(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "T")
+	id := strings.TrimSpace(out)
+	path := filepath.Join(beadsDir, "laps.json")
+	data, _ := store.Load(path)
+	old := time.Now().UTC().Add(-6 * time.Minute)
+	for i := range data.Tasks {
+		if data.Tasks[i].ID == id {
+			data.Tasks[i].UpdatedAt = old
+		}
+	}
+	if err := store.Save(path, data); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, errStr, code := runMB("assign", id, "reviewer"); code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if task := taskByID(t, beadsDir, id); !task.UpdatedAt.After(old) {
+		t.Fatalf("expected updatedAt to advance past %v, got %v", old, task.UpdatedAt)
+	}
+}
+
+func TestAssignHookContext(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "AssignMe")
+	id := strings.TrimSpace(out)
+	hooks := `{"version":1,"hooks":[` +
+		`{"title":"beforeAssign","command":"assign","when":"before","run":"echo BEFORE:$id:$title:$assignee","passback":true},` +
+		`{"title":"afterAssign","command":"assign","when":"after","run":"echo AFTER:$id:$title:$assignee","passback":true}` +
+		`]}`
+	if err := os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errStr, code := runMB("assign", id, "reviewer")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "BEFORE:"+id+":AssignMe:") {
+		t.Fatalf("expected before hook with task context, got: %s", out)
+	}
+	if !strings.Contains(out, "AFTER:"+id+":AssignMe:reviewer") {
+		t.Fatalf("expected after hook with updated task context, got: %s", out)
 	}
 }
 

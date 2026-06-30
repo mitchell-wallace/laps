@@ -35,12 +35,18 @@ Prints the moved task id on success.`,
 		if position != "head" && position != "tail" && position != "after" {
 			exit(1, "move: position must be head, tail, or after <id>")
 		}
+		if position != "after" && len(args) != 2 {
+			exit(1, "move: usage: move <id> <head|tail|after> [target]")
+		}
+		if position == "after" && len(args) < 3 {
+			exit(1, "move: after requires a target id")
+		}
+		if position == "after" && len(args) > 3 {
+			exit(1, "move: after requires exactly one target id")
+		}
 
 		var afterID string
 		if position == "after" {
-			if len(args) < 3 {
-				exit(1, "move: after requires a target id")
-			}
 			afterID = args[2]
 			if afterID == moveID {
 				exit(1, "move: cannot move a lap after itself")

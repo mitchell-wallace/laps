@@ -13,7 +13,7 @@ A blank role clears the assignee. Assigning a completed lap succeeds with a
 warning and does not reopen it. Prints the affected task id on success.`,
 	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 2 {
+		if len(args) != 2 {
 			exit(1, "assign: usage: assign <id> <role>")
 		}
 		runEdit(cmd, args, editFields{
