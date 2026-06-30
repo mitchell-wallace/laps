@@ -21,13 +21,13 @@
 
 ## 3. Edit & assign
 
-- [ ] 3.1 Add `edit <id> [--title] [--description] [--assignee]` updating set fields and bumping `updatedAt`; require ≥1 field flag. Gate each field on `cmd.Flags().Changed("<name>")` (mirror `add.go:73`), not on a non-empty value, so `--description ""` (clear) is distinguishable from an unset flag; the ≥1-flag check is `Changed("title") || Changed("description") || Changed("assignee")`
-- [ ] 3.2 Add `assign <id> <role>` as a shortcut for `edit <id> --assignee <role>`
-- [ ] 3.3 Honor `--json-output`, returning `{task}` for both
-- [ ] 3.4 Run before/after hooks with the affected task and populated `$output`/`$exit_code`
-- [ ] 3.5 Implement edit semantics: blank title errors; `--description ""` and `--assignee ""` clear fields; non-empty assignees trim; descriptions handle escaped `\\n` like `add`; blank `assign` role clears assignee
-- [ ] 3.6 Allow `edit`/`assign` on done laps with a stderr warning; preserve done state and `completedAt`
-- [ ] 3.7 Update `internal/cmd/hooks.go:isKnownCommand` so `edit` and `assign` are treated as built-ins
+- [x] 3.1 Add `edit <id> [--title] [--description] [--assignee]` updating set fields and bumping `updatedAt`; require ≥1 field flag. Gate each field on `cmd.Flags().Changed("<name>")` (mirror `add.go:73`), not on a non-empty value, so `--description ""` (clear) is distinguishable from an unset flag; the ≥1-flag check is `Changed("title") || Changed("description") || Changed("assignee")`
+- [x] 3.2 Add `assign <id> <role>` as a shortcut for `edit <id> --assignee <role>`
+- [x] 3.3 Honor `--json-output`, returning `{task}` for both
+- [x] 3.4 Run before/after hooks with the affected task and populated `$output`/`$exit_code`
+- [x] 3.5 Implement edit semantics: blank title errors; `--description ""` and `--assignee ""` clear fields; non-empty assignees trim; descriptions handle escaped `\\n` like `add`; blank `assign` role clears assignee
+- [x] 3.6 Allow `edit`/`assign` on done laps with a stderr warning; preserve done state and `completedAt`
+- [x] 3.7 Update `internal/cmd/hooks.go:isKnownCommand` so `edit` and `assign` are treated as built-ins
 - [ ] 3.8 Tests: edit each field; no-flags error; field validation/normalization; blank `assign` clears assignee; done-target warning/preservation; assign sets assignee; non-JSON success prints id; `--json-output`; hook context; `runMBExecute` dispatch
 - [ ] 3.9 Extend the `runMB`/`runMBExecute` reset harness in `cmd_test.go`: zero the new package-level vars (`listOneline`, `edit*`, `move*`) and register `editCmd.Flags()`, `moveCmd.Flags()`, `assignCmd.Flags()` (and the `list` flagset for `--oneline`) in the `flag.Changed`-reset loop. Because `edit`'s semantics hinge on `Changed`, a leaked `Changed=true` from one test silently corrupts the next (e.g. a prior `--description ""` clears description in a later title-only edit)
 
