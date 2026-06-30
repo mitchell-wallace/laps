@@ -61,11 +61,11 @@
       "title": "Verify ls alias, list tests, and move command",
       "description": "**Context** — VERIFY covering the §1 tail (`ls` alias + full list test matrix: 1.5, 1.6, 1.7) and all of §2 move (2.1–2.7) — the natural \"read + reorder primitives complete\" boundary, and the cadence point after three impl laps since the last VERIFY. Use `openspec-verify-change` against `improve-cli-ergonomics`. Identify the merge target and the first lap in this batch; treat earlier branch work as pre-existing; never rewrite history.\n\n**Outcome** — Verification report plus `tasks.md` boxes ticked for verified-correct work only.\n\n**Trace depth** — `git diff \u003ctarget\u003e...HEAD -- internal/cmd/list.go internal/cmd/hooks.go internal/cmd/move.go internal/cmd/cmd_test.go`. Confirm: (1) `ls` is registered as a cobra alias of `list` AND `\"ls\"` and `\"move\"` are in `isKnownCommand` (otherwise an `ls`/`move` invocation is misrouted to the hook-only intercept); (2) move reuses `store.ComputeInsertOrder` (not a reimplementation) and preserves the lap id (no `store.GenerateID` call on the move path); (3) exit codes match design.md — missing `after` target → 3 via `ErrTaskNotFound`, unknown/done moved id → 1, self-reference → error; (4) the after-done stderr notice is emitted by `move.go` itself (ComputeInsertOrder only returns fallbackHead); (5) move runs before/after hooks with the affected task and `$output`/`$exit_code`; (6) `updatedAt` advances on success; (7) the 1.7 marker tests cover all three spec scenarios (claimed→marked, no-claim→none, nonmatching→none) and `--json-output` structure is unchanged. Run `just test` and `just lint`.\n\n**Acceptance** — Report findings first; raise head laps for gaps. If correct and thorough, tick `tasks.md` boxes 1.5, 1.6, 1.7, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7. Do NOT tick §3/§4 boxes (not yet implemented).",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-29T10:10:35.710101138Z",
-      "updatedAt": "2026-06-29T10:10:35.710101138Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T01:07:35.545351283Z",
+      "completedAt": "2026-06-30T01:07:35.545351283Z"
     },
     {
       "id": "laps-0ee5",

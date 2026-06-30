@@ -11,13 +11,13 @@
 
 ## 2. Move
 
-- [ ] 2.1 Add `move <id> head|tail|after <id>` reusing `store.ComputeInsertOrder`, preserving the lap id
-- [ ] 2.2 Operate on todo laps only; error on unknown or already-done id (exit `1`); `after` a missing target errors via `store.ErrTaskNotFound` (exit `3`, like `add after`); `after` a done target falls back to head with a stderr notice that `move.go` emits itself (copy the `fmt.Fprintf(os.Stderr, …)` from `add.go:164` — `ComputeInsertOrder` only returns `fallbackHead`, it does not print); `move <id> after <id>` (self-reference) errors
-- [ ] 2.3 Honor `--json-output`, returning `{task}`
-- [ ] 2.4 Run before/after hooks with the affected task and populated `$output`/`$exit_code`
-- [ ] 2.5 Update `internal/cmd/hooks.go:isKnownCommand` so `move` is treated as a built-in
-- [ ] 2.6 Advance `updatedAt` on successful `move`
-- [ ] 2.7 Tests: move to head/tail/after; id preserved; done/unknown moved id errors; missing `after` target error; after-done fallback; hook context; `runMBExecute` dispatch; `updatedAt` advances
+- [x] 2.1 Add `move <id> head|tail|after <id>` reusing `store.ComputeInsertOrder`, preserving the lap id
+- [x] 2.2 Operate on todo laps only; error on unknown or already-done id (exit `1`); `after` a missing target errors via `store.ErrTaskNotFound` (exit `3`, like `add after`); `after` a done target falls back to head with a stderr notice that `move.go` emits itself (copy the `fmt.Fprintf(os.Stderr, …)` from `add.go:164` — `ComputeInsertOrder` only returns `fallbackHead`, it does not print); `move <id> after <id>` (self-reference) errors
+- [x] 2.3 Honor `--json-output`, returning `{task}`
+- [x] 2.4 Run before/after hooks with the affected task and populated `$output`/`$exit_code`
+- [x] 2.5 Update `internal/cmd/hooks.go:isKnownCommand` so `move` is treated as a built-in
+- [x] 2.6 Advance `updatedAt` on successful `move`
+- [x] 2.7 Tests: move to head/tail/after; id preserved; done/unknown moved id errors; missing `after` target error; after-done fallback; hook context; `runMBExecute` dispatch; `updatedAt` advances
 
 ## 3. Edit & assign
 
