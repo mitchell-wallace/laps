@@ -16,8 +16,9 @@ var (
 )
 
 var listCmd = &cobra.Command{
-	Use:   "list [--all | --done]",
-	Short: "List tasks",
+	Use:     "list [--all | --done]",
+	Aliases: []string{"ls"},
+	Short:   "List tasks",
 	Long: `List tasks as a markdown numbered list.
 
 Default shows todo tasks only, head first.

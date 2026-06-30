@@ -529,6 +529,219 @@ func TestListOutputIncludesAssignee(t *testing.T) {
 	}
 }
 
+func TestListTwoLineStructure(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "tail", "--title", "Title One", "--assignee", "alice")
+	id := strings.TrimSpace(out)
+
+	out, _, code := runMB("list")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines for 1 lap (two-line default), got %d: %q", len(lines), out)
+	}
+	if want := "1. Title One"; lines[0] != want {
+		t.Fatalf("line 1 = %q, want %q", lines[0], want)
+	}
+	if want := "   " + id + " · alice · todo"; lines[1] != want {
+		t.Fatalf("line 2 = %q, want %q", lines[1], want)
+	}
+}
+
+func TestListTwoLineEmDashWhenUnassigned(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "Unassigned")
+
+	out, _, code := runMB("list")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	// Unset assignee renders as an em dash, never an empty field.
+	if !strings.Contains(out, " · — · todo") {
+		t.Fatalf("expected em-dash assignee placeholder, got: %s", out)
+	}
+}
+
+func TestListMarksClaimedLap(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	outA, _, _ := runMB("add", "head", "--title", "A")
+	idA := strings.TrimSpace(outA)
+	runMB("add", "tail", "--title", "B")
+	if _, _, code := runMB("claim", idA); code != 0 {
+		t.Fatalf("claim failed, code %d", code)
+	}
+
+	out, _, code := runMB("list")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	// Exactly one active marker, and it sits on the claimed lap's title line.
+	if n := strings.Count(out, "> "); n != 1 {
+		t.Fatalf("expected exactly one active marker, got %d: %q", n, out)
+	}
+	if !strings.Contains(out, "1. > A") {
+		t.Fatalf("expected claimed lap A marked, got: %s", out)
+	}
+	if strings.Contains(out, "2. > B") {
+		t.Fatalf("unclaimed lap B must not be marked, got: %s", out)
+	}
+}
+
+func TestListNoMarkerWithoutClaim(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "A")
+	runMB("add", "tail", "--title", "B")
+
+	out, _, code := runMB("list")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if strings.Contains(out, "> ") {
+		t.Fatalf("expected no active marker without a claim, got: %s", out)
+	}
+}
+
+func TestListNoMarkerWhenClaimOutsideResult(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "A")
+	outB, _, _ := runMB("add", "tail", "--title", "B")
+	idB := strings.TrimSpace(outB)
+	if _, _, code := runMB("claim", idB); code != 0 {
+		t.Fatalf("claim failed, code %d", code)
+	}
+	// Delete the claimed lap. The claim still points at B, but B is no longer in
+	// the rendered result, so no marker may appear.
+	if _, _, code := runMB("delete", idB); code != 0 {
+		t.Fatalf("delete failed, code %d", code)
+	}
+
+	out, _, code := runMB("list")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if strings.Contains(out, "> ") {
+		t.Fatalf("expected no marker when claim is outside result, got: %s", out)
+	}
+	if !strings.Contains(out, "1. A") {
+		t.Fatalf("expected remaining lap A in list, got: %s", out)
+	}
+}
+
+func TestListOnelineOmitsMarker(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, _, _ := runMB("add", "head", "--title", "A")
+	id := strings.TrimSpace(out)
+	runMB("claim") // claim the head (A)
+
+	// The active marker only applies to the two-line default; --oneline keeps the
+	// legacy shape, so even a claimed lap renders without a marker.
+	out, _, code := runMB("list", "--oneline")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	want := fmt.Sprintf("1. %s — A\n", id)
+	if out != want {
+		t.Fatalf("expected oneline shape without marker %q, got %q", want, out)
+	}
+}
+
+func TestLSAliasMatchesList(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "A")
+	runMB("add", "tail", "--title", "B", "--assignee", "alice")
+
+	cases := [][]string{
+		{},
+		{"--oneline"},
+		{"--json-output"},
+	}
+	for _, flags := range cases {
+		listArgs := append([]string{"list"}, flags...)
+		lsArgs := append([]string{"ls"}, flags...)
+		listOut, _, listCode := runMB(listArgs...)
+		lsOut, _, lsCode := runMB(lsArgs...)
+		if lsCode != listCode {
+			t.Fatalf("ls %v exit %d != list exit %d", flags, lsCode, listCode)
+		}
+		if lsOut != listOut {
+			t.Fatalf("ls %v output != list output\nlist: %q\nls:   %q", flags, listOut, lsOut)
+		}
+	}
+}
+
+func TestLSAliasDispatchThroughExecute(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Via alias")
+
+	// A hook registered for the command name "ls" can only fire through the
+	// hook-only intercept. Because ls is a recognized built-in, the intercept is
+	// skipped and listCmd runs instead — so this hook must NOT run.
+	hooks := `{"version":1,"hooks":[{"title":"intercept","command":"ls","when":"before","run":"echo HOOK-RAN","passback":true}]}`
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errStr, err := runMBExecute("ls")
+	if err != nil {
+		t.Fatalf("expected nil error dispatching ls, got %v, stderr: %s", err, errStr)
+	}
+	if strings.Contains(out, "HOOK-RAN") {
+		t.Fatalf("ls must not be intercepted as a hook-only command, got: %s", out)
+	}
+	if !strings.Contains(out, "Via alias") {
+		t.Fatalf("expected list output through ls alias, got: %s", out)
+	}
+}
+
+func TestLSAliasJSONOutput(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "A")
+	runMB("add", "tail", "--title", "B")
+
+	listOut, _, code := runMB("list", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	lsOut, _, code := runMB("ls", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if lsOut != listOut {
+		t.Fatalf("ls --json-output != list --json-output\nlist: %q\nls:   %q", listOut, lsOut)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(lsOut)), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", lsOut)
+	}
+	tasks, ok := result["tasks"].([]interface{})
+	if !ok {
+		t.Fatalf("expected tasks array in JSON, got: %s", lsOut)
+	}
+	if len(tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(tasks))
+	}
+}
+
 func TestDoneWithClaim(t *testing.T) {
 	beadsDir, cleanup := setupTempRepo(t)
 	defer cleanup()
