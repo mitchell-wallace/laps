@@ -17,11 +17,11 @@
       "title": "Verify list two-line formatter and assertion migration",
       "description": "**Context** — First VERIFY of `improve-cli-ergonomics`, gating the highest-risk lap (the default `list` output format change — the change's only behavior break). Use the `openspec-verify-change` skill against `improve-cli-ergonomics`. Identify the merge target (confirm from the operator/PR metadata/branch config; likely `main` or `origin/main`) and the first lap in this batch; treat any branch work predating this batch as pre-existing baseline. Never rewrite git history.\n\n**Outcome** — A verification report confirming or flagging the list formatter change, plus `tasks.md` boxes ticked only for work verified as correct and thorough.\n\n**Trace depth (not just \"tests pass\")** — `git diff \u003ctarget\u003e...HEAD -- internal/cmd/list.go internal/cmd/cmd_test.go` and confirm: (1) `--oneline` reuses `formatListTask` VERBATIM (no rewrite) and the ` (assignee: \u003ca\u003e)` clause is still conditional on a non-empty assignee — a regression here breaks the downstream add-stints/event-log consumers; (2) the active marker is wired through `store.ReadClaim`, NOT a direct `.laps/claim` read inside the formatter (forward-compat with add-event-log-and-status); (3) line-2 indent pads to the width of `\"\u003cn\u003e. \"`, not a fixed 3 spaces (reason about or test position ≥ 10); (4) done strike is title-only in two-line mode and whole-line in `--oneline`; (5) the migrated `TestListDefault` / `TestListOutputUnchangedWithoutAssignee` / `TestListOutputIncludesAssignee` and the `Contains(id+\" — ...\")` / `idxBefore(\"— A\",\"— B\")` checks now target `--oneline` for the terse shape and the new two-line shape for the default — not deleted. Run `just test` and `just lint`.\n\n**Acceptance** — Report findings first; create head laps for any substantive gap (do not silently implement). If 1.1, 1.2, 1.3, 1.4, and 1.8 are correct and thorough, check off those five boxes in `openspec/changes/improve-cli-ergonomics/tasks.md`. Do NOT tick 1.5, 1.6, or 1.7 — those land in a later lap.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-29T10:10:35.710097109Z",
-      "updatedAt": "2026-06-29T10:10:35.710097109Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T00:26:44.932008985Z",
+      "completedAt": "2026-06-30T00:26:44.932008985Z"
     },
     {
       "id": "laps-2635",
