@@ -545,6 +545,41 @@ func TestClaimRecordsClaimedAt(t *testing.T) {
 	}
 }
 
+func TestClaimDifferentFileGetsFreshClaimedAt(t *testing.T) {
+	dir := t.TempDir()
+	beadsDir := filepath.Join(dir, ".laps")
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	original := time.Date(2026, time.June, 30, 7, 0, 0, 0, time.UTC)
+	if err := WriteClaim(beadsDir, Claim{
+		Lap:       "lap-1",
+		File:      "alpha.json",
+		ClaimedAt: &original,
+	}); err != nil {
+		t.Fatalf("WriteClaim original: %v", err)
+	}
+
+	if err := WriteClaim(beadsDir, Claim{Lap: "lap-1", File: "beta.json"}); err != nil {
+		t.Fatalf("WriteClaim different file: %v", err)
+	}
+
+	claim, err := ReadClaim(beadsDir, "beta.json")
+	if err != nil {
+		t.Fatalf("ReadClaim: %v", err)
+	}
+	if claim.File != "beta.json" {
+		t.Fatalf("expected file beta.json, got %q", claim.File)
+	}
+	if claim.ClaimedAt == nil {
+		t.Fatal("expected claimedAt to be set")
+	}
+	if claim.ClaimedAt.Equal(original) {
+		t.Fatalf("expected a fresh claimedAt for different-file claim, got preserved %v", claim.ClaimedAt)
+	}
+}
+
 func TestReadClaimLegacyBareID(t *testing.T) {
 	dir := t.TempDir()
 	beadsDir := filepath.Join(dir, ".laps")
@@ -601,6 +636,29 @@ func TestReadClaimMalformedStructured(t *testing.T) {
 	cases := map[string]string{
 		"truncated":      `{"lap":"x",`,
 		"wrong-type-lap": `{"lap":123}`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(ClaimPath(beadsDir), []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, err := ReadClaim(beadsDir, "laps.json")
+			if !errors.Is(err, ErrMalformedClaim) {
+				t.Fatalf("expected ErrMalformedClaim, got %v", err)
+			}
+		})
+	}
+}
+
+func TestReadClaimJSONScalarIsMalformed(t *testing.T) {
+	dir := t.TempDir()
+	beadsDir := filepath.Join(dir, ".laps")
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]string{
+		"string": `"legacy-id-7"`,
+		"array":  `["legacy-id-7"]`,
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {

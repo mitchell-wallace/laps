@@ -48,8 +48,8 @@ func ClaimPath(beadsDir string) string {
 //
 // Forward-compat: unknown JSON fields are ignored.
 //
-// A file whose contents begin with '{' but fail to decode into a Claim returns
-// ErrMalformedClaim — it is treated as a corrupt structured claim, not legacy.
+// Any valid JSON value that is not an object claim, or any structured-looking
+// invalid JSON, returns ErrMalformedClaim rather than being treated as legacy.
 func ReadClaim(beadsDir, selectedFile string) (Claim, error) {
 	path := ClaimPath(beadsDir)
 	data, err := os.ReadFile(path)
@@ -65,12 +65,19 @@ func ReadClaim(beadsDir, selectedFile string) (Claim, error) {
 		return Claim{}, nil
 	}
 
-	if trimmed[0] == '{' {
+	if json.Valid(trimmed) {
+		if trimmed[0] != '{' {
+			return Claim{}, fmt.Errorf("%w: expected JSON object", ErrMalformedClaim)
+		}
 		var c Claim
 		if err := json.Unmarshal(trimmed, &c); err != nil {
 			return Claim{}, fmt.Errorf("%w: %v", ErrMalformedClaim, err)
 		}
 		return c, nil
+	}
+
+	if trimmed[0] == '{' || trimmed[0] == '[' || trimmed[0] == '"' {
+		return Claim{}, fmt.Errorf("%w: invalid JSON", ErrMalformedClaim)
 	}
 
 	// Legacy bare-id file: a non-JSON token. The id is the lap; the file is the
@@ -90,10 +97,10 @@ func WriteClaim(beadsDir string, c Claim) error {
 		return err
 	}
 
-	// Preserve the original claim time on same-lap re-claim. A malformed or
+	// Preserve the original claim time on same-claim re-claim. A malformed or
 	// legacy existing file simply yields no time to preserve.
 	if existing, err := ReadClaim(beadsDir, c.File); err == nil &&
-		existing.Lap == c.Lap && existing.ClaimedAt != nil {
+		existing.Lap == c.Lap && existing.File == c.File && existing.ClaimedAt != nil {
 		c.ClaimedAt = existing.ClaimedAt
 	} else if c.ClaimedAt == nil {
 		now := time.Now().UTC()
