@@ -26,11 +26,11 @@
 
 ## 4. Status
 
-- [ ] 4.1 Add `laps status` reporting todo/done counts, active (claimed) lap, head lap, assignee breakdown, selected file, and state `active|ready|empty|complete`
-- [ ] 4.2 Honor `--json-output` with a stable shape Rally can consume: expose `claimedAt` (nullable RFC3339 UTC timestamp, `null` when no lap is claimed) and `ageSeconds` (integer seconds since `claimedAt`, `null` when `claimedAt` is `null`); do NOT add a `stale` boolean in this change (DECIDED: defer the stale flag until a threshold/policy is chosen)
-- [ ] 4.3 Classify status failure modes: valid snapshots exit 0; corrupt/unreadable store, malformed claim JSON, and JSON serialization failures use the normal error path
-- [ ] 4.4 Report dangling/non-todo/wrong-file claims as valid snapshots with `claim.valid=false`; do not auto-clear claims silently
-- [ ] 4.5 Tests: counts/head, empty, complete, ready, json shape with file identity, corrupt store, malformed claim, dangling/non-todo/wrong-file claim behavior
+- [x] 4.1 Add `laps status` reporting todo/done counts, active (claimed) lap, head lap, assignee breakdown, selected file, and state `active|ready|empty|complete`
+- [x] 4.2 Honor `--json-output` with a stable shape Rally can consume: expose `claimedAt` (nullable RFC3339 UTC timestamp, `null` when no lap is claimed) and `ageSeconds` (integer seconds since `claimedAt`, `null` when `claimedAt` is `null`); do NOT add a `stale` boolean in this change (DECIDED: defer the stale flag until a threshold/policy is chosen)
+- [x] 4.3 Classify status failure modes: valid snapshots exit 0; corrupt/unreadable store, malformed claim JSON, and JSON serialization failures use the normal error path
+- [x] 4.4 Report dangling/non-todo/wrong-file claims as valid snapshots with `claim.valid=false`; do not auto-clear claims silently
+- [x] 4.5 Tests: counts/head, empty, complete, ready, json shape with file identity, corrupt store, malformed claim, dangling/non-todo/wrong-file claim behavior
 
 ## 5. Structured claim
 

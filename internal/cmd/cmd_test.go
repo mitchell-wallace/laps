@@ -4013,3 +4013,289 @@ func TestLogFileFilter(t *testing.T) {
 		t.Errorf("explicit log output --file filter failed, got: %q", stdout)
 	}
 }
+
+func parseStatusJSON(t *testing.T, raw string) map[string]interface{} {
+	t.Helper()
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		t.Fatalf("status JSON did not parse: %v\nraw: %q", err, raw)
+	}
+	return m
+}
+
+func TestStatusEmpty(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, errStr, code := runMB("status")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "State: empty") {
+		t.Fatalf("expected empty state, got: %s", out)
+	}
+	if !strings.Contains(out, "Head: none") {
+		t.Fatalf("expected no head, got: %s", out)
+	}
+}
+
+func TestStatusReadyWithCountsAndHead(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	outA, _, _ := runMB("add", "tail", "--title", "Alpha", "--assignee", "SENIOR")
+	idA := strings.TrimSpace(outA)
+	runMB("add", "tail", "--title", "Beta", "--assignee", "JUNIOR")
+	runMB("add", "tail", "--title", "Gamma")
+
+	out, errStr, code := runMB("status")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "State: ready") {
+		t.Fatalf("expected ready state with todos and no claim, got: %s", out)
+	}
+	if !strings.Contains(out, "Laps: 3 todo, 0 done (3 total)") {
+		t.Fatalf("expected counts line, got: %s", out)
+	}
+	if !strings.Contains(out, "Head: "+idA+" — Alpha") {
+		t.Fatalf("expected head to be Alpha, got: %s", out)
+	}
+	if !strings.Contains(out, "- SENIOR: 1") || !strings.Contains(out, "- JUNIOR: 1") {
+		t.Fatalf("expected assignee breakdown, got: %s", out)
+	}
+	if !strings.Contains(out, "Claim: none") {
+		t.Fatalf("expected no claim, got: %s", out)
+	}
+}
+
+func TestStatusComplete(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "tail", "--title", "Only")
+	runMB("claim")
+	if _, _, code := runMB("done"); code != 0 {
+		t.Fatalf("done failed, code %d", code)
+	}
+
+	out, _, code := runMB("status")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "State: complete") {
+		t.Fatalf("expected complete state, got: %s", out)
+	}
+	if !strings.Contains(out, "Laps: 0 todo, 1 done (1 total)") {
+		t.Fatalf("expected counts, got: %s", out)
+	}
+}
+
+func TestStatusActiveWithValidClaim(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	outA, _, _ := runMB("add", "head", "--title", "Alpha")
+	idA := strings.TrimSpace(outA)
+	if _, _, code := runMB("claim", idA); code != 0 {
+		t.Fatalf("claim failed, code %d", code)
+	}
+
+	out, _, code := runMB("status")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	if !strings.Contains(out, "State: active") {
+		t.Fatalf("expected active state, got: %s", out)
+	}
+	if !strings.Contains(out, "Claim: "+idA+" (valid)") {
+		t.Fatalf("expected valid claim, got: %s", out)
+	}
+}
+
+func TestStatusJSONShape(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	// No claim: file identity present, claimedAt/ageSeconds explicitly null.
+	runMB("add", "head", "--title", "Alpha")
+	out, _, code := runMB("status", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	m := parseStatusJSON(t, out)
+	if m["file"] != "laps.json" {
+		t.Fatalf("expected file identity laps.json, got: %v", m["file"])
+	}
+	if m["state"] != "ready" {
+		t.Fatalf("expected ready, got: %v", m["state"])
+	}
+	claim, ok := m["claim"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected claim object, got: %v", m["claim"])
+	}
+	if claim["valid"] != false {
+		t.Fatalf("expected claim.valid false, got: %v", claim["valid"])
+	}
+	if v, present := claim["claimedAt"]; !present || v != nil {
+		t.Fatalf("expected null claimedAt when no claim, got present=%v val=%v", present, v)
+	}
+	if v, present := claim["ageSeconds"]; !present || v != nil {
+		t.Fatalf("expected null ageSeconds when no claim, got present=%v val=%v", present, v)
+	}
+
+	// With a claim: claimedAt is a non-null RFC3339 string and ageSeconds a number.
+	runMB("claim")
+	out, _, code = runMB("status", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+	m = parseStatusJSON(t, out)
+	claim = m["claim"].(map[string]interface{})
+	if claim["valid"] != true {
+		t.Fatalf("expected claim.valid true, got: %v", claim["valid"])
+	}
+	ts, ok := claim["claimedAt"].(string)
+	if !ok {
+		t.Fatalf("expected claimedAt string, got: %v", claim["claimedAt"])
+	}
+	if _, err := time.Parse(time.RFC3339, ts); err != nil {
+		t.Fatalf("claimedAt is not RFC3339: %v", err)
+	}
+	if _, ok := claim["ageSeconds"].(float64); !ok {
+		t.Fatalf("expected ageSeconds number, got: %v", claim["ageSeconds"])
+	}
+}
+
+func TestStatusCorruptStoreErrors(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	if err := os.WriteFile(filepath.Join(beadsDir, "laps.json"), []byte(`{"version":1,"tasks":`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, code := runMB("status")
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for corrupt store, got 0")
+	}
+}
+
+func TestStatusMalformedClaimErrors(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	runMB("add", "head", "--title", "Alpha")
+	// Structured-looking but invalid JSON => malformed claim, not legacy.
+	if err := os.WriteFile(filepath.Join(beadsDir, "claim"), []byte(`{"lap":`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, code := runMB("status")
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for malformed claim, got 0")
+	}
+}
+
+func TestStatusDanglingClaimIsDegradedNoAutoClear(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	outA, _, _ := runMB("add", "head", "--title", "Alpha")
+	idA := strings.TrimSpace(outA)
+	if _, _, code := runMB("claim", idA); code != 0 {
+		t.Fatalf("claim failed, code %d", code)
+	}
+	// Delete the claimed lap: the claim now dangles.
+	if _, _, code := runMB("delete", idA); code != 0 {
+		t.Fatalf("delete failed, code %d", code)
+	}
+
+	claimPath := filepath.Join(beadsDir, "claim")
+	before, err := os.ReadFile(claimPath)
+	if err != nil {
+		t.Fatalf("claim file should still exist: %v", err)
+	}
+
+	out, _, code := runMB("status", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected exit 0 for degraded snapshot, got %d", code)
+	}
+	m := parseStatusJSON(t, out)
+	claim := m["claim"].(map[string]interface{})
+	if claim["valid"] != false {
+		t.Fatalf("expected claim.valid false for dangling claim, got: %v", claim["valid"])
+	}
+	if claim["lap"] != idA {
+		t.Fatalf("expected dangling claim to retain its lap id, got: %v", claim["lap"])
+	}
+	if m["state"] != "empty" {
+		t.Fatalf("expected empty state (lap deleted), got: %v", m["state"])
+	}
+
+	after, err := os.ReadFile(claimPath)
+	if err != nil {
+		t.Fatalf("claim file must not be cleared: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Fatalf("status must not rewrite the claim file: before=%q after=%q", before, after)
+	}
+}
+
+func TestStatusDoneClaimIsInvalid(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	outA, _, _ := runMB("add", "head", "--title", "Alpha")
+	idA := strings.TrimSpace(outA)
+	// Complete the lap without going through claim, then point a claim at the
+	// now-done lap directly.
+	if _, _, code := runMB("done", idA); code != 0 {
+		t.Fatalf("done failed, code %d", code)
+	}
+	if err := store.WriteClaim(beadsDir, store.Claim{Lap: idA, File: "laps.json"}); err != nil {
+		t.Fatalf("write claim: %v", err)
+	}
+
+	out, _, code := runMB("status", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+	m := parseStatusJSON(t, out)
+	claim := m["claim"].(map[string]interface{})
+	if claim["valid"] != false {
+		t.Fatalf("expected claim.valid false for done lap, got: %v", claim["valid"])
+	}
+	if m["state"] != "complete" {
+		t.Fatalf("expected complete state, got: %v", m["state"])
+	}
+}
+
+func TestStatusWrongFileClaimIsInvalid(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	outA, _, _ := runMB("add", "head", "--title", "Alpha")
+	idA := strings.TrimSpace(outA)
+	// A claim recorded against a different task file must not count as valid for
+	// the selected (default) file even though the lap id exists there.
+	if err := os.WriteFile(filepath.Join(beadsDir, "claim"),
+		[]byte(`{"lap":"`+idA+`","file":"other.json","claimedAt":"2026-06-30T00:00:00Z"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, code := runMB("status", "--json-output")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+	m := parseStatusJSON(t, out)
+	claim := m["claim"].(map[string]interface{})
+	if claim["valid"] != false {
+		t.Fatalf("expected claim.valid false for wrong-file claim, got: %v", claim["valid"])
+	}
+	if m["state"] != "ready" {
+		t.Fatalf("expected ready state (todo present, no valid claim), got: %v", m["state"])
+	}
+	// Even an invalid claim surfaces its recorded claimedAt for visibility.
+	if _, ok := claim["claimedAt"].(string); !ok {
+		t.Fatalf("expected claimedAt surfaced for dangling claim, got: %v", claim["claimedAt"])
+	}
+}
