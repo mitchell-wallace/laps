@@ -39,10 +39,32 @@
       "title": "VERIFY Phase A: schema v3 and globally-unique id prefixes",
       "description": "Context: Phase A complete (laps 1-3). HIGH-RISK: schema v3 migration is one-way and id-prefix allocation correctness underpins every downstream scope-resolution guarantee. Use the openspec-verify-change skill against the `add-stints` change.\n\nOutcome: Verified report on Phase A correctness. Check off tasks.md boxes for 1.1-1.9 ONLY if thoroughly and correctly done. Implementation laps do not tick boxes.\n\nFiles \u0026 scope: Read-only review. Identify the branch/merge target BEFORE diffing (check PR metadata, branch config, recent git history; do not assume main). Diff \u003ctarget\u003e...HEAD for the Phase A changes.\n\nDesign: Do not rewrite git history; if cleanup is needed, add a focused head lap instead. Tests-green is NOT sufficient verification here. Trace the actual code paths: (a) store.Load lenient envelope decode -\u003e version gate -\u003e strict entry decode (confirm a synthetic v4 file hits the version-gate message, not the unknown-field error); (b) migrate v1-\u003ev2-\u003ev3 ordering and idempotency; (c) kind/ref shapes and ordering with laps; (d) stint-name validation branches and archive no-overwrite; (e) GenerateID signature + every caller passes the correct scope prefix; (f) AllocateStintPrefix determinism and that the uniqueness set includes BOTH the repo prefix AND existing stint prefixes. If improve-cli-ergonomics or add-event-log-and-status work appears in the diff, treat it as pre-existing baseline unless the user asks otherwise.\n\nAcceptance: Report states what is correct, what is missing, and any blockers. Check 1.1-1.9 boxes in openspec/changes/add-stints/tasks.md for verified-done work. Open head laps for any gap too big for a one-liner fix.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-29T10:09:28.111360644Z",
-      "updatedAt": "2026-06-29T10:09:28.111360644Z",
+      "updatedAt": "2026-06-30T17:43:57.054384246Z",
+      "completedAt": "2026-06-30T17:43:57.054384246Z"
+    },
+    {
+      "id": "work-9d4f",
+      "title": "Fix raw stint-file initialization to require/assign stint prefixes",
+      "description": "",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-06-30T17:43:50.798636986Z",
+      "updatedAt": "2026-06-30T17:43:50.798636986Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-672b",
+      "title": "VERIFY raw stint-file prefix enforcement for Phase A",
+      "description": "",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-06-30T17:43:50.785404423Z",
+      "updatedAt": "2026-06-30T17:43:50.785404423Z",
       "completedAt": null
     },
     {
