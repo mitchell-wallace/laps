@@ -17,11 +17,11 @@
       "title": "Write schema v3 test suite",
       "description": "Context: Lap 1 implemented schema v3. This lap adds the dedicated coverage called out in task 1.7, split from impl because migration and version-gate correctness is subtle and high-risk.\n\nOutcome: internal/store has thorough, named tests covering every scenario in task 1.7.\n\nFiles \u0026 scope: internal/store/store_test.go (extend) or a new internal/store/stint_test.go if cleaner. No production code changes unless a tiny one-liner is needed to make a test possible.\n\nDesign: Tests must assert the decode-order guarantee EXPLICITLY: a synthetic v4 file (CurrentVersion+1) carrying a novel entry field produces the version-gate error string, NOT the generic unknown-field error. Migration tests must verify BOTH steps (v1-\u003ev2 ordering, v2-\u003ev3 kind stamping) run in order and are idempotent. The mixed-queue test must verify laps and stint refs round-trip and order by their order keys together. Name-safety tests must cover each rejection branch (blank, separator, `.`, `..`, active collision, archived collision) and the archive no-overwrite case.\n\nAcceptance: `just test` green. Each task-1.7 scenario has at least one named test. `just lint` clean.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-29T10:09:28.111358793Z",
-      "updatedAt": "2026-06-29T10:09:28.111358793Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T17:33:59.533894071Z",
+      "completedAt": "2026-06-30T17:33:59.533894071Z"
     },
     {
       "id": "laps-0264",
