@@ -6,7 +6,7 @@
 - [x] 1.4 Migrate v2→v3 after v1→v2 ordering migration: stamp `kind:"lap"` on every entry, bump version; keep the version-gate rejection for newer files
 - [x] 1.5 Stint files at `.laps/stints/<name>.laps.json` (same `File` schema); archive dir `.laps/stints/archive/`
 - [x] 1.6 Enforce stint-name safety and archive no-overwrite behavior
-- [ ] 1.7 Tests: v2 migrates; missing `kind` ⇒ lap; mixed queue round-trips; newer files with new fields get a version-gate error; unsafe/colliding names rejected
+- [x] 1.7 Tests: v2 migrates; missing `kind` ⇒ lap; mixed queue round-trips; newer files with new fields get a version-gate error; unsafe/colliding names rejected
 - [ ] 1.8 Globally-unique ids: record an allocated 4-char `prefix` in stint file metadata; make `store.GenerateID` (store.go:413) take the containing scope's prefix — repo prefix (`normalizePrefix(repoRoot)`) for root laps, the stint's prefix for stint laps — so a lap id is unique across all files and its prefix identifies its owning queue
 - [ ] 1.9 Allocate a stint prefix at `stints new`: first 4 lowercase alphanumerics of the stint name, made unique against the repo prefix and all existing stint prefixes by trying other permutations/substrings of the name chars, then incrementing the last char through `0-9a-z`; widening to 6 chars is a future option. Tests: stint laps carry the stint prefix; root vs stint ids never collide; a name colliding with the repo/another stint prefix gets a distinct prefix
 

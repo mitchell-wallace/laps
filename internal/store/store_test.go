@@ -400,6 +400,26 @@ func TestLoad_RejectExtraTaskField(t *testing.T) {
 	}
 }
 
+func TestLoadNewerVersionWithNovelEntryFieldReturnsVersionGateError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "laps.json")
+	data := `{"version":4,"tasks":[{"kind":"lap","id":"x","title":"y","isDone":false,"order":1,"createdAt":"2026-04-28T10:15:00Z","updatedAt":"2026-04-28T10:15:00Z","futureEntryField":"new-in-v4"}]}`
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for newer schema version")
+	}
+	if !strings.Contains(err.Error(), "schema version 4") || !strings.Contains(err.Error(), "please update laps") {
+		t.Fatalf("expected version-gate error, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("expected version gate before strict entry decode, got unknown-field error: %v", err)
+	}
+}
+
 func TestLoad_RejectInvalidTaskStructure(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "laps.json")
@@ -428,6 +448,139 @@ func TestCheckDefaultStore_OK(t *testing.T) {
 	}
 }
 
+func TestMigrateV1RunsOrderingBeforeKindStampAndIsIdempotent(t *testing.T) {
+	f := &File{
+		Version: 1,
+		Tasks: []Task{
+			{ID: "first"},
+			{ID: "second"},
+			{ID: "third"},
+		},
+	}
+
+	if !Migrate(f) {
+		t.Fatal("expected Migrate to report a change")
+	}
+	if f.Version != CurrentVersion {
+		t.Fatalf("version = %d, want %d", f.Version, CurrentVersion)
+	}
+	for i, task := range f.Tasks {
+		wantOrder := (i + 1) * orderStep
+		if task.Order != wantOrder {
+			t.Errorf("task %s order = %d, want %d", task.ID, task.Order, wantOrder)
+		}
+		if task.Kind != KindLap {
+			t.Errorf("task %s kind = %q, want %q", task.ID, task.Kind, KindLap)
+		}
+	}
+
+	before := append([]Task(nil), f.Tasks...)
+	if Migrate(f) {
+		t.Fatal("expected second Migrate to be a no-op")
+	}
+	if f.Version != CurrentVersion {
+		t.Fatalf("version after second migrate = %d, want %d", f.Version, CurrentVersion)
+	}
+	for i := range before {
+		if f.Tasks[i] != before[i] {
+			t.Fatalf("task %d changed on idempotent migrate: got %+v want %+v", i, f.Tasks[i], before[i])
+		}
+	}
+}
+
+func TestMigrateV2StampsLapKindAndIsIdempotent(t *testing.T) {
+	f := &File{
+		Version: 2,
+		Tasks: []Task{
+			{ID: "alpha", Order: 10},
+			{ID: "beta", Kind: KindLap, Order: 20},
+		},
+	}
+
+	if !Migrate(f) {
+		t.Fatal("expected Migrate to report a change")
+	}
+	if f.Version != CurrentVersion {
+		t.Fatalf("version = %d, want %d", f.Version, CurrentVersion)
+	}
+	for _, task := range f.Tasks {
+		if task.Kind != KindLap {
+			t.Errorf("task %s kind = %q, want %q", task.ID, task.Kind, KindLap)
+		}
+	}
+	if f.Tasks[0].Order != 10 || f.Tasks[1].Order != 20 {
+		t.Fatalf("v2 migration should preserve existing order keys, got %d and %d", f.Tasks[0].Order, f.Tasks[1].Order)
+	}
+
+	before := append([]Task(nil), f.Tasks...)
+	if Migrate(f) {
+		t.Fatal("expected second Migrate to be a no-op")
+	}
+	for i := range before {
+		if f.Tasks[i] != before[i] {
+			t.Fatalf("task %d changed on idempotent migrate: got %+v want %+v", i, f.Tasks[i], before[i])
+		}
+	}
+}
+
+func TestLoadMissingKindDefaultsToLap(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "laps.json")
+	data := `{"version":3,"tasks":[{"id":"x","title":"y","isDone":false,"order":1,"createdAt":"2026-04-28T10:15:00Z","updatedAt":"2026-04-28T10:15:00Z"}]}`
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := file.Tasks[0].Kind; got != KindLap {
+		t.Fatalf("missing kind loaded as %q, want %q", got, KindLap)
+	}
+}
+
+func TestMixedQueueRoundTripsLapAndStintRefsOrderedTogether(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "laps.json")
+	created := time.Date(2026, 6, 30, 8, 0, 0, 0, time.UTC)
+	file := &File{
+		Version: CurrentVersion,
+		Tasks: []Task{
+			{Kind: KindLap, ID: "lap-tail", Title: "Tail lap", Order: 30, CreatedAt: created, UpdatedAt: created},
+			{Kind: KindStint, ID: "stint-ref", Ref: "auth", Title: "Auth stint", Order: 10, CreatedAt: created, UpdatedAt: created},
+			{Kind: KindLap, ID: "lap-middle", Title: "Middle lap", Order: 20, CreatedAt: created, UpdatedAt: created},
+		},
+	}
+
+	if err := Save(path, file); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if len(loaded.Tasks) != 3 {
+		t.Fatalf("len(Tasks) = %d, want 3", len(loaded.Tasks))
+	}
+	want := []struct {
+		id   string
+		kind string
+		ref  string
+	}{
+		{id: "stint-ref", kind: KindStint, ref: "auth"},
+		{id: "lap-middle", kind: KindLap},
+		{id: "lap-tail", kind: KindLap},
+	}
+	for i, exp := range want {
+		if loaded.Tasks[i].ID != exp.id || loaded.Tasks[i].Kind != exp.kind || loaded.Tasks[i].Ref != exp.ref {
+			t.Fatalf("task %d = id %q kind %q ref %q, want id %q kind %q ref %q",
+				i, loaded.Tasks[i].ID, loaded.Tasks[i].Kind, loaded.Tasks[i].Ref, exp.id, exp.kind, exp.ref)
+		}
+	}
+}
+
 func TestCheckDefaultStore_MissingNoCandidates(t *testing.T) {
 	dir := t.TempDir()
 	beadsDir := filepath.Join(dir, ".laps")
@@ -436,6 +589,96 @@ func TestCheckDefaultStore_MissingNoCandidates(t *testing.T) {
 	}
 	if err := CheckDefaultStore(beadsDir); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestStintNameSafetyRejectsUnsafeAndCollidingNames(t *testing.T) {
+	beadsDir := filepath.Join(t.TempDir(), ".laps")
+	if err := os.MkdirAll(StintsDir(beadsDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(StintArchiveDir(beadsDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(StintsDir(beadsDir), "active"+stintFileSuffix), []byte(`{"version":3,"tasks":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(StintArchiveDir(beadsDir), "archived"+stintFileSuffix), []byte(`{"version":3,"tasks":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		want string
+	}{
+		{name: "", want: "blank"},
+		{name: "auth" + string(os.PathSeparator) + "api", want: "not a path"},
+		{name: ".", want: "invalid stint name"},
+		{name: "..", want: "invalid stint name"},
+		{name: "active", want: "active stint file already exists"},
+		{name: "archived", want: "archived stint file already exists"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := CheckStintNameAvailable(beadsDir, tt.name)
+			if err == nil {
+				t.Fatal("expected stint name to be rejected")
+			}
+			if !errors.Is(err, ErrStore) {
+				t.Fatalf("expected ErrStore, got %v", err)
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("expected error to contain %q, got %v", tt.want, err)
+			}
+		})
+	}
+}
+
+func TestArchiveStintRefusesToOverwriteArchivedFile(t *testing.T) {
+	beadsDir := filepath.Join(t.TempDir(), ".laps")
+	active, err := ResolveStintFile(beadsDir, "auth")
+	if err != nil {
+		t.Fatal(err)
+	}
+	archived, err := ResolveArchivedStintFile(beadsDir, "auth")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(active), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(archived), 0755); err != nil {
+		t.Fatal(err)
+	}
+	activeBody := []byte(`{"version":3,"tasks":[{"kind":"lap","id":"active","title":"active","isDone":false,"order":1,"createdAt":"2026-04-28T10:15:00Z","updatedAt":"2026-04-28T10:15:00Z"}]}`)
+	archivedBody := []byte(`{"version":3,"tasks":[{"kind":"lap","id":"archived","title":"archived","isDone":false,"order":1,"createdAt":"2026-04-28T10:15:00Z","updatedAt":"2026-04-28T10:15:00Z"}]}`)
+	if err := os.WriteFile(active, activeBody, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(archived, archivedBody, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = ArchiveStint(beadsDir, "auth")
+	if err == nil {
+		t.Fatal("expected archive collision error")
+	}
+	if !strings.Contains(err.Error(), "archived stint file already exists") {
+		t.Fatalf("expected archive no-overwrite error, got %v", err)
+	}
+	gotArchived, err := os.ReadFile(archived)
+	if err != nil {
+		t.Fatalf("archived file should remain readable: %v", err)
+	}
+	if string(gotArchived) != string(archivedBody) {
+		t.Fatalf("archived file was overwritten: got %s want %s", gotArchived, archivedBody)
+	}
+	gotActive, err := os.ReadFile(active)
+	if err != nil {
+		t.Fatalf("active file should remain after failed archive: %v", err)
+	}
+	if string(gotActive) != string(activeBody) {
+		t.Fatalf("active file changed: got %s want %s", gotActive, activeBody)
 	}
 }
 
