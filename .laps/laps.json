@@ -149,11 +149,11 @@
       "title": "Final whole-outcome verification of add-event-log-and-status",
       "description": "Context: Final verification lap covering the whole change against both specs (event-log and status) and all of tasks.md before the change is considered done.\n\nOutcome: Whole-change sign-off. Check off ALL remaining tasks.md boxes (1.1-1.6, 2.1-2.6, 3.1-3.5, 4.1-4.5, 5.1-5.5, 6.1-6.2) only after confirming each is correct and thorough. Confirm explicitly that VERSION was NOT bumped (6.2).\n\nProcess: Use the openspec-verify-change skill against add-event-log-and-status and run the COMPLETE verification. Identify the merge target before diffing (git diff \u003ctarget\u003e...HEAD); treat any branch work from improve-cli-ergonomics that predates this batch as pre-existing baseline — do NOT add cleanup laps that remove it. Do NOT rewrite git history (no reset/rebase/squash/force-push).\n\nDepth checks: Walk every SHALL requirement and scenario in openspec/changes/add-event-log-and-status/specs/event-log/spec.md and specs/status/spec.md against the actual diff. Trace the core dependency lines: structured claim -\u003e status claimedAt/ageSeconds; event-log writer -\u003e every mutating command -\u003e log reader. Confirm the append-only/best-effort contract holds under failure; schema and attribution (ts/event/cmd/file/scope/session) complete; gitignore idempotent; reader filter-then-limit/newest-last/--since inclusive/malformed-skip/json-object-output; status state taxonomy and failure-mode classification (error path vs degraded claim.valid=false with no auto-clear); structured-claim back-compat (legacy bare-id, unknown-field ignoring, malformed detection). Confirm the three DECIDED product calls are implemented as decided: claim-clear replay as a separate unclaimed event with detail.reason \"completed\"; status JSON shape with nullable claimedAt + integer ageSeconds and NO stale boolean; log reader filter-then-limit semantics. Run just test and just lint. Fix only tiny safe one-liners; escalate anything larger to a head lap. Report a final summary.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-06-29T10:05:27.706355059Z",
-      "updatedAt": "2026-06-29T10:05:27.706355059Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T10:34:56.616407912Z",
+      "completedAt": "2026-06-30T10:34:56.616407912Z"
     }
   ]
 }
