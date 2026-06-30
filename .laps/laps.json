@@ -94,11 +94,11 @@
       "title": "Verify cross-file claim event logging",
       "description": "Re-check add-event-log-and-status event-log tasks after the file-identity fix: unclaimed(replaced) and claim-undo must stamp the cleared claim's file/title/assignee correctly across task files, then rerun go test ./... and golangci-lint run ./....",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 425984,
       "createdAt": "2026-06-30T09:30:12.81016091Z",
-      "updatedAt": "2026-06-30T09:30:12.81016091Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T09:40:25.790864483Z",
+      "completedAt": "2026-06-30T09:40:25.790864483Z"
     },
     {
       "id": "laps-e248",
