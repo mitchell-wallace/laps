@@ -138,11 +138,11 @@
       "title": "Document event log, log/status commands, LAPS_SESSION, and structured claim in README",
       "description": "Context: All implementation laps are complete and verified. Document the new user-facing behavior. Tasks 6.1 (document) and 6.2 (explicitly do NOT bump VERSION — add-stints-gating owns the 0.9.0 bump).\n\nOutcome: README.md documents the event log, the laps log command, the laps status command, the LAPS_SESSION env var, and the structured claim format. VERSION is untouched.\n\nFiles \u0026 scope: README.md only. Follow the existing README's structure and tone.\n\nDesign: Cover what the event log is (native, best-effort, append-only, gitignored) and where it lives (.laps/log.jsonl); the laps log flags (-n, --lap, --session, --since, --json-output) and the filter-then-limit/newest-last behavior; the laps status states (active/ready/empty/complete) and the --json-output claimedAt/ageSeconds shape (and the explicit absence of a stale flag in this version); LAPS_SESSION attribution; the structured claim {lap, file, claimedAt} with legacy bare-id back-compat. Do NOT bump VERSION.\n\nAcceptance: README covers all five topics; no VERSION change; just lint clean. The final VERIFY lap confirms VERSION is still unchanged.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-29T10:05:27.706353855Z",
-      "updatedAt": "2026-06-29T10:05:27.706353855Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T10:29:43.2591327Z",
+      "completedAt": "2026-06-30T10:29:43.2591327Z"
     },
     {
       "id": "laps-0598",
