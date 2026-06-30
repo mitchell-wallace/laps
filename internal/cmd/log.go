@@ -96,7 +96,7 @@ var logCmd = &cobra.Command{
 		}
 
 		resolvedFile := store.ResolveFile(fileFlag)
-		var filtered []logEventLine
+		filtered := make([]logEventLine, 0)
 		for _, ev := range events {
 			if ev.File != resolvedFile {
 				continue

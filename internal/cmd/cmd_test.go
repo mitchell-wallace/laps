@@ -3954,6 +3954,38 @@ func TestLogJSONOutput(t *testing.T) {
 	}
 }
 
+func TestLogJSONOutputNoMatchesUsesEmptyArray(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	lines := []string{
+		`{"ts":"2026-01-01T12:00:00Z","event":"created","cmd":"add","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,
+	}
+	writeTestLog(t, beadsDir, lines)
+
+	stdout, _, code := runMB("log", "--json-output", "--lap", "laps-missing")
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d", code)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+		t.Fatalf("failed to unmarshal JSON output: %v, output: %q", err, stdout)
+	}
+
+	evs, ok := parsed["events"]
+	if !ok {
+		t.Fatalf("JSON output missing 'events' field: %q", stdout)
+	}
+	evList, ok := evs.([]interface{})
+	if !ok {
+		t.Fatalf("expected events to be an array, got %T (%v)", evs, evs)
+	}
+	if len(evList) != 0 {
+		t.Fatalf("expected empty events array, got: %v", evList)
+	}
+}
+
 func TestLogMissingLog(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
