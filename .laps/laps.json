@@ -6,11 +6,11 @@
       "title": "Build append-only event-log writer with schema and session stamping",
       "description": "Context: This is change #2 (add-event-log-and-status). improve-cli-ergonomics is assumed already merged (move/edit/assign commands and the list active-marker exist). This lap builds the foundation for the whole event-log capability: a native, best-effort JSONL writer that every mutating command will call in later laps.\n\nOutcome: A reusable event-log writer that appends one JSON line per call to .laps/log.jsonl, populating the full schema and stamping session/scope/file. Not yet wired into any command (wiring is a later lap).\n\nFiles \u0026 scope: Add a new writer module (a new internal/eventlog package is the natural home; internal/store is acceptable if it fits better — pick one and be consistent). Define the line schema struct and the append helper. Do NOT touch any command file yet. Do NOT add a log reader here.\n\nDesign: The writer is NATIVE and BEST-EFFORT by contract: an append failure is reported with a one-line warning on stderr and MUST NEVER change the command's exit code or be returned as an error to the caller. Each line is a JSON object: {ts (UTC RFC3339), event, cmd, file, lap?, title?, assignee?, scope, detail{}, session}. scope defaults to \"root\". file is the resolved .laps-relative task file (e.g. laps.json, auth.json) for the mutation — the caller passes it in. session is read from the LAPS_SESSION env var and is empty when unset. Optional fields (lap/title/assignee) are omitted or empty when not applicable; detail is an event-specific object (empty object when unused).\n\nAcceptance: Focused unit tests covering: (1) append writes one valid JSON line with all required schema fields populated; (2) session is stamped from LAPS_SESSION when set and empty when unset; (3) scope defaults to root; (4) best-effort on write failure (e.g. unwritable path) — the writer returns no error and emits a stderr note, caller unaffected; (5) appends are additive (existing lines preserved). go test ./... passes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-29T10:05:27.706328561Z",
-      "updatedAt": "2026-06-29T10:05:27.706328561Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T07:46:42.776303465Z",
+      "completedAt": "2026-06-30T07:46:42.776303465Z"
     },
     {
       "id": "laps-2b1d",
