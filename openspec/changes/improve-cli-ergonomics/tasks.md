@@ -1,13 +1,13 @@
 ## 1. List rendering
 
-- [ ] 1.1 Add a two-line default formatter to `list`: line 1 = number + title + active marker `> `, line 2 = `id · assignee · state`, no descriptions
-- [ ] 1.2 Add a `--oneline` flag that renders the current single-line format (`<n>. <id> — <title> (assignee: X)`)
-- [ ] 1.3 Render done laps struck through under `--all`/`--done`: title-only strike in two-line mode, prior whole-line strike under `--oneline`
-- [ ] 1.4 Active-lap marker: use the central claim-reader contract and mark the matching lap; no marker when nothing is claimed or the claim is outside the rendered result
+- [x] 1.1 Add a two-line default formatter to `list`: line 1 = number + title + active marker `> `, line 2 = `id · assignee · state`, no descriptions
+- [x] 1.2 Add a `--oneline` flag that renders the current single-line format (`<n>. <id> — <title> (assignee: X)`)
+- [x] 1.3 Render done laps struck through under `--all`/`--done`: title-only strike in two-line mode, prior whole-line strike under `--oneline`
+- [x] 1.4 Active-lap marker: use the central claim-reader contract and mark the matching lap; no marker when nothing is claimed or the claim is outside the rendered result
 - [ ] 1.5 Register `ls` as an alias of `list` (same flags, same output)
 - [ ] 1.6 Update `internal/cmd/hooks.go:isKnownCommand` so `ls` is treated as a built-in and is not intercepted as hook-only
 - [ ] 1.7 Tests: two-line default, `--oneline`, marker present/absent/nonmatching claim, `ls` alias through `runMBExecute`, `--json-output` unchanged
-- [ ] 1.8 Migrate existing `list` assertions in `internal/cmd/cmd_test.go` to the new default: `TestListDefault` (expects N lines for N laps), `TestListOutputUnchangedWithoutAssignee`, `TestListOutputIncludesAssignee`, the `Contains(out, id+" — ...")` check, and the `idxBefore(list, "— A", "— B")` ordering assertions (these rely on the `— <title>` substring that two-line line 1 no longer carries). Re-point the terse-shape assertions at `--oneline` so the legacy one-line format stays under test rather than deleted
+- [x] 1.8 Migrate existing `list` assertions in `internal/cmd/cmd_test.go` to the new default: `TestListDefault` (expects N lines for N laps), `TestListOutputUnchangedWithoutAssignee`, `TestListOutputIncludesAssignee`, the `Contains(out, id+" — ...")` check, and the `idxBefore(list, "— A", "— B")` ordering assertions (these rely on the `— <title>` substring that two-line line 1 no longer carries). Re-point the terse-shape assertions at `--oneline` so the legacy one-line format stays under test rather than deleted
 
 ## 2. Move
 

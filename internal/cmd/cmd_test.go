@@ -43,6 +43,7 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	jsonOutput = false
 	listAll = false
 	listDone = false
+	listOneline = false
 	addTitle = ""
 	addDescription = ""
 	addAssignee = ""
@@ -107,6 +108,7 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	jsonOutput = false
 	listAll = false
 	listDone = false
+	listOneline = false
 	addTitle = ""
 	addDescription = ""
 	addAssignee = ""
@@ -234,7 +236,7 @@ func TestAddJSONWithAssignee(t *testing.T) {
 	}
 	id := strings.TrimSpace(out)
 
-	out, _, code = runMB("list")
+	out, _, code = runMB("list", "--oneline")
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d", code)
 	}
@@ -486,9 +488,10 @@ func TestListDefault(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d", code)
 	}
+	// Two-line default: two laps render on four lines.
 	lines := strings.Split(strings.TrimSpace(out), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("expected 2 lines, got %d", len(lines))
+	if len(lines) != 4 {
+		t.Fatalf("expected 4 lines, got %d: %q", len(lines), out)
 	}
 }
 
@@ -498,7 +501,8 @@ func TestListOutputUnchangedWithoutAssignee(t *testing.T) {
 
 	out, _, _ := runMB("add", "tail", "--title", "A")
 	id := strings.TrimSpace(out)
-	out, _, code := runMB("list")
+	// --oneline preserves the prior single-line shape byte-for-byte.
+	out, _, code := runMB("list", "--oneline")
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d", code)
 	}
@@ -514,7 +518,8 @@ func TestListOutputIncludesAssignee(t *testing.T) {
 
 	out, _, _ := runMB("add", "tail", "--title", "A", "--assignee", "alice")
 	id := strings.TrimSpace(out)
-	out, _, code := runMB("list")
+	// --oneline appends the assignee clause when the assignee is set.
+	out, _, code := runMB("list", "--oneline")
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d", code)
 	}
@@ -621,7 +626,8 @@ func TestPruneDefault(t *testing.T) {
 		t.Fatalf("expected 5 removed, got %s", out)
 	}
 
-	out, _, code = runMB("list", "--done")
+	// --oneline keeps one line per lap so the count maps to lap count.
+	out, _, code = runMB("list", "--done", "--oneline")
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d", code)
 	}
@@ -1179,7 +1185,8 @@ func TestOrderingHeadLandsBelowDone(t *testing.T) {
 	runMB("done")
 
 	// Default list shows only todos, head first: A then B.
-	list, _, _ := runMB("list")
+	// --oneline keeps the `— <title>` substring the legacy assertion relies on.
+	list, _, _ := runMB("list", "--oneline")
 	if !strings.Contains(list, "1. ") || !idxBefore(list, "— A", "— B") {
 		t.Fatalf("expected A before B in todo list, got:\n%s", list)
 	}
@@ -1189,7 +1196,7 @@ func TestOrderingHeadLandsBelowDone(t *testing.T) {
 
 	// New head lands at the top of the todo section, still below the done lap.
 	runMB("add", "head", "--title", "D")
-	list2, _, _ := runMB("list")
+	list2, _, _ := runMB("list", "--oneline")
 	if !idxBefore(list2, "— D", "— A") {
 		t.Fatalf("expected new head D before A, got:\n%s", list2)
 	}
@@ -1218,7 +1225,7 @@ func TestAddAfterDoneWarnsAndBecomesHead(t *testing.T) {
 	if !strings.Contains(errStr, "already complete") || !strings.Contains(errStr, "head") {
 		t.Fatalf("expected fallback-to-head warning, got stderr: %q", errStr)
 	}
-	list, _, _ := runMB("list")
+	list, _, _ := runMB("list", "--oneline")
 	if !idxBefore(list, "— D", "— A") {
 		t.Fatalf("expected D to be the new head, got:\n%s", list)
 	}
