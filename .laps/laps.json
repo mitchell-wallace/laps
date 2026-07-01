@@ -39,11 +39,11 @@
       "title": "Implement exitState and typed held-aware resolver",
       "description": "Context: This is the LOAD-BEARING, high-risk lap of the whole change. Read design.md Implementation Contracts in full before coding. Today `exit()` (internal/cmd/root.go:39-51) ALWAYS writes a `laps:` stderr line (or an `{error,exitCode}` JSON object to STDERR), and the ONLY way a nonzero OS code is produced is `panic(*exitError)` -\u003e recover -\u003e `os.Exit` (root.go:50, 57-64); the deferred after-hook `runAfterHooksDeferred` (internal/cmd/hooks.go:32-51, registered at get.go:46 / claim.go:46) reads `*exitCode` ONLY during that panic unwind. So a naive `os.Exit(11)` or `return`-with-error SKIPS the after-hook and violates 'hook sees the code'.\n\nOutcome: (a) a dedicated `exitState(code int)` helper; (b) a single TYPED queue-state (`lap | held | empty | complete`) returned by the flow-start resolver; (c) held detection — at each context head, a held `kind:\"stint\"` ref returns `held` and SHALL NOT descend into the child file. Do NOT wire exit codes into the get/claim nil-site yet (that is the next impl lap); do NOT touch status yet.\n\nFiles \u0026 scope: internal/cmd/root.go for exitState; the add-stints flow-start resolver (locate it in the merged tree) for the typed queue-state return and held-no-descent. Keep the resolver signature change additive so get/claim and the status probe can both consume one resolution pass.\n\nDesign (load-bearing — implement exactly): `exitState(code)` (1) sets the captured `exitCode = code`, (2) in JSON mode prints the small queue-state object to STDOUT via `printJSON` (note: `exit()` puts JSON on STDERR — this stdout-vs-stderr split IS the contract), (3) panics `*exitError{code}` with NO stderr error line. Held cases additionally warn on STDERR. Routing 10/11/12 through the existing panic/recover path is precisely what keeps `runAfterHooksDeferred` firing — do not bypass it. The resolver returns ONE typed outcome shared by get/claim and the later status gate probe (one resolution pass, not two); a held kind:\"stint\" ref at a context head returns held and does not descend.\n\nAcceptance: `just build` + `just test` + `just lint` green. Include focused regression tests now (not deferred): the after-hook observes exit code 11 (the critical assertion proving the mechanism), and held-no-descent returns the held state without selecting a lap. The broader exit-code matrix is a later lap; do not tick tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-29T10:05:58.993477099Z",
-      "updatedAt": "2026-06-29T10:05:58.993477099Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T08:31:31.721804458Z",
+      "completedAt": "2026-07-01T08:31:31.721804458Z"
     },
     {
       "id": "laps-d068",
