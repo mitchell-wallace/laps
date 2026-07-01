@@ -214,30 +214,134 @@ func rejectExistingFile(path, label string) error {
 // ArchiveStint moves an active stint file into the archive directory without
 // overwriting an existing archived file.
 func ArchiveStint(beadsDir, name string) error {
-	src, err := ResolveStintFile(beadsDir, name)
-	if err != nil {
-		return err
-	}
-	dst, err := ResolveArchivedStintFile(beadsDir, name)
+	src, dst, err := PrepareArchiveStint(beadsDir, name)
 	if err != nil {
 		return err
 	}
 	return ArchiveStintFile(src, dst)
 }
 
+// PrepareArchiveStint validates the active and archived paths, creates and
+// checks the archive directory, and returns the paths to use for the final
+// no-overwrite rename.
+func PrepareArchiveStint(beadsDir, name string) (src, dst string, err error) {
+	src, err = ResolveStintFile(beadsDir, name)
+	if err != nil {
+		return "", "", err
+	}
+	dst, err = ResolveArchivedStintFile(beadsDir, name)
+	if err != nil {
+		return "", "", err
+	}
+	if err := prepareMoveTarget(dst, "archived stint", "stint archive directory"); err != nil {
+		return "", "", err
+	}
+	return src, dst, nil
+}
+
 // ArchiveStintFile moves src to dst, creating dst's parent directory and
 // refusing to overwrite an existing file.
 func ArchiveStintFile(src, dst string) error {
-	if err := rejectExistingFile(dst, "archived stint"); err != nil {
+	if err := prepareMoveTarget(dst, "archived stint", "stint archive directory"); err != nil {
 		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return fmt.Errorf("%w: create stint archive directory: %v", ErrStore, err)
 	}
 	if err := os.Rename(src, dst); err != nil {
 		return fmt.Errorf("%w: archive stint %s to %s: %v", ErrStore, src, dst, err)
 	}
 	return nil
+}
+
+// RestoreArchivedStint moves an archived stint back to the active stints
+// directory without overwriting an existing active file.
+func RestoreArchivedStint(beadsDir, name string) error {
+	src, err := ResolveArchivedStintFile(beadsDir, name)
+	if err != nil {
+		return err
+	}
+	dst, err := ResolveStintFile(beadsDir, name)
+	if err != nil {
+		return err
+	}
+	if err := prepareMoveTarget(dst, "active stint", "stints directory"); err != nil {
+		return err
+	}
+	if err := os.Rename(src, dst); err != nil {
+		return fmt.Errorf("%w: restore archived stint %s to %s: %v", ErrStore, src, dst, err)
+	}
+	return nil
+}
+
+func prepareMoveTarget(dst, collisionLabel, dirLabel string) error {
+	if err := rejectExistingFile(dst, collisionLabel); err != nil {
+		return err
+	}
+	dir := filepath.Dir(dst)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("%w: create %s: %v", ErrStore, dirLabel, err)
+	}
+	if err := checkDirWritable(dir); err != nil {
+		return fmt.Errorf("%w: %s is not writable: %v", ErrStore, dirLabel, err)
+	}
+	return nil
+}
+
+func checkDirWritable(dir string) error {
+	f, err := os.CreateTemp(dir, ".laps-write-test-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	closeErr := f.Close()
+	removeErr := os.Remove(name)
+	if closeErr != nil {
+		return closeErr
+	}
+	return removeErr
+}
+
+// ArchivedStintNameForPath returns the stint name when path identifies an
+// archived stint file directly under .laps/stints/archive/.
+func ArchivedStintNameForPath(beadsDir, path string) (string, bool) {
+	rel, err := filepath.Rel(StintArchiveDir(beadsDir), path)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+		return "", false
+	}
+	if filepath.Dir(rel) != "." || !strings.HasSuffix(rel, stintFileSuffix) {
+		return "", false
+	}
+	name := strings.TrimSuffix(rel, stintFileSuffix)
+	if err := ValidateStintName(name); err != nil {
+		return "", false
+	}
+	return name, true
+}
+
+// QueueFilePaths returns the root queue plus all active and archived stint
+// files in deterministic path order.
+func QueueFilePaths(beadsDir string) ([]string, error) {
+	paths := []string{filepath.Join(beadsDir, defaultFileName)}
+	stintsDir := StintsDir(beadsDir)
+	if _, err := os.Stat(stintsDir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return paths, nil
+		}
+		return nil, fmt.Errorf("%w: stat %s: %v", ErrStore, stintsDir, err)
+	}
+	err := filepath.WalkDir(stintsDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("%w: scan queue file %s: %v", ErrStore, path, err)
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), stintFileSuffix) {
+			return nil
+		}
+		paths = append(paths, path)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(paths[1:])
+	return paths, nil
 }
 
 // Load reads and unmarshals a task file.

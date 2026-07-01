@@ -50,10 +50,10 @@
 
 ## 7. Drain & auto-archive
 
-- [ ] 7.1 Detect drain (no todo laps left) in the operation that empties a stint; flip its ref to done and set `completedAt`
-- [ ] 7.2 Move the drained stint file to `.laps/stints/archive/`. Order the drain to fail safe (see design "Ordering and partial-failure"): check the archive-collision/no-overwrite and target writability **before** any mutation, do the `os.Rename` **last**, and flip the root ref to done only after the rename succeeds, so a partial failure never leaves a `done` root ref over a still-present non-archived stint file; the next flow op idempotently re-drains the empty stint
-- [ ] 7.3 Keep draining content-based/position-independent (a preempted, non-head stint still drains)
-- [ ] 7.4 `done undo` scans all queue files (root, active stints, `.laps/stints/archive/`) and reopens the lap with the greatest `CompletedAt` across them (replacing today's single-file `done.go:114-123` max). When that lap is in an archived stint, restore the stint file to `.laps/stints/`, reopen the root stint ref (clear its `completedAt`), then reopen the lap under the existing undo rules (5-minute age gate still applies)
+- [x] 7.1 Detect drain (no todo laps left) in the operation that empties a stint; flip its ref to done and set `completedAt`
+- [x] 7.2 Move the drained stint file to `.laps/stints/archive/`. Order the drain to fail safe (see design "Ordering and partial-failure"): check the archive-collision/no-overwrite and target writability **before** any mutation, do the `os.Rename` **last**, and flip the root ref to done only after the rename succeeds, so a partial failure never leaves a `done` root ref over a still-present non-archived stint file; the next flow op idempotently re-drains the empty stint
+- [x] 7.3 Keep draining content-based/position-independent (a preempted, non-head stint still drains)
+- [x] 7.4 `done undo` scans all queue files (root, active stints, `.laps/stints/archive/`) and reopens the lap with the greatest `CompletedAt` across them (replacing today's single-file `done.go:114-123` max). When that lap is in an archived stint, restore the stint file to `.laps/stints/`, reopen the root stint ref (clear its `completedAt`), then reopen the lap under the existing undo rules (5-minute age gate still applies)
 - [ ] 7.5 Tests: completing the last lap drains→archives; a non-head stint drains correctly; undo after archive unarchives and reopens the ref/lap
 
 ## 8. Commands & rendering

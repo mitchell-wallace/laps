@@ -99,9 +99,20 @@ When a claimed task is completed, .laps/claim is cleared.`,
 		task.IsDone = true
 		task.CompletedAt = &now
 		task.UpdatedAt = now
+		drain, err := prepareStintDrain(beadsDir, repoRoot, path, file)
+		if err != nil {
+			exitCode = 2
+			exit(2, "done: %v", err)
+		}
 		if err := store.Save(path, file); err != nil {
 			exitCode = 2
 			exit(2, "done: %v", err)
+		}
+		if drain != nil {
+			if err := finishStintDrain(drain, now); err != nil {
+				exitCode = 2
+				exit(2, "done: %v", err)
+			}
 		}
 		logEvent(beadsDir, &eventlog.Entry{
 			Event:    "completed",
@@ -145,55 +156,190 @@ var doneUndoCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
-		file := loadFile(path, repoRoot, beadsDir)
 
-		var latest *store.Task
-		for i := range file.Tasks {
-			if file.Tasks[i].IsDone && file.Tasks[i].CompletedAt != nil {
-				if latest == nil || file.Tasks[i].CompletedAt.After(*latest.CompletedAt) {
-					latest = &file.Tasks[i]
-				}
-			}
+		latest, err := findLatestCompletedTask(beadsDir, repoRoot, path)
+		if err != nil {
+			exit(2, "done undo: %v", err)
 		}
 
 		exitCode := 0
 		var output string
-		defer runAfterHooksDeferred(hookCommandName(cmd), beadsDir, path, &latest, &output, &exitCode, args)()
-		runBeforeHooks(hookCommandName(cmd), beadsDir, path, latest, args)
+		hookPath := path
+		if latest != nil {
+			hookPath = latest.Path
+		}
+		var latestTask *store.Task
+		if latest != nil {
+			latestTask = latest.Task
+		}
+		defer runAfterHooksDeferred(hookCommandName(cmd), beadsDir, hookPath, &latestTask, &output, &exitCode, args)()
+		runBeforeHooks(hookCommandName(cmd), beadsDir, hookPath, latestTask, args)
 
 		if latest == nil {
 			exitCode = 3
 			exit(3, "no completed task to undo")
 		}
 
-		age := time.Since(*latest.CompletedAt)
+		age := time.Since(*latest.Task.CompletedAt)
 		if age > UndoAgeLimit && !forceUndo {
 			exitCode = 3
-			exit(3, "last completed task %s (%s) was completed %v ago; use 'laps done undo -y' to force", latest.ID, latest.Title, age.Round(time.Second))
+			exit(3, "last completed task %s (%s) was completed %v ago; use 'laps done undo -y' to force", latest.Task.ID, latest.Task.Title, age.Round(time.Second))
 		}
 
-		latest.IsDone = false
-		latest.CompletedAt = nil
-		latest.UpdatedAt = time.Now().UTC()
-		if err := store.Save(path, file); err != nil {
+		now := time.Now().UTC()
+		if err := reopenLatestCompletion(beadsDir, latest, now); err != nil {
 			exitCode = 2
 			exit(2, "done undo: %v", err)
 		}
 		logEvent(beadsDir, &eventlog.Entry{
 			Event:    "reopened",
 			Cmd:      "done-undo",
-			Lap:      latest.ID,
-			Title:    latest.Title,
-			Assignee: latest.Assignee,
+			Lap:      latest.Task.ID,
+			Title:    latest.Task.Title,
+			Assignee: latest.Task.Assignee,
 		})
 
-		output = latest.ID
+		output = latest.Task.ID
 		if jsonOutput {
-			printJSON(map[string]interface{}{"task": latest})
+			printJSON(map[string]interface{}{"task": latest.Task})
 		} else {
-			fmt.Printf("Done state cleared for %s (%s)\n", latest.Title, latest.ID)
+			fmt.Printf("Done state cleared for %s (%s)\n", latest.Task.Title, latest.Task.ID)
 		}
 	},
+}
+
+type pendingStintDrain struct {
+	RootPath string
+	RootFile *store.File
+	RootRef  *store.Task
+	Stint    string
+	Src      string
+	Dst      string
+}
+
+func prepareStintDrain(beadsDir, repoRoot, path string, file *store.File) (*pendingStintDrain, error) {
+	stint, ok := store.ActiveStintNameForPath(beadsDir, path)
+	if !ok || firstTodo(file) != nil {
+		return nil, nil
+	}
+
+	rootPath := scopedRootPath(beadsDir)
+	rootFile := loadFile(rootPath, repoRoot, beadsDir)
+	rootRef := findStintRef(rootFile, stint)
+	if rootRef == nil {
+		return nil, nil
+	}
+
+	src, dst, err := store.PrepareArchiveStint(beadsDir, stint)
+	if err != nil {
+		return nil, err
+	}
+	return &pendingStintDrain{
+		RootPath: rootPath,
+		RootFile: rootFile,
+		RootRef:  rootRef,
+		Stint:    stint,
+		Src:      src,
+		Dst:      dst,
+	}, nil
+}
+
+func finishStintDrain(drain *pendingStintDrain, completedAt time.Time) error {
+	if err := store.ArchiveStintFile(drain.Src, drain.Dst); err != nil {
+		return err
+	}
+	drain.RootRef.IsDone = true
+	drain.RootRef.CompletedAt = &completedAt
+	drain.RootRef.UpdatedAt = completedAt
+	return store.Save(drain.RootPath, drain.RootFile)
+}
+
+func findStintRef(file *store.File, stint string) *store.Task {
+	for i := range file.Tasks {
+		if file.Tasks[i].Kind == store.KindStint && file.Tasks[i].Ref == stint {
+			return &file.Tasks[i]
+		}
+	}
+	return nil
+}
+
+type completedTaskCandidate struct {
+	Path          string
+	File          *store.File
+	Task          *store.Task
+	ArchivedStint string
+}
+
+func findLatestCompletedTask(beadsDir, repoRoot, rootPath string) (*completedTaskCandidate, error) {
+	paths, err := store.QueueFilePaths(beadsDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var latest *completedTaskCandidate
+	for _, candidatePath := range paths {
+		file, err := loadQueueFileForUndo(candidatePath, repoRoot, beadsDir, rootPath)
+		if err != nil {
+			return nil, err
+		}
+		archivedStint, _ := store.ArchivedStintNameForPath(beadsDir, candidatePath)
+		for i := range file.Tasks {
+			task := &file.Tasks[i]
+			if task.Kind != store.KindLap || !task.IsDone || task.CompletedAt == nil {
+				continue
+			}
+			if latest == nil || task.CompletedAt.After(*latest.Task.CompletedAt) || task.CompletedAt.Equal(*latest.Task.CompletedAt) && task.ID > latest.Task.ID {
+				latest = &completedTaskCandidate{
+					Path:          candidatePath,
+					File:          file,
+					Task:          task,
+					ArchivedStint: archivedStint,
+				}
+			}
+		}
+	}
+	return latest, nil
+}
+
+func loadQueueFileForUndo(path, repoRoot, beadsDir, rootPath string) (*store.File, error) {
+	if path == rootPath {
+		return loadFile(path, repoRoot, beadsDir), nil
+	}
+	file, err := loadExistingFile(path, repoRoot, beadsDir)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
+func reopenLatestCompletion(beadsDir string, latest *completedTaskCandidate, now time.Time) error {
+	if latest.ArchivedStint != "" {
+		rootPath := scopedRootPath(beadsDir)
+		rootFile, err := store.Load(rootPath)
+		if err != nil {
+			return err
+		}
+		store.Normalize(rootFile)
+		rootRef := findStintRef(rootFile, latest.ArchivedStint)
+		if rootRef == nil {
+			return fmt.Errorf("archived stint %s has no root reference to reopen", latest.ArchivedStint)
+		}
+		if err := store.RestoreArchivedStint(beadsDir, latest.ArchivedStint); err != nil {
+			return err
+		}
+		rootRef.IsDone = false
+		rootRef.CompletedAt = nil
+		rootRef.UpdatedAt = now
+		if err := store.Save(rootPath, rootFile); err != nil {
+			return err
+		}
+		latest.Path, _ = store.ResolveStintFile(beadsDir, latest.ArchivedStint)
+	}
+
+	latest.Task.IsDone = false
+	latest.Task.CompletedAt = nil
+	latest.Task.UpdatedAt = now
+	return store.Save(latest.Path, latest.File)
 }
 
 func hookCommandName(cmd *cobra.Command) string {

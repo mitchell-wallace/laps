@@ -917,9 +917,9 @@ func TestDoneCompletesClaimedLapAfterEnqueueHeadPreemption(t *testing.T) {
 		t.Fatalf("bare done exit %d, stderr: %s", code, errStr)
 	}
 
-	authFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+	authFile, err := store.Load(filepath.Join(beadsDir, "stints", "archive", "auth.laps.json"))
 	if err != nil {
-		t.Fatalf("Load auth stint file: %v", err)
+		t.Fatalf("Load archived auth stint file: %v", err)
 	}
 	authLap := taskByIDInFile(t, authFile, authLapID)
 	if !authLap.IsDone {
