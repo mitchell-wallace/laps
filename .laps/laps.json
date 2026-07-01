@@ -79,6 +79,17 @@
       "completedAt": "2026-07-01T09:04:21.229510216Z"
     },
     {
+      "id": "work-71b8",
+      "title": "Add held-head non-flow command regressions",
+      "description": "Context: VERIFY confirmed the shared held-aware resolver and exit-state routing are implemented, but section 2 remains under-tested in two places. internal/cmd/cmd_test.go covers resolver-level nested-held no-descent and the core get/claim/status exits, but it does not yet prove the CLI commands themselves exit 10 when a held stint is encountered during multi-step descent, and it does not cover the DECIDED 2.4a contract that non-flow-start commands remain unaffected under a held head.\n\nOutcome: add command-level regressions for laps get and laps claim through root -\u003e auth -\u003e search(held) proving nested held descent stops with exit 10 and warning, plus tests that at least list, add, edit, and delete operate normally under a held head with no held warning, no exit-code change, and expected mutations. Update openspec/changes/add-stints-gating/tasks.md to tick 2.4a and 2.5 only once those tests are in place.\n\nAcceptance: go test ./... and golangci-lint run ./... green.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-07-01T09:06:53.526777498Z",
+      "updatedAt": "2026-07-01T09:06:53.526777498Z",
+      "completedAt": null
+    },
+    {
       "id": "laps-e063",
       "title": "Wire get/claim exit codes and explicit-id held behavior",
       "description": "Context: exitState + the typed resolver exist (prior lap, verified). Now wire the exit codes at the existing post-defer `task == nil` site. That site (get.go:49-52 / claim.go:49-55) is ALREADY after the after-hook defer (get.go:46 / claim.go:46), so NO reordering is needed — the hook already observes the code. Read design.md Implementation Contracts (Empty/complete split, Existing failures keep existing codes) and Resolved Product Calls (empty-vs-complete DECIDED) before coding.\n\nOutcome: head/flow `get`/`claim` exit `0` (lap), `10` (held), `11` (empty), `12` (complete). The empty-vs-complete DECIDED mapping: `12` = everything resolvable from the root head is done AND nothing enqueueable remains; `11` = root resolves to zero todo because nothing was enqueued (incl. only-unqueued stint files / empty active stint file). Explicit `get \u003cid\u003e` into a held stint returns the lap AND warns on stderr; explicit `claim \u003cid\u003e` into a held stint exits `10`, leaves the claim unchanged, and warns.\n\nFiles \u0026 scope: get.go and claim.go — replace the single `exit(3,\"no head task\")` at the post-defer nil-site with `exitState(11)` vs `exitState(12)` per the typed resolver's outcome, and add the explicit-id-held behavior (warn for get; exit 10 + no mutation for claim). Leave `checkDefault`'s `exit(2)`-on-corrupt and explicit-id-not-found `exit(3)` unchanged; `checkDefault`'s `ErrEmptyState-\u003eexit(3)` branch is DEAD (nothing returns ErrEmptyState) — leave it.\n\nDesign: 11/12 apply ONLY to head/flow ops NOT targeting an explicit id; 10 ALSO applies to explicit `claim \u003cid\u003e` into a held stint. Explicit-id-not-found stays exit 3; store/io stays 2; hook stays 4. Drive the 11-vs-12 and held-vs-lap decisions from the single typed resolver outcome — do not re-derive state ad-hoc in each command.\n\nAcceptance: `just build` + `just lint` green. Smoke-check each of 0/10/11/12 by hand against fixture files (the full matrix is the next lap). Do not tick tasks.md boxes.",
@@ -86,7 +97,7 @@
       "isDone": false,
       "order": 262144,
       "createdAt": "2026-06-29T10:05:58.993480419Z",
-      "updatedAt": "2026-06-29T10:05:58.993480419Z",
+      "updatedAt": "2026-07-01T09:06:59.873874895Z",
       "completedAt": null
     },
     {
