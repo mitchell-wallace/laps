@@ -35,3 +35,4 @@
 {"run_id":"relay-1-run-4","summary":"Verified Phase A again; raw stint files without prefix still fall back to repo-prefixed IDs","updated_at":"2026-06-30T17:58:47Z","laps_completed":["work-672b"]}
 {"run_id":"relay-2-run-1","summary":"Raw stint files now get or require prefix metadata before use; added regression tests and marked stints prefix tasks complete.","updated_at":"2026-07-01T00:09:35Z","laps_completed":["work-9d4f"]}
 {"run_id":"relay-2-run-1","summary":"Verified raw stint-file prefix initialization is already implemented; go test ./... passes. No additional code changes were needed in this retry.","updated_at":"2026-07-01T00:12:57Z","laps_completed":["work-9d4f"]}
+{"run_id":"relay-2-run-2","summary":"Implemented read-through resolution through active stint refs for get/claim/done/list with classified resolver failures.","updated_at":"2026-07-01T00:45:47Z","laps_completed":["laps-9427"]}

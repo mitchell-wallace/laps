@@ -72,11 +72,11 @@
       "title": "Implement read-through resolution: descend through active stint refs",
       "description": "Context: Schema v3 + id prefixes are verified in. Now the resolution layer that makes stints invisible to agents. From the root head, descend through active stint refs to the first lap; recursive for nesting. Route get/claim/done/list through it; keep agent output identical. Classify resolver failures. Implements tasks 2.1, 2.2, 2.3. Tests are a separate lap (task 2.4).\n\nOutcome: A resolver that takes the root File and returns the resolved deepest-active context (file path + canonical scope string + head lap). get/claim/done/list use it and produce agent-identical output (title/description only, no nesting indication). Resolver failures (missing child file, malformed stint ref, malformed child file, cycle) error deterministically rather than loop or silently skip.\n\nFiles \u0026 scope: A new internal/store/resolution.go (or internal/cmd/resolver.go, wherever File loading naturally lives) for the resolver. internal/cmd/get.go, claim.go, done.go, list.go route through it. count.go and prune.go are NOT flow ops: they get scope-flag handling in lap 7, NOT recursive descent.\n\nDesign: CRITICAL TRAP (design.md Canonical scope strings): the cycle-detection visited set MUST key on PHYSICAL stint identity (the ref name / resolved child-file path), NOT the slash-path scope string. A cumulative slash path is unique on every descent (A, A/B, A/B/A, ...) so a path-keyed set NEVER detects an A-\u003eB-\u003eA cycle and loops forever. The ref name / child-file path is constant per stint regardless of where it sits in the path, so keying on that catches the revisit. This is the single most important correctness invariant in this lap. Second subtlety: agent output stays identical, get returns title/description only with no nesting hint. Third: failure classes must be distinguishable so commands surface the right error.\n\nAcceptance: `just build`, `just test`, `just lint` clean. Smoke: with a stint ref at root head, `laps get` returns the stint's head lap with no nesting hint; nested stints descend recursively; synthetic-cycle input errors cleanly without looping.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-29T10:09:28.111361337Z",
-      "updatedAt": "2026-06-29T10:09:28.111361337Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T00:45:36.677392097Z",
+      "completedAt": "2026-07-01T00:45:36.677392097Z"
     },
     {
       "id": "laps-a3c8",
