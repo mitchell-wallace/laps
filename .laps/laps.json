@@ -160,11 +160,11 @@
       "title": "Verify full add-stints-gating outcome",
       "description": "Use the openspec-verify-change skill against `add-stints-gating` for the FULL outcome — all five sections (Hold \u0026 release; Gated flow ops \u0026 exit codes; Finish-under-hold; Status; Docs/release/Rally).\n\nIdentify the branch/merge target first and use it for `git diff \u003ctarget\u003e...HEAD`; do not assume main. Treat pre-batch branch work as pre-existing unless the operator says otherwise. Do not rewrite git history.\n\nTrace every core dependency line: the exit codes 0/10/11/12 and the load-bearing exitState -\u003e panic(*exitError) -\u003e recover -\u003e os.Exit path (root.go:50, 57-64) with `runAfterHooksDeferred` (hooks.go:32-51) firing for 10/11/12; the stdout-vs-stderr JSON split; held stops descent at a context head (no child-file descent); the single typed queue-state resolver shared by get/claim AND status; the empty-vs-complete DECIDED mapping across get/claim and status; explicit `get \u003cid\u003e` warns + returns, `claim \u003cid\u003e` exits 10 + no mutation; non-flow-start commands unaffected; finish-under-hold (done succeeds; final-lap drain still advances the head past a held drained stint); status precedence (active claim wins; held primary only without a valid active claim) and the taxonomy extension to active/ready/empty/complete/held; stints ls held as a separate badge; hold/release idempotency and stint.held/stint.released events; the VERSION=0.9.0 bump and README/Rally-coordination docs.\n\nRun the full `just test` + `just lint`. Confirm the post-merge assumptions (add-stints, add-event-log-and-status) actually hold in the tree — if not, `laps add head` a blocker. Check ALL remaining tasks.md boxes (§1, §3, §4, §5, and any §2 boxes not already ticked) only once verified correct and thorough. `laps add head` for substantive gaps; tiny safe one-liners excepted.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-29T10:05:58.993494298Z",
-      "updatedAt": "2026-06-29T10:05:58.993494298Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T10:42:15.441089719Z",
+      "completedAt": "2026-07-01T10:42:15.441089719Z"
     }
   ]
 }

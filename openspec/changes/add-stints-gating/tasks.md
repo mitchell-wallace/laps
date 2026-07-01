@@ -8,12 +8,12 @@
 
 ## 1. Hold & release
 
-- [ ] 1.1 Add a held flag to non-archived stint file metadata; missing `held` defaults to `false` and folds into schema v3 before the first v3/0.9.0 binary ships
-- [ ] 1.2 `laps stints hold <name>` / `release <name>` target any non-archived stint, including not-yet-enqueued stints; archived stints are refused
-- [ ] 1.3 Make hold/release idempotent: already-held/already-released operations do not append duplicate events
-- [ ] 1.4 Append `stint.held` / `stint.released` events only when state changes
-- [ ] 1.5 `laps stints ls` renders `held` as a SEPARATE badge/marker alongside the queued/active/done lifecycle state, not as a replacement (DECIDED: hold is orthogonal to lifecycle; the lifecycle column keeps its value and a held marker flags held metadata regardless of whether the hold has taken effect at the head)
-- [ ] 1.6 Tests: hold sets / release clears before and after enqueue; default missing held is false; archived target refused; idempotent operations do not double-log; held shown in `stints ls`
+- [x] 1.1 Add a held flag to non-archived stint file metadata; missing `held` defaults to `false` and folds into schema v3 before the first v3/0.9.0 binary ships
+- [x] 1.2 `laps stints hold <name>` / `release <name>` target any non-archived stint, including not-yet-enqueued stints; archived stints are refused
+- [x] 1.3 Make hold/release idempotent: already-held/already-released operations do not append duplicate events
+- [x] 1.4 Append `stint.held` / `stint.released` events only when state changes
+- [x] 1.5 `laps stints ls` renders `held` as a SEPARATE badge/marker alongside the queued/active/done lifecycle state, not as a replacement (DECIDED: hold is orthogonal to lifecycle; the lifecycle column keeps its value and a held marker flags held metadata regardless of whether the hold has taken effect at the head)
+- [x] 1.6 Tests: hold sets / release clears before and after enqueue; default missing held is false; archived target refused; idempotent operations do not double-log; held shown in `stints ls`
 
 ## 2. Gated flow ops & exit codes
 
@@ -27,9 +27,9 @@
 
 ## 3. Finish-under-hold
 
-- [ ] 3.1 Ensure `done` for the claimed lap succeeds while its stint (or the head stint) is held
-- [ ] 3.2 Ensure final-lap completion under hold still runs drain/archive instead of leaving a drained held stint stuck
-- [ ] 3.3 Tests: non-final claimed lap completes under hold and next `get`/`claim` returns exit 10; final claimed lap completes under hold and next flow state is next lap/empty/complete rather than held
+- [x] 3.1 Ensure `done` for the claimed lap succeeds while its stint (or the head stint) is held
+- [x] 3.2 Ensure final-lap completion under hold still runs drain/archive instead of leaving a drained held stint stuck
+- [x] 3.3 Tests: non-final claimed lap completes under hold and next `get`/`claim` returns exit 10; final claimed lap completes under hold and next flow state is next lap/empty/complete rather than held
 
 ## 4. Status
 
@@ -40,6 +40,6 @@
 
 ## 5. Docs, release & Rally coordination
 
-- [ ] 5.1 Document hold/release, the gate exit codes, and the held status in `README.md`
-- [ ] 5.2 Note the `get`/`claim` exit-code contract change for Rally; coordinate the relay-loop update
-- [ ] 5.3 After all four changes land, bump `VERSION` to `0.9.0` per the release process
+- [x] 5.1 Document hold/release, the gate exit codes, and the held status in `README.md`
+- [x] 5.2 Note the `get`/`claim` exit-code contract change for Rally; coordinate the relay-loop update
+- [x] 5.3 After all four changes land, bump `VERSION` to `0.9.0` per the release process
