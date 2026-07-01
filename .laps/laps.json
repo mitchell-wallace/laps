@@ -94,11 +94,11 @@
       "title": "Implement scope flags: --active/-c, --root/-r, --stint/-s",
       "description": "Context: Resolver is in. Now the operator-facing scope vocabulary. Shared local, mutually-exclusive flags on queue-targeting commands. Implements tasks 3.1, 3.2, 3.3, and the flag-leak reset-harness update (3.5). Scoped-op semantics land in the next lap; this lap is flag wiring + path resolution + harness only.\n\nOutcome: Queue-targeting commands (add, get, claim, done, list, count, delete, prune, move, edit, assign) accept --active/-c (default), --root/-r, --stint \u003cname\u003e/-s. Two scope flags combined errors. Raw --file plus any scope flag errors. --stint resolves to .laps/stints/\u003cname\u003e.laps.json via a DEDICATED stint-path helper distinct from ResolveFile. Non-queue commands (init, on, off, update, version, help, log, status, hook-only) reject or omit these flags. The runMB/runMBExecute reset harness resets the new flag sets so a --root/--stint set in one test does not leak Changed=true into the next.\n\nFiles \u0026 scope: internal/cmd/root.go or a new internal/cmd/scope.go for shared flag registration + the stint-path helper. Each queue-targeting command file for MarkFlagsMutuallyExclusive wiring. internal/cmd/cmd_test.go runMB (cmd_test.go:33-54) and runMBExecute (cmd_test.go:89-118) reset-list extension. Do NOT conflate with hooks.go isKnownCommand (that is lap 16).\n\nDesign: CRITICAL (task 3.3): --active is the default but MUST be implemented as a flag detected via .Changed, NOT a default-true value, or cobra's MarkFlagsMutuallyExclusive will false-positive on every invocation. For the --file mutex: per queue-targeting command, MarkFlagsMutuallyExclusive(\"file\", \"root\", \"stint\", \"active\"); the persistent file flag is visible in each command's merged flag set. The stint-path helper is NOT ResolveFile: -f auth -\u003e .laps/auth.json, but --stint auth -\u003e .laps/stints/auth.laps.json (different dir + .laps.json infix). Task 3.5: today's hardcoded reset list (rootCmd.PersistentFlags, addCmd, listCmd, updateCmd, doneUndoCmd) does not cover the new shared scope-flag package vars, the per-command local flag sets, or the stints subcommand flag sets; extend the list (or replace it with a recursive walk of all command flag sets) so Changed state resets between tests.\n\nAcceptance: `just build`, `just test`, `just lint` clean. Smoke: each scope flag works alone; combining two errors; --file + scope flag errors; a --root set in test A does not leak into test B. The full task-3.4 matrix lands in lap 9.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-29T10:09:28.111362729Z",
-      "updatedAt": "2026-06-29T10:09:28.111362729Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T01:07:54.370771875Z",
+      "completedAt": "2026-07-01T01:07:54.370771875Z"
     },
     {
       "id": "laps-5917",
