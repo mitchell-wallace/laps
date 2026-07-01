@@ -162,6 +162,34 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	return string(outBuf), string(errBuf), err
 }
 
+var resolverTestTime = time.Date(2026, 4, 28, 10, 15, 0, 0, time.UTC)
+
+func writeResolverQueue(t *testing.T, path, prefix string, tasks ...store.Task) {
+	t.Helper()
+
+	if err := store.Save(path, &store.File{
+		Version: store.CurrentVersion,
+		Prefix:  prefix,
+		Tasks:   tasks,
+	}); err != nil {
+		t.Fatalf("Save %s: %v", path, err)
+	}
+}
+
+func readResolverFiles(t *testing.T, paths ...string) map[string]string {
+	t.Helper()
+
+	files := make(map[string]string, len(paths))
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("ReadFile %s: %v", path, err)
+		}
+		files[path] = string(data)
+	}
+	return files
+}
+
 func TestAddHead(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
@@ -558,6 +586,206 @@ func TestGetHead(t *testing.T) {
 	}
 	if !strings.Contains(out, "Details") {
 		t.Fatalf("expected Details in output, got: %s", out)
+	}
+}
+
+func TestResolverGetDescendsIntoActiveStint(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "", store.Task{
+		Kind:      store.KindStint,
+		ID:        "root-auth",
+		Ref:       "auth",
+		Title:     "Auth stint",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth", store.Task{
+		Kind:        store.KindLap,
+		ID:          "auth-1111",
+		Title:       "Inside auth",
+		Description: "Nested details",
+		Order:       1,
+		CreatedAt:   resolverTestTime,
+		UpdatedAt:   resolverTestTime,
+	})
+
+	out, errStr, code := runMB("get")
+	if code != 0 {
+		t.Fatalf("get exit %d, stderr: %s", code, errStr)
+	}
+	if out != "Inside auth\n\nNested details\n" {
+		t.Fatalf("get output = %q", out)
+	}
+}
+
+func TestResolverGetRecursesAcrossNestedStint(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "", store.Task{
+		Kind:      store.KindStint,
+		ID:        "root-auth",
+		Ref:       "auth",
+		Title:     "Auth stint",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth", store.Task{
+		Kind:      store.KindStint,
+		ID:        "auth-search",
+		Ref:       "search",
+		Title:     "Search stint",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch", store.Task{
+		Kind:        store.KindLap,
+		ID:          "srch-1111",
+		Title:       "Inside search",
+		Description: "Deep details",
+		Order:       1,
+		CreatedAt:   resolverTestTime,
+		UpdatedAt:   resolverTestTime,
+	})
+
+	out, errStr, code := runMB("get")
+	if code != 0 {
+		t.Fatalf("get exit %d, stderr: %s", code, errStr)
+	}
+	if out != "Inside search\n\nDeep details\n" {
+		t.Fatalf("get output = %q", out)
+	}
+}
+
+func TestResolverMissingChildFileError(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "", store.Task{
+		Kind:      store.KindStint,
+		ID:        "root-missing",
+		Ref:       "missing",
+		Title:     "Missing stint",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+
+	_, errStr, code := runMB("get")
+	if code != 2 {
+		t.Fatalf("get exit %d, want 2; stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "missing child file") || !strings.Contains(errStr, "missing") {
+		t.Fatalf("missing-child error was not classified: %s", errStr)
+	}
+}
+
+func TestResolverMalformedRefError(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "", store.Task{
+		Kind:      store.KindStint,
+		ID:        "root-bad-ref",
+		Ref:       "../auth",
+		Title:     "Bad ref",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+
+	_, errStr, code := runMB("get")
+	if code != 2 {
+		t.Fatalf("get exit %d, want 2; stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "malformed stint ref") || !strings.Contains(errStr, "../auth") {
+		t.Fatalf("malformed-ref error was not classified: %s", errStr)
+	}
+}
+
+func TestResolverMalformedChildFileError(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "", store.Task{
+		Kind:      store.KindStint,
+		ID:        "root-auth",
+		Ref:       "auth",
+		Title:     "Auth stint",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+	stintPath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	if err := os.MkdirAll(filepath.Dir(stintPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stintPath, []byte(`{"version":3,"prefix":"auth","tasks":[`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errStr, code := runMB("get")
+	if code != 2 {
+		t.Fatalf("get exit %d, want 2; stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "malformed child file") || !strings.Contains(errStr, "auth") {
+		t.Fatalf("malformed-child error was not classified: %s", errStr)
+	}
+}
+
+func TestResolverCycleErrorForActualStintGraphDoesNotMutateFiles(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	rootPath := filepath.Join(beadsDir, "laps.json")
+	authPath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	searchPath := filepath.Join(beadsDir, "stints", "search.laps.json")
+	writeResolverQueue(t, rootPath, "", store.Task{
+		Kind:      store.KindStint,
+		ID:        "root-auth",
+		Ref:       "auth",
+		Title:     "Auth stint",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+	writeResolverQueue(t, authPath, "auth", store.Task{
+		Kind:      store.KindStint,
+		ID:        "auth-search",
+		Ref:       "search",
+		Title:     "Search stint",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+	writeResolverQueue(t, searchPath, "srch", store.Task{
+		Kind:      store.KindStint,
+		ID:        "search-auth",
+		Ref:       "auth",
+		Title:     "Auth again",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+	before := readResolverFiles(t, rootPath, authPath, searchPath)
+
+	_, errStr, code := runMB("get")
+	if code != 2 {
+		t.Fatalf("get exit %d, want 2; stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "cycle detected") || !strings.Contains(errStr, "auth") {
+		t.Fatalf("cycle error was not classified: %s", errStr)
+	}
+	after := readResolverFiles(t, rootPath, authPath, searchPath)
+	for path, beforeData := range before {
+		if after[path] != beforeData {
+			t.Fatalf("%s mutated during cycle resolution\nbefore: %s\nafter:  %s", path, beforeData, after[path])
+		}
 	}
 }
 

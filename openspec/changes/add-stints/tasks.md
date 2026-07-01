@@ -15,7 +15,7 @@
 - [x] 2.1 Implement deepest-active resolution: from the root head, descend through active stint refs to the first lap (recursive)
 - [x] 2.2 Route `get`/`claim`/`done`/`list` through resolution; keep agent output identical (title/description only)
 - [x] 2.3 Classify resolver failures: missing child file, malformed ref, malformed child file, and cycles. Key the cycle-detection visited set on **physical stint identity** (`ref` name / resolved child-file path), NOT the slash-path scope string — a path string is unique per descent and would never detect an `A→B→A` cycle
-- [ ] 2.4 Tests: `get` descends into the active stint; recursion across a nested stint; failure classes do not loop or silently skip
+- [x] 2.4 Tests: `get` descends into the active stint; recursion across a nested stint; failure classes do not loop or silently skip
 
 ## 3. Scope flags
 
