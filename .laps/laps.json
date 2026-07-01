@@ -72,11 +72,11 @@
       "title": "Verify held flow-state exit routing and shared resolver after fix",
       "description": "",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-07-01T08:45:50.162438286Z",
-      "updatedAt": "2026-07-01T08:45:50.162438286Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T09:04:21.229510216Z",
+      "completedAt": "2026-07-01T09:04:21.229510216Z"
     },
     {
       "id": "laps-e063",
