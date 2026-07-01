@@ -78,21 +78,27 @@ The claim file `.laps/claim` is stored as a single JSON object:
 {
   "lap": "laps-f0f4",
   "file": "laps.json",
+  "scope": "root",
   "claimedAt": "2026-06-30T10:28:42Z"
 }
 ```
 Fields:
 - `lap` — the claimed task ID.
 - `file` — the relative path of the task file containing the lap.
+- `scope` — the canonical logical scope the lap was claimed in (`root`, a
+  root-level stint name like `auth`, or a slash path for nesting like
+  `auth/search`). A bare `laps done` completes the claimed lap **within its
+  recorded scope**, so it survives head changes from preemption or another
+  session. See [Stints](#stints).
 - `claimedAt` — the UTC timestamp of when the lap was claimed (RFC3339). When the same lap is re-claimed, the original `claimedAt` timestamp is preserved.
 
-**Backward Compatibility**: If `.laps/claim` contains a legacy bare task ID (a plain string token, not JSON), it is successfully parsed as a legacy claim with the lap ID assigned, `file` defaulting to the current selected task file, and `claimedAt` treated as `null`.
+**Backward Compatibility**: If `.laps/claim` contains a legacy bare task ID (a plain string token, not JSON), it is successfully parsed as a legacy claim with the lap ID assigned, `file` defaulting to the current selected task file, `scope` defaulting to `root`, and `claimedAt` treated as `null`. Structured claims also ignore unknown JSON fields for forward compatibility.
 
 ### `laps claim undo`
 Clear the claimed lap stored in `.laps/claim`. Prints the id and title of the
 un-claimed lap.
 
-### `laps list [--all | --done]`
+### `laps list [--all | --done] [--tree]`
 List tasks as a markdown numbered list. `ls` is an alias for `list`.
 
 The default format renders each task across two lines: the title, then the
@@ -109,9 +115,20 @@ task id, assignee, and status:
 - `--all` — include done tasks after todo items (struck through).
 - `--done` — show only completed tasks, most recent first.
 - `--oneline` — render each task on a single line (the prior format), e.g. `laps-6b4a — Second task (assignee: JUNIOR)`.
+- `--tree` — render the full recursive overview. Descends into every queued
+  stint ref and indents its laps, so root laps, queued stints, and the laps
+  inside each are visible in one picture. A stint ref renders as a single
+  line, e.g. `2. auth/ (stint - 4 laps)`; a missing stint file or a ref cycle
+  is flagged inline rather than silently skipped. `--tree` operates on the
+  whole root queue and ignores the scope flags (it always starts from root).
+
+`list` is a flow op: a bare `laps list` resolves the **active** context and
+shows the active stint's laps (not root) when a stint is active. Use
+`list --root` for the root queue or `list --tree` for the full pipeline (see
+[Stints](#stints)).
 
 ### `laps status`
-Show a snapshot of the lap queue status. Reports the selected task file path, the queue state, todo/done/total task counts, the head (next todo) lap, the active (claimed) lap, and a breakdown of todo tasks by assignee.
+Show a snapshot of the lap queue status. Reports the selected task file path, the queue state, todo/done/total task counts, the head (next todo) lap, the active (claimed) lap, a breakdown of todo tasks by assignee, and — when stints are present — the active stint and per-stint progress.
 
 Queue state is one of:
 - `active` — a valid todo lap is currently claimed (work in progress).
@@ -171,6 +188,8 @@ Fields in JSON:
   - `claimedAt` — nullable RFC3339 UTC timestamp (string) of when the claim was created. This is `null` if no lap is claimed or if the claim file contains a legacy bare-id (no timestamp).
   - `ageSeconds` — nullable integer representing the seconds elapsed since the claim was made. This is `null` whenever `claimedAt` is `null`.
 - `assignees` — array of `{assignee, todo}` objects summarizing todo counts by assignee role, sorted alphabetically by assignee name (with unassigned tasks grouped under `"unassigned"`).
+- `activeStint` — when the active context is a stint, a `{scope, todo, done, total}` object for that stint (otherwise `null`).
+- `stints` — array of `{scope, todo, done, total}` objects giving per-stint progress for every queued stint (empty when no stints are queued).
 
 ### `laps log`
 Show recent event log history, newest last (chronological order).
@@ -253,11 +272,38 @@ Prints the task title on success.
 ### `laps delete <id>`
 Delete a task by id, regardless of whether it is todo or done.
 
+By default `delete` refuses to remove a currently claimed lap (completing a
+claimed lap is legitimate progress, but deleting it discards in-flight work),
+printing a warning on stderr. `delete --force <id>` removes it and clears the
+matching claim. Prints the deleted task id on success.
+
 ### `laps prune [N]`
 Remove old done tasks, keeping the `N` most recent. Default `N` is 20.
 `laps prune 0` removes all done tasks. Todo tasks are never touched.
 
 Prints the number of tasks removed.
+
+### `laps stints <ls|new|enqueue|show|rm>`
+Manage stints (prepared per-change queues). `st` is an alias for `stints`.
+See [Stints](#stints) for the model behind these commands.
+
+- `stints ls` — list every stint file with its lap count and `queued`/
+  `archived` flags. With `--json-output`, returns `{"stints": [...]}`.
+- `stints new <name>` — create an empty stint file at
+  `.laps/stints/<name>.laps.json` and allocate its id prefix. Prints the
+  allocated 4-character prefix.
+- `stints enqueue <name> [head|tail|after <id>]` — add a stint reference to
+  the root queue (default `tail`). `head` preempts the active stint
+  non-destructively; the paused stint resumes from its own file when the
+  interloper drains. `after <id>` resolves the anchor id **in root only**; if
+  the id lives inside a stint, the command fails naming that stint. Prints the
+  new stint-ref id.
+- `stints show <name>` — print a stint's queue (active or archived).
+- `stints rm <name>` — remove a stint file. By default this allows unqueued
+  non-archived stints and archived stints (including archived stints that still
+  have a done root ref), and refuses non-archived queued/active/claimed stints
+  unless `--force` is supplied; forced removal also drops matching root refs
+  and clears a matching claim.
 
 ### `laps on`
 Add the `<laps-instructions>` block to `AGENTS.md` (creating it if absent).
@@ -272,6 +318,92 @@ Check the Laps GitHub repository for a newer version.
 Prints the current and latest versions. If a newer release exists, prompts for
 Y/n confirmation before downloading and installing it via the official install
 script. Use `laps update --yes` to install non-interactively.
+
+## Stints
+
+A **stint** is a prepared queue for a single change, stored at
+`.laps/stints/<name>.laps.json`. The canonical `laps.json` queue stays flat but
+may now hold laps, **stint references**, or any mix: a stint ref is a queue
+entry that points at a stint file. Operators stage one stint per change and
+enqueue them as a pipeline, while agents keep seeing the same
+read-head → do-it → mark-done contract without noticing stints at all.
+
+The **active context** is derived from queue position, never stored: it is the
+deepest stint ref on the path from the resolved root head down to the head lap.
+There is no active-pointer file to desynchronize.
+
+### Read-through resolution
+The flow ops `get`, `claim`, `done`, and `list` start at the root head and
+**descend** through active stint refs to the first real lap (recursive, so
+nesting is supported by the engine). Agent output stays identical — a nested
+lap's title and description look the same as a root lap. Resolver failures
+(missing child file, malformed ref, malformed child file, or a ref cycle) fail
+deterministically instead of looping or silently skipping.
+
+### Scope flags
+Queue-targeting commands (`add`, `get`, `claim`, `done`, `list`, `count`,
+`delete`, `prune`, `move`, `edit`, `assign`) accept three mutually exclusive
+scope flags that select *which* layer a command targets:
+
+- `--active` / `-c` — the deepest active queue. This is the **default** when no
+  scope flag is given. Flow ops (`get`/`claim`/`done`/`list`) recursively
+  descend; `count`/`prune` resolve the active chain only to *locate* the target
+  file and then operate on that single file (no aggregation into nested
+  children).
+- `--root` / `-r` — the root queue, with no descent.
+- `--stint <name>` / `-s` — a named stint queue, with no descent.
+
+The raw `--file`/`-f` flag is **mutually exclusive** with all three scope
+flags, so one invocation has exactly one target model (`--stint auth` resolves
+to `.laps/stints/auth.laps.json`, a different path than `-f auth` →
+`.laps/auth.json`). Combining two scope flags, or `--file` with a scope flag,
+errors out.
+
+Bare verbs used by agents default to `--active` and descend; operators reach
+for the long forms (`--root`, `--stint`) for explicit structural control.
+
+### Scoped explicit-id resolution
+Every id-taking operation (`get <id>`, `claim <id>`, `done <id>`,
+`add after <id>`, `move`, `edit`, `assign`, `delete`) resolves the id **within
+the selected scope first**. If the id lives in another stint, the command fails
+naming that stint (e.g. `a7 is in stint search - re-run with -s search`) and
+mutates no file. `stints enqueue after <id>` resolves the anchor in root only.
+
+### Per-stint id prefixes (globally unique ids)
+A lap id is `<prefix>-<hash>`. Root laps use the **repo prefix** (the first 4
+lowercase alphanumerics of the repo directory name). Each stint gets its own
+allocated 4-character prefix, recorded in the stint file metadata, and laps
+created inside that stint carry the stint's prefix. Allocation happens once at
+`stints new` and is made unique against the repo prefix and every existing
+stint prefix.
+
+Consequence: **a lap id's prefix identifies its owning stint (or root)**, so
+ids are globally unique across all files. This is what lets scoped explicit-id
+resolution and the active-lap marker in `list` work unambiguously even though
+`list` descends — the marker and scope are read straight from the id, with no
+separate file/scope comparison.
+
+### Enqueue, drain, and auto-archive
+`stints enqueue` adds a ref to the root queue (default `tail`). A `head`
+enqueue preempts the active stint; because each stint's progress lives in its
+own file, preemption is non-destructive and the paused stint resumes when the
+interloper drains.
+
+A stint with no todo laps left is **drained**: the draining operation flips its
+root ref to done and moves the file to `.laps/stints/archive/`. Draining is
+content-based and position-independent — a preempted, non-head stint still
+drains when its last lap completes, and a done ref is skipped on later
+advance. `done undo` scans all queue files (root, active stints, and the
+archive) for the globally latest completion and unarchives when that lap lives
+in a drained stint (the 5-minute age gate still applies).
+
+### Schema version
+The on-disk schema reaches **v3** with this feature: queue entries gain a
+`kind` discriminator (`lap` by default, `stint` for refs), and existing
+entries are migrated to `kind:"lap"`. The binary `VERSION`, however, stays at
+`0.8.1` until a later change bumps `0.9.0`, so a v3-writing build still reports
+`0.8.1`. An entry with no `kind` is treated as a `lap`, so older data files
+remain readable.
 
 ## Hooks
 
@@ -298,6 +430,9 @@ Use `$var` or `${var}` in `run`:
 - `$exit_code` — laps's exit code (`after` hooks only).
 - `$output` — laps's stdout (`after` hooks only).
 - `$file` — the resolved task file path.
+- `$scope` — the canonical logical scope the command ran in (`root`, a stint
+  name like `auth`, or a slash path for nesting like `auth/search`). Defaults
+  to `root` for hook-only commands.
 
 For a batch `laps add --json '[...]'`, hooks run once for the add command with
 empty single-task variables (`$id`, `$title`, `$description`, and `$assignee`).
@@ -361,13 +496,13 @@ If the `LAPS_SESSION` environment variable is set, its value is automatically st
 Each line in `.laps/log.jsonl` is a JSON object with the following fields:
 
 - `ts` — UTC timestamp of the event (RFC3339 format).
-- `event` — the event type (e.g. `claimed`, `unclaimed`, `completed`, `created`, `moved`, `edited`).
-- `cmd` — the name of the command that triggered the event (e.g. `claim`, `claim-undo`, `done`, `add`, `move`, `edit`).
+- `event` — the event type (e.g. `claimed`, `unclaimed`, `completed`, `created`, `moved`, `edited`, `stint.enqueued`, `stint.completed`, `stint.archived`).
+- `cmd` — the name of the command that triggered the event (e.g. `claim`, `claim-undo`, `done`, `add`, `move`, `edit`, `stints-enqueue`).
 - `file` — the relative path of the task file affected (e.g. `laps.json`).
 - `lap` — the ID of the affected task (omitted if not task-specific).
 - `title` — the title of the affected task (omitted if not task-specific).
 - `assignee` — the assignee role of the task (omitted if none or not task-specific).
-- `scope` — the scope of the log (defaults to `"root"`).
+- `scope` — the canonical logical scope of the event (`root`, a stint name like `auth`, or a slash path for nesting like `auth/search`).
 - `detail` — an object containing additional event-specific details.
 - `session` — the session ID from the `LAPS_SESSION` environment variable (empty string if unset).
 
