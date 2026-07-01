@@ -105,11 +105,11 @@
       "title": "Implement scoped structure ops and delete --force",
       "description": "Context: Scope flags are wired. Now structure-op semantics: default to active scope, resolve explicit ids within scope, out-of-scope error names the stint. Plus delete --force on claimed laps. Implements tasks 4.1, 4.2, 4.3. Task 10.1 (confirm improve-cli-ergonomics landed for scoped move/edit/assign) is the FIRST step of this lap.\n\nOutcome: add/move/edit/assign/delete default to active scope. Every id-taking queue command (get, claim, done, add after, move, edit, assign, delete) resolves the id within the selected scope first; if the id lives in another stint, the command fails with a message NAMING that stint and mutates no file. delete --force removes a claimed lap and clears the matching claim; default delete refuses a claimed lap with a stderr warning.\n\nFiles \u0026 scope: internal/cmd/add.go, move.go, edit.go, assign (the claim shortcut), delete.go, get.go, done.go. internal/store for any scope-aware id-lookup helper.\n\nDesign: FIRST step is task 10.1: verify move/edit/assign commands exist (improve-cli-ergonomics dependency). If they are missing, do NOT stub them; add a head lap flagging the blocker and stop. Assuming present: the out-of-scope error must NAME the stint (example: `a7 is in stint search - re-run with -s search`), not just say not-found. Use the id-prefix -\u003e stint map from lap 3 to locate the owning stint in O(1). DECIDED (design.md Deleting claimed laps): delete is the ONLY guarded structural case. Default delete refuses a claimed lap; --force removes it and clears the matching claim. Completing a claimed lap via done is allowed and NOT guarded (concurrency is a Non-Goal; the single-actor structural guarantee is sufficient). Keep add-after root-structural semantics; root-only resolution for `stints enqueue after` lands in lap 11.\n\nAcceptance: `just build`, `just test`, `just lint` clean. Smoke: add head into active stint; add --root into root; out-of-scope id errors name the stint; claimed delete refuses; forced claimed delete clears the claim. Full task-4.4 tests land in lap 9.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-29T10:09:28.111363312Z",
-      "updatedAt": "2026-06-29T10:09:28.111363312Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T01:16:39.585372902Z",
+      "completedAt": "2026-07-01T01:16:39.585372902Z"
     },
     {
       "id": "laps-027e",
