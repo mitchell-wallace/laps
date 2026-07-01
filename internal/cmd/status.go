@@ -90,11 +90,14 @@ and the queue state.
 Queue state is one of:
   active    a valid todo lap is claimed (work in progress)
   ready     todo laps exist and nothing valid is claimed
+  held      the next flow-start operation is gated by a held stint
   empty     no laps exist
   complete  laps exist and all are done
 
 A claim that points at a deleted, completed, or wrong-file lap yields a degraded
-snapshot with claim.valid=false; it is reported, never silently cleared.`,
+snapshot with claim.valid=false; it is reported, never silently cleared. A valid
+claim takes precedence over a held gate; held gate details are surfaced
+separately in the snapshot.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)

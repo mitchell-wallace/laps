@@ -65,3 +65,4 @@
 {"run_id":"relay-3-run-11","summary":"Verified add-stints-gating §2 gated flow ops and exit codes; no issues found; go test and golangci-lint passed.","updated_at":"2026-07-01T09:42:36Z","laps_completed":["laps-fbdb"]}
 {"run_id":"relay-3-run-11","summary":"Verified add-stints-gating §2 gated flow ops and exit codes; no issues found; go test and golangci-lint passed.","updated_at":"2026-07-01T10:15:47Z","laps_completed":"none"}
 {"run_id":"relay-3-run-12","summary":"Added regression coverage proving claimed done succeeds under held stints and final held drains advance to the next flow state.","updated_at":"2026-07-01T10:18:17Z","laps_completed":["laps-ed95"]}
+{"run_id":"relay-3-run-13","summary":"Verified held status behavior and documented the held status taxonomy plus active-claim precedence in status help; go test ./... and golangci-lint run ./... passed.","updated_at":"2026-07-01T10:33:30Z","laps_completed":["laps-d41e"]}

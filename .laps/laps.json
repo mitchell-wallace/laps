@@ -138,11 +138,11 @@
       "title": "Add held state to status with active-claim precedence",
       "description": "Context: the typed resolver from §2 is shared by the status gate probe — status derives its state from ONE resolution pass, not a second ad-hoc detection. Read the spec 'Held state in status' and design.md 'Status precedence'. This EXTENDS the status taxonomy added by add-event-log-and-status; the merged set of status.state values is active/ready/empty/complete/held.\n\nOutcome: a valid active claim keeps `status.state=active` with held gate metadata included SEPARATELY when the next head is held (4.1). When there is no valid active claim and the next flow-start would gate, status reports primary `held` state, the held stint, and the gate message; exits 0 for valid snapshots (4.2). `--json-output` reflects held with the resolved clean-state shape (4.3). Tests for 4.4.\n\nFiles \u0026 scope: the status command (internal/cmd, from add-event-log-and-status) and the resolver's typed queue-state. Reuse the same resolver outcome as get/claim.\n\nDesign: status precedence — a valid active claim ALWAYS wins (state=active; held gate metadata is a separate field). `held` is primary only when no valid active claim exists AND the next flow-start operation would gate. The empty-vs-complete DECIDED mapping (12 = all resolvable done + nothing enqueueable; 11 = nothing enqueued) also governs status empty/complete. Consumers MUST NOT treat the original four states as a closed list — surface held as a first-class state in both text and JSON. Status stays exit 0 for valid snapshots.\n\nAcceptance: `just test` + `just lint` green. Tests (4.4): held state in text and JSON; active-claim precedence over the held gate (state=active + separate gate metadata). Do not tick tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-29T10:05:58.993489587Z",
-      "updatedAt": "2026-06-29T10:05:58.993489587Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T10:33:24.715217844Z",
+      "completedAt": "2026-07-01T10:33:24.715217844Z"
     },
     {
       "id": "laps-eef5",
