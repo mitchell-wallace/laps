@@ -556,6 +556,19 @@ func setupActiveStintRepo(t *testing.T) (beadsDir, authLapID string) {
 	return beadsDir, "auth-aaaa"
 }
 
+func setStintHeld(t *testing.T, beadsDir, name string, held bool) {
+	t.Helper()
+	path := filepath.Join(beadsDir, "stints", name+".laps.json")
+	file, err := store.Load(path)
+	if err != nil {
+		t.Fatalf("Load %s: %v", path, err)
+	}
+	file.Held = held
+	if err := store.Save(path, file); err != nil {
+		t.Fatalf("Save %s: %v", path, err)
+	}
+}
+
 // setupTwoStints seeds a root queue with an active "auth" stint, an auth stint
 // file with one lap, and a separate "search" stint file with one lap. The
 // search lap is out of scope when the default --active scope resolves into auth.
@@ -681,6 +694,131 @@ func TestFlowStartHeldStintDoesNotDescendIntoChild(t *testing.T) {
 	}
 	if resolved.Ctx.Head.ID == "srch-held" {
 		t.Fatalf("held child lap was selected: %+v", resolved.Ctx.Head)
+	}
+}
+
+func TestGetHeldHeadExitsTenAndWarns(t *testing.T) {
+	beadsDir, _ := setupActiveStintRepo(t)
+	setStintHeld(t, beadsDir, "auth", true)
+
+	out, errStr, code := runMB("get")
+	if code != 10 {
+		t.Fatalf("get held head exit %d, want 10; stderr: %s", code, errStr)
+	}
+	if out != "" {
+		t.Fatalf("held get should not emit a task, got stdout %q", out)
+	}
+	if !strings.Contains(errStr, "auth") || !strings.Contains(errStr, "held") {
+		t.Fatalf("held get should warn with the stint scope, got: %s", errStr)
+	}
+}
+
+func TestClaimHeldHeadExitsTenAndLeavesClaimUnchanged(t *testing.T) {
+	beadsDir, _ := setupActiveStintRepo(t)
+	setStintHeld(t, beadsDir, "auth", true)
+
+	out, errStr, code := runMB("claim")
+	if code != 10 {
+		t.Fatalf("claim held head exit %d, want 10; stdout: %s stderr: %s", code, out, errStr)
+	}
+	if out != "" {
+		t.Fatalf("held claim should not emit a task, got stdout %q", out)
+	}
+	if !strings.Contains(errStr, "auth") || !strings.Contains(errStr, "held") {
+		t.Fatalf("held claim should warn with the stint scope, got: %s", errStr)
+	}
+	if _, err := os.Stat(filepath.Join(beadsDir, "claim")); !os.IsNotExist(err) {
+		t.Fatalf("held claim must leave claim absent, stat err: %v", err)
+	}
+}
+
+func TestGetAndClaimCleanQueueStateJSON(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, errStr, code := runMB("get", "--json-output")
+	if code != 11 {
+		t.Fatalf("empty get json exit %d, want 11; stderr: %s", code, errStr)
+	}
+	if errStr != "" {
+		t.Fatalf("empty get json should not emit stderr, got: %s", errStr)
+	}
+	var state map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &state); err != nil {
+		t.Fatalf("empty get json did not parse: %v\nraw: %s", err, out)
+	}
+	if state["state"] != "empty" || state["exitCode"] != float64(11) {
+		t.Fatalf("empty state json = %#v, want empty/11", state)
+	}
+
+	idOut, _, _ := runMB("add", "head", "--title", "Only")
+	if _, _, code := runMB("done", strings.TrimSpace(idOut)); code != 0 {
+		t.Fatalf("done setup failed, code %d", code)
+	}
+	out, errStr, code = runMB("claim", "--json-output")
+	if code != 12 {
+		t.Fatalf("complete claim json exit %d, want 12; stderr: %s", code, errStr)
+	}
+	if errStr != "" {
+		t.Fatalf("complete claim json should not emit stderr, got: %s", errStr)
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &state); err != nil {
+		t.Fatalf("complete claim json did not parse: %v\nraw: %s", err, out)
+	}
+	if state["state"] != "complete" || state["exitCode"] != float64(12) {
+		t.Fatalf("complete state json = %#v, want complete/12", state)
+	}
+}
+
+func TestGetExplicitHeldStintWarnsButReturnsLap(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+	setStintHeld(t, beadsDir, "auth", true)
+
+	out, errStr, code := runMB("get", authLapID)
+	if code != 0 {
+		t.Fatalf("explicit get held exit %d, want 0; stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "Inside auth") {
+		t.Fatalf("explicit get should return held lap, got: %s", out)
+	}
+	if !strings.Contains(errStr, "auth") || !strings.Contains(errStr, "held") {
+		t.Fatalf("explicit get should warn about held stint, got: %s", errStr)
+	}
+}
+
+func TestClaimExplicitHeldStintBlocked(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+	setStintHeld(t, beadsDir, "auth", true)
+
+	out, errStr, code := runMB("claim", authLapID)
+	if code != 10 {
+		t.Fatalf("explicit claim held exit %d, want 10; stdout: %s stderr: %s", code, out, errStr)
+	}
+	if out != "" {
+		t.Fatalf("explicit held claim should not emit a task, got stdout %q", out)
+	}
+	if !strings.Contains(errStr, "auth") || !strings.Contains(errStr, "held") {
+		t.Fatalf("explicit claim should warn about held stint, got: %s", errStr)
+	}
+	if _, err := os.Stat(filepath.Join(beadsDir, "claim")); !os.IsNotExist(err) {
+		t.Fatalf("explicit held claim must leave claim absent, stat err: %v", err)
+	}
+}
+
+func TestHeldStateAfterHookObservesExitCode(t *testing.T) {
+	beadsDir, _ := setupActiveStintRepo(t)
+	setStintHeld(t, beadsDir, "auth", true)
+	hooks := `{"version":1,"hooks":[{"title":"held-exit","command":"get","when":"after","run":"printf '%s' \"$exit_code\"","passback":true}]}`
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatalf("write hooks: %v", err)
+	}
+
+	out, errStr, code := runMB("get")
+	if code != 10 {
+		t.Fatalf("held get exit %d, want 10; stderr: %s", code, errStr)
+	}
+	if out != "10" {
+		t.Fatalf("after hook should see held exit code, got stdout %q", out)
 	}
 }
 
@@ -1287,12 +1425,12 @@ func TestEmptyStintEnqueuesAndResolvesAsNoHead(t *testing.T) {
 		t.Fatalf("empty enqueue ref = %+v, want todo empty stint ref", emptyRef)
 	}
 
-	_, errStr, code = runMB("get")
-	if code != 3 {
-		t.Fatalf("get through empty active stint exit %d, want 3; stderr: %s", code, errStr)
+	out, errStr, code = runMB("get")
+	if code != 11 {
+		t.Fatalf("get through empty active stint exit %d, want 11; stderr: %s", code, errStr)
 	}
-	if !strings.Contains(errStr, "no head task") {
-		t.Fatalf("empty active stint should use normal no-head error, got: %s", errStr)
+	if out != "" || errStr != "" {
+		t.Fatalf("empty active stint should be a clean state exit, stdout=%q stderr=%q", out, errStr)
 	}
 }
 
@@ -1642,6 +1780,62 @@ func TestStatusValidatesClaimInRecordedScope(t *testing.T) {
 	}
 	if claim["valid"] != true || claim["lap"] != authLapID || claim["file"] != "stints/auth.laps.json" {
 		t.Fatalf("status should validate scoped claim, got: %#v", claim)
+	}
+}
+
+func TestStatusHeldStateAndGateMetadata(t *testing.T) {
+	beadsDir, _ := setupActiveStintRepo(t)
+	setStintHeld(t, beadsDir, "auth", true)
+
+	out, errStr, code := runMB("status")
+	if code != 0 {
+		t.Fatalf("status held exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "State: held") || !strings.Contains(out, "Gate: stint auth is held") {
+		t.Fatalf("status should report held state and gate message, got: %s", out)
+	}
+
+	out, errStr, code = runMB("status", "--json-output")
+	if code != 0 {
+		t.Fatalf("status held json exit %d, stderr: %s", code, errStr)
+	}
+	m := parseStatusJSON(t, out)
+	if m["state"] != "held" {
+		t.Fatalf("status state = %v, want held", m["state"])
+	}
+	gate, ok := m["gate"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected held gate metadata, got: %#v", m["gate"])
+	}
+	if gate["state"] != "held" || gate["stint"] != "auth" || gate["scope"] != "auth" || gate["file"] != "stints/auth.laps.json" {
+		t.Fatalf("unexpected held gate metadata: %#v", gate)
+	}
+}
+
+func TestStatusActiveClaimPrecedesHeldGate(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth",
+		store.Task{Kind: store.KindStint, ID: "auth-search", Ref: "search", Title: "Search stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+		store.Task{Kind: store.KindLap, ID: authLapID, Title: "Inside auth", Order: 2, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeHeldResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch", true,
+		store.Task{Kind: store.KindLap, ID: "srch-next", Title: "Inside search", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	if err := store.WriteClaim(beadsDir, store.Claim{Lap: authLapID, File: "stints/auth.laps.json", Scope: "auth"}); err != nil {
+		t.Fatalf("write active claim: %v", err)
+	}
+
+	out, errStr, code := runMB("status", "--json-output")
+	if code != 0 {
+		t.Fatalf("status json exit %d, stderr: %s", code, errStr)
+	}
+	m := parseStatusJSON(t, out)
+	if m["state"] != "active" {
+		t.Fatalf("valid active claim should take precedence, got state %v", m["state"])
+	}
+	gate, ok := m["gate"].(map[string]interface{})
+	if !ok || gate["scope"] != "auth/search" {
+		t.Fatalf("status should still include held gate metadata, got: %#v", m["gate"])
 	}
 }
 
@@ -3027,12 +3221,12 @@ func TestGetNoHead(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
 
-	_, errStr, code := runMB("get")
-	if code != 3 {
-		t.Fatalf("expected code 3, got %d", code)
+	out, errStr, code := runMB("get")
+	if code != 11 {
+		t.Fatalf("expected code 11, got %d", code)
 	}
-	if !strings.Contains(errStr, "no head task") {
-		t.Fatalf("expected no head task, got: %s", errStr)
+	if out != "" || errStr != "" {
+		t.Fatalf("expected clean empty state exit, stdout=%q stderr=%q", out, errStr)
 	}
 }
 
@@ -3527,8 +3721,8 @@ func TestHookAfterRunsOnFailure(t *testing.T) {
 	os.WriteFile(filepath.Join(".laps", "hooks.json"), []byte(hooks), 0644)
 
 	out, _, code := runMB("get")
-	if code != 3 {
-		t.Fatalf("expected code 3, got %d", code)
+	if code != 11 {
+		t.Fatalf("expected code 11, got %d", code)
 	}
 	if !strings.Contains(out, "after") {
 		t.Fatalf("expected after hook output, got: %s", out)
@@ -4408,19 +4602,22 @@ func TestJSONOutputError(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
 
-	_, errStr, code := runMB("get", "--json-output")
-	if code != 3 {
-		t.Fatalf("expected code 3, got %d", code)
+	out, errStr, code := runMB("get", "--json-output")
+	if code != 11 {
+		t.Fatalf("expected code 11, got %d", code)
+	}
+	if errStr != "" {
+		t.Fatalf("expected clean state JSON on stdout only, got stderr: %s", errStr)
 	}
 	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(errStr)), &result); err != nil {
-		t.Fatalf("expected valid JSON on stderr, got: %s", errStr)
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON on stdout, got: %s", out)
 	}
-	if result["error"] != "no head task" {
-		t.Fatalf("expected error 'no head task', got: %v", result["error"])
+	if result["state"] != "empty" {
+		t.Fatalf("expected state 'empty', got: %v", result["state"])
 	}
-	if result["exitCode"].(float64) != 3 {
-		t.Fatalf("expected exitCode 3, got: %v", result["exitCode"])
+	if result["exitCode"].(float64) != 11 {
+		t.Fatalf("expected exitCode 11, got: %v", result["exitCode"])
 	}
 }
 
@@ -4870,12 +5067,12 @@ func TestClaimNoHead(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
 
-	_, errStr, code := runMB("claim")
-	if code != 3 {
-		t.Fatalf("expected code 3, got %d", code)
+	out, errStr, code := runMB("claim")
+	if code != 11 {
+		t.Fatalf("expected code 11, got %d", code)
 	}
-	if !strings.Contains(errStr, "no head task") {
-		t.Fatalf("expected 'no head task', got: %s", errStr)
+	if out != "" || errStr != "" {
+		t.Fatalf("expected clean empty state exit, stdout=%q stderr=%q", out, errStr)
 	}
 }
 
@@ -5314,16 +5511,19 @@ func TestJSONOutputClaimBareError(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
 
-	_, errStr, code := runMB("claim", "--json-output")
-	if code != 3 {
-		t.Fatalf("expected code 3, got %d", code)
+	out, errStr, code := runMB("claim", "--json-output")
+	if code != 11 {
+		t.Fatalf("expected code 11, got %d", code)
+	}
+	if errStr != "" {
+		t.Fatalf("expected clean state JSON on stdout only, got stderr: %s", errStr)
 	}
 	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(errStr)), &result); err != nil {
-		t.Fatalf("expected valid JSON on stderr, got: %s", errStr)
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("expected valid JSON on stdout, got: %s", out)
 	}
-	if result["error"] != "no head task" {
-		t.Fatalf("expected error 'no head task', got: %v", result["error"])
+	if result["state"] != "empty" || result["exitCode"] != float64(11) {
+		t.Fatalf("expected empty/11 state JSON, got: %#v", result)
 	}
 }
 

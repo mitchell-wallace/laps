@@ -88,6 +88,7 @@ type stintDescent struct {
 	Ref        *store.Task
 	ChildPath  string
 	ChildName  string
+	ChildHeld  bool
 	Scope      string
 }
 
@@ -162,6 +163,20 @@ func resolveActiveContext(rootPath, repoRoot, beadsDir string, rootFile *store.F
 	return resolved.Ctx, nil
 }
 
+func resolveSelectedFlowStart(path, repoRoot, beadsDir string, file *store.File, stopOnHeld bool) (*flowResolution, error) {
+	if activeScopeSelected() {
+		return resolveFlowStart(path, repoRoot, beadsDir, file, stopOnHeld)
+	}
+	ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
+	if err != nil {
+		return nil, err
+	}
+	return &flowResolution{
+		State: queueStateForContext(ctx),
+		Ctx:   ctx,
+	}, nil
+}
+
 func resolveFlowStart(rootPath, repoRoot, beadsDir string, rootFile *store.File, stopOnHeld bool) (*flowResolution, error) {
 	scope := "root"
 	if name, ok := store.ActiveStintNameForPath(beadsDir, rootPath); ok {
@@ -226,6 +241,7 @@ func resolveFlowStart(rootPath, repoRoot, beadsDir string, rootFile *store.File,
 				Ref:        ctx.Head,
 				ChildPath:  childPath,
 				ChildName:  ref,
+				ChildHeld:  childFile.Held,
 				Scope:      childScope,
 			}),
 		}
@@ -245,6 +261,57 @@ func queueStateForContext(ctx *activeContext) queueState {
 		return queueStateComplete
 	}
 	return queueStateLap
+}
+
+func heldGateForContext(ctx *activeContext) *heldGate {
+	if ctx == nil {
+		return nil
+	}
+	for i := range ctx.Chain {
+		edge := &ctx.Chain[i]
+		if !edge.ChildHeld {
+			continue
+		}
+		return &heldGate{
+			Stint: edge.ChildName,
+			Ref:   edge.Ref,
+			Scope: edge.Scope,
+			Path:  edge.ChildPath,
+		}
+	}
+	if ctx.File != nil && ctx.File.Held {
+		name := ctx.Scope
+		if strings.Contains(name, "/") {
+			parts := strings.Split(name, "/")
+			name = parts[len(parts)-1]
+		}
+		return &heldGate{
+			Stint: name,
+			Scope: ctx.Scope,
+			Path:  ctx.Path,
+		}
+	}
+	return nil
+}
+
+func warnHeldGate(gate *heldGate) {
+	if gate == nil {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "laps: stint %s is held; do not implement laps in it yet.\n", gate.Scope)
+}
+
+func exitForQueueState(state queueState) int {
+	switch state {
+	case queueStateHeld:
+		return 10
+	case queueStateEmpty:
+		return 11
+	case queueStateComplete:
+		return 12
+	default:
+		return 0
+	}
 }
 
 func resolvePhysicalStintChain(beadsDir, repoRoot, targetName string, includeArchived bool) ([]stintDescent, bool, error) {

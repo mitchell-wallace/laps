@@ -57,15 +57,24 @@ type statusStint struct {
 	Active   bool   `json:"active"`
 }
 
+type statusGate struct {
+	State   string `json:"state"`
+	Stint   string `json:"stint,omitempty"`
+	Scope   string `json:"scope,omitempty"`
+	File    string `json:"file,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
 // statusSnapshot is the stable JSON shape consumed by Rally. file is the
 // selected task file identity; state is the queue taxonomy
-// (active|ready|empty|complete).
+// (active|ready|empty|complete|held).
 type statusSnapshot struct {
 	File        string           `json:"file"`
 	State       string           `json:"state"`
 	Counts      statusCounts     `json:"counts"`
 	Head        *statusHead      `json:"head"`
 	Claim       statusClaim      `json:"claim"`
+	Gate        *statusGate      `json:"gate,omitempty"`
 	Assignees   []statusAssignee `json:"assignees"`
 	ActiveStint *statusStint     `json:"activeStint"`
 	Stints      []statusStint    `json:"stints"`
@@ -98,7 +107,8 @@ snapshot with claim.valid=false; it is reported, never silently cleared.`,
 		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
 
 		selectedFile := store.ResolveFile(fileFlag)
-		activeCtx, err := resolveActiveContext(scopedRootPath(beadsDir), repoRoot, beadsDir, loadFile(scopedRootPath(beadsDir), repoRoot, beadsDir))
+		rootPath := scopedRootPath(beadsDir)
+		flow, err := resolveFlowStart(rootPath, repoRoot, beadsDir, loadFile(rootPath, repoRoot, beadsDir), true)
 		if err != nil {
 			exitCode = 2
 			exit(2, "%v", err)
@@ -172,15 +182,12 @@ snapshot with claim.valid=false; it is reported, never silently cleared.`,
 			sc.AgeSeconds = &age
 		}
 
-		state := "ready"
+		state := statusStateForFlow(flow.State)
 		switch {
 		case claimValid:
 			state = "active"
-		case counts.Total == 0:
-			state = "empty"
-		case counts.Todo == 0:
-			state = "complete"
 		}
+		gate := statusGateForFlow(beadsDir, flow)
 
 		assignees := make([]statusAssignee, 0, len(assigneeTodos))
 		for role, n := range assigneeTodos {
@@ -189,7 +196,7 @@ snapshot with claim.valid=false; it is reported, never silently cleared.`,
 		sort.Slice(assignees, func(i, j int) bool {
 			return assignees[i].Assignee < assignees[j].Assignee
 		})
-		stints, activeStint, err := statusStints(beadsDir, repoRoot, activeCtx)
+		stints, activeStint, err := statusStints(beadsDir, repoRoot, flow.Ctx)
 		if err != nil {
 			exitCode = 2
 			exit(2, "status: %v", err)
@@ -201,6 +208,7 @@ snapshot with claim.valid=false; it is reported, never silently cleared.`,
 			Counts:      counts,
 			Head:        head,
 			Claim:       sc,
+			Gate:        gate,
 			Assignees:   assignees,
 			ActiveStint: activeStint,
 			Stints:      stints,
@@ -229,6 +237,9 @@ func formatStatusHuman(s *statusSnapshot) string {
 	if s.ActiveStint != nil {
 		lines = append(lines, fmt.Sprintf("Active stint: %s (%d todo, %d done, %d total)", s.ActiveStint.Scope, s.ActiveStint.Todo, s.ActiveStint.Done, s.ActiveStint.Total))
 	}
+	if s.Gate != nil && s.Gate.State == string(queueStateHeld) {
+		lines = append(lines, fmt.Sprintf("Gate: %s", s.Gate.Message))
+	}
 
 	switch s.Claim.Lap {
 	case "":
@@ -256,6 +267,32 @@ func formatStatusHuman(s *statusSnapshot) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func statusStateForFlow(state queueState) string {
+	switch state {
+	case queueStateHeld:
+		return string(queueStateHeld)
+	case queueStateEmpty:
+		return string(queueStateEmpty)
+	case queueStateComplete:
+		return string(queueStateComplete)
+	default:
+		return "ready"
+	}
+}
+
+func statusGateForFlow(beadsDir string, flow *flowResolution) *statusGate {
+	if flow == nil || flow.State != queueStateHeld || flow.Held == nil {
+		return nil
+	}
+	return &statusGate{
+		State:   string(queueStateHeld),
+		Stint:   flow.Held.Stint,
+		Scope:   flow.Held.Scope,
+		File:    fileNameForClaim(beadsDir, flow.Held.Path),
+		Message: fmt.Sprintf("stint %s is held; do not implement laps in it yet", flow.Held.Scope),
+	}
 }
 
 func statusStints(beadsDir, repoRoot string, activeCtx *activeContext) ([]statusStint, *statusStint, error) {

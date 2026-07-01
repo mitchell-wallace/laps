@@ -25,15 +25,25 @@ task to complete.`,
 		checkDefault(beadsDir)
 		file := loadFile(path, repoRoot, beadsDir)
 
-		ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
+		var flow *flowResolution
+		var ctx *activeContext
+		var err error
+		if target == "head" {
+			flow, err = resolveSelectedFlowStart(path, repoRoot, beadsDir, file, true)
+		} else {
+			flow, err = resolveSelectedFlowStart(path, repoRoot, beadsDir, file, false)
+		}
 		if err != nil {
 			exit(2, "%v", err)
 		}
+		ctx = flow.Ctx
 		path = ctx.Path
 
 		var task *store.Task
 		if target == "head" {
-			task = ctx.Head
+			if flow.State == queueStateLap {
+				task = ctx.Head
+			}
 		} else {
 			task = findScopedTask(ctx, target)
 			if task == nil {
@@ -43,15 +53,26 @@ task to complete.`,
 
 		exitCode := 0
 		var output string
+		restoreCapture := captureExitCode(&exitCode)
+		defer restoreCapture()
 		defer runAfterHooksDeferredScoped(hookCommandName(cmd), beadsDir, path, ctx.Scope, &task, &output, &exitCode, args)()
 		runBeforeHooksScoped(hookCommandName(cmd), beadsDir, path, ctx.Scope, task, args)
 
 		if task == nil {
-			exitCode = 3
 			if target == "head" {
-				exit(3, "no head task")
+				if flow.State == queueStateHeld {
+					warnHeldGate(flow.Held)
+				}
+				exitState(exitForQueueState(flow.State))
 			}
+			exitCode = 3
 			exit(3, "task not found")
+		}
+		if target != "head" {
+			if gate := heldGateForContext(ctx); gate != nil {
+				warnHeldGate(gate)
+				exitState(10)
+			}
 		}
 
 		selectedFile := fileNameForClaim(beadsDir, path)

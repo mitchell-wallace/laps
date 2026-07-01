@@ -61,11 +61,11 @@
       "title": "Wire held/empty/complete flow-start state through get, claim, and status gate probing",
       "description": "Use resolveFlowStart/exitState on head flow-start so held returns 10 with stderr warning, empty returns 11, complete returns 12, JSON state goes to stdout, after-hooks see the exit code, and status consumes the same typed queue-state instead of ad-hoc counts.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-07-01T08:45:55.299361501Z",
-      "updatedAt": "2026-07-01T08:45:55.299361501Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T08:53:23.090501451Z",
+      "completedAt": "2026-07-01T08:53:23.090501451Z"
     },
     {
       "id": "work-b3f5",
