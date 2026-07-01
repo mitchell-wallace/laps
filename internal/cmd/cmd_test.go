@@ -12,6 +12,7 @@ import (
 
 	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
@@ -59,21 +60,10 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	lapFlag = ""
 	sessionFlag = ""
 	sinceFlag = ""
-	for _, f := range []*pflag.FlagSet{
-		rootCmd.PersistentFlags(),
-		addCmd.Flags(),
-		listCmd.Flags(),
-		updateCmd.Flags(),
-		doneUndoCmd.Flags(),
-		editCmd.Flags(),
-		moveCmd.Flags(),
-		assignCmd.Flags(),
-		logCmd.Flags(),
-	} {
-		f.VisitAll(func(flag *pflag.Flag) {
-			flag.Changed = false
-		})
-	}
+	scopeActive = false
+	scopeRoot = false
+	scopeStint = ""
+	resetCommandFlags(rootCmd)
 
 	func() {
 		defer func() {
@@ -135,21 +125,10 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	lapFlag = ""
 	sessionFlag = ""
 	sinceFlag = ""
-	for _, f := range []*pflag.FlagSet{
-		rootCmd.PersistentFlags(),
-		addCmd.Flags(),
-		listCmd.Flags(),
-		updateCmd.Flags(),
-		doneUndoCmd.Flags(),
-		editCmd.Flags(),
-		moveCmd.Flags(),
-		assignCmd.Flags(),
-		logCmd.Flags(),
-	} {
-		f.VisitAll(func(flag *pflag.Flag) {
-			flag.Changed = false
-		})
-	}
+	scopeActive = false
+	scopeRoot = false
+	scopeStint = ""
+	resetCommandFlags(rootCmd)
 
 	err = Execute("test")
 
@@ -160,6 +139,20 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	errBuf, _ := io.ReadAll(rErr)
 
 	return string(outBuf), string(errBuf), err
+}
+
+func resetCommandFlags(cmd *cobra.Command) {
+	for _, f := range []*pflag.FlagSet{
+		cmd.PersistentFlags(),
+		cmd.Flags(),
+	} {
+		f.VisitAll(func(flag *pflag.Flag) {
+			flag.Changed = false
+		})
+	}
+	for _, child := range cmd.Commands() {
+		resetCommandFlags(child)
+	}
 }
 
 var resolverTestTime = time.Date(2026, 4, 28, 10, 15, 0, 0, time.UTC)
@@ -345,6 +338,98 @@ func TestExistingPopulatedRawStintFileRequiresPrefix(t *testing.T) {
 	}
 	if !strings.Contains(errStr, "missing prefix metadata") {
 		t.Fatalf("expected missing prefix metadata error, got: %s", errStr)
+	}
+}
+
+func TestScopeFlagsResolveQueuePaths(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	if out, errStr, code := runMB("add", "head", "--root", "--title", "Root scoped"); code != 0 {
+		t.Fatalf("add --root exit %d, stderr: %s, stdout: %s", code, errStr, out)
+	}
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	if len(rootFile.Tasks) != 1 || rootFile.Tasks[0].Title != "Root scoped" {
+		t.Fatalf("root file tasks = %#v", rootFile.Tasks)
+	}
+
+	if out, errStr, code := runMB("add", "head", "--stint", "auth", "--title", "Stint scoped"); code != 0 {
+		t.Fatalf("add --stint exit %d, stderr: %s, stdout: %s", code, errStr, out)
+	}
+	stintFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load stint file: %v", err)
+	}
+	if len(stintFile.Tasks) != 1 || stintFile.Tasks[0].Title != "Stint scoped" {
+		t.Fatalf("stint file tasks = %#v", stintFile.Tasks)
+	}
+
+	if out, errStr, code := runMB("list", "--active"); code != 0 {
+		t.Fatalf("list --active exit %d, stderr: %s", code, errStr)
+	} else if !strings.Contains(out, "Root scoped") {
+		t.Fatalf("list --active output = %q, want root task", out)
+	}
+}
+
+func TestScopeFlagsAreMutuallyExclusive(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	tests := [][]string{
+		{"add", "head", "--root", "--active", "--title", "X"},
+		{"add", "head", "--root", "--stint", "auth", "--title", "X"},
+		{"add", "head", "--active", "--stint", "auth", "--title", "X"},
+		{"--file", "other", "add", "head", "--root", "--title", "X"},
+		{"--file", "other", "add", "head", "--active", "--title", "X"},
+		{"--file", "other", "add", "head", "--stint", "auth", "--title", "X"},
+	}
+	for _, args := range tests {
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			_, _, err := runMBExecute(args...)
+			if err == nil {
+				t.Fatalf("expected mutual-exclusion error for args %v", args)
+			}
+		})
+	}
+}
+
+func TestScopeFlagsAreOnlyOnQueueTargetingCommands(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	tests := [][]string{
+		{"init", "--root"},
+		{"on", "--root"},
+		{"off", "--root"},
+		{"update", "--root"},
+		{"version", "--root"},
+		{"log", "--root"},
+		{"status", "--root"},
+		{"stints", "new", "auth", "--root"},
+		{"customcmd", "--root"},
+	}
+	for _, args := range tests {
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			_, _, err := runMBExecute(args...)
+			if err == nil {
+				t.Fatalf("expected unknown flag error for args %v", args)
+			}
+		})
+	}
+}
+
+func TestScopeFlagChangedStateDoesNotLeakBetweenRuns(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	if out, errStr, code := runMB("add", "head", "--root", "--title", "A"); code != 0 {
+		t.Fatalf("add --root exit %d, stderr: %s, stdout: %s", code, errStr, out)
+	}
+	if out, errStr, code := runMB("--file", "other", "add", "head", "--title", "B"); code != 0 {
+		t.Fatalf("add --file after --root exit %d, stderr: %s, stdout: %s", code, errStr, out)
 	}
 }
 

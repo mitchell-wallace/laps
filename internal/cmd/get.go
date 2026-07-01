@@ -66,6 +66,7 @@ Output is title, blank line, description — nothing else.`,
 }
 
 func init() {
+	addScopeFlags(getCmd)
 	rootCmd.AddCommand(getCmd)
 }
 

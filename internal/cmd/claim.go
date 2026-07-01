@@ -168,6 +168,7 @@ var claimUndoCmd = &cobra.Command{
 }
 
 func init() {
+	addScopeFlags(claimCmd)
 	rootCmd.AddCommand(claimCmd)
 	claimCmd.AddCommand(claimUndoCmd)
 }

@@ -19,11 +19,11 @@
 
 ## 3. Scope flags
 
-- [ ] 3.1 Add shared local, mutually-exclusive scope flags `--active`/`-c` (default), `--root`/`-r`, `--stint <name>`/`-s` on queue-targeting commands; error when two are combined
-- [ ] 3.2 Wire them through only the queue-targeting commands in the design command matrix; non-queue/admin commands reject or omit these flags
-- [ ] 3.3 Reject invocations that combine raw `--file` with any scope flag. Mechanism: per queue-targeting command, `cmd.MarkFlagsMutuallyExclusive("file", "root", "stint", "active")` (the persistent `file` flag is visible in each command's merged flag set). Because `--active` is the default, it must be implemented as a flag detected via `.Changed` (not a default-`true` value), or cobra's mutual-exclusion check will false-positive on every invocation
+- [x] 3.1 Add shared local, mutually-exclusive scope flags `--active`/`-c` (default), `--root`/`-r`, `--stint <name>`/`-s` on queue-targeting commands; error when two are combined
+- [x] 3.2 Wire them through only the queue-targeting commands in the design command matrix; non-queue/admin commands reject or omit these flags
+- [x] 3.3 Reject invocations that combine raw `--file` with any scope flag. Mechanism: per queue-targeting command, `cmd.MarkFlagsMutuallyExclusive("file", "root", "stint", "active")` (the persistent `file` flag is visible in each command's merged flag set). Because `--active` is the default, it must be implemented as a flag detected via `.Changed` (not a default-`true` value), or cobra's mutual-exclusion check will false-positive on every invocation
 - [ ] 3.4 Tests: default active, `--root`, `--stint`, scope-flag mutual-exclusion error, non-queue command behavior, `--file` plus scope flag rejection
-- [ ] 3.5 Extend the `runMB`/`runMBExecute` reset harness in `cmd_test.go`: the new shared scope-flag package vars and per-command local flag sets (plus the `stints` subcommand flag sets) are not in today's hardcoded reset list (`rootCmd.PersistentFlags`, `addCmd`, `listCmd`, `updateCmd`, `doneUndoCmd`), so a `--root`/`--stint` set in one test leaks `Changed=true` into the next. Add the new flag sets (or replace the hardcoded list with a recursive walk of all command flag sets)
+- [x] 3.5 Extend the `runMB`/`runMBExecute` reset harness in `cmd_test.go`: the new shared scope-flag package vars and per-command local flag sets (plus the `stints` subcommand flag sets) are not in today's hardcoded reset list (`rootCmd.PersistentFlags`, `addCmd`, `listCmd`, `updateCmd`, `doneUndoCmd`), so a `--root`/`--stint` set in one test leaks `Changed=true` into the next. Add the new flag sets (or replace the hardcoded list with a recursive walk of all command flag sets)
 
 ## 4. Scoped structure ops & id resolution
 

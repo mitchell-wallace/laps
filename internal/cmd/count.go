@@ -107,5 +107,6 @@ var countCmd = &cobra.Command{
 }
 
 func init() {
+	addScopeFlags(countCmd)
 	rootCmd.AddCommand(countCmd)
 }

@@ -64,5 +64,6 @@ var deleteCmd = &cobra.Command{
 }
 
 func init() {
+	addScopeFlags(deleteCmd)
 	rootCmd.AddCommand(deleteCmd)
 }

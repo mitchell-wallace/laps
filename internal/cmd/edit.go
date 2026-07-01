@@ -148,5 +148,6 @@ func init() {
 	editCmd.Flags().StringVar(&editTitle, "title", "", "new task title")
 	editCmd.Flags().StringVar(&editDescription, "description", "", "new task description (empty clears)")
 	editCmd.Flags().StringVar(&editAssignee, "assignee", "", "new task assignee (empty clears)")
+	addScopeFlags(editCmd)
 	rootCmd.AddCommand(editCmd)
 }

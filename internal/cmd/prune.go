@@ -101,5 +101,6 @@ Prints the number of tasks removed.`,
 }
 
 func init() {
+	addScopeFlags(pruneCmd)
 	rootCmd.AddCommand(pruneCmd)
 }

@@ -121,5 +121,6 @@ Prints the moved task id on success.`,
 }
 
 func init() {
+	addScopeFlags(moveCmd)
 	rootCmd.AddCommand(moveCmd)
 }

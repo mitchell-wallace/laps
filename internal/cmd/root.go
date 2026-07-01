@@ -15,10 +15,19 @@ import (
 var version string
 var fileFlag string
 var jsonOutput bool
+var rootFlagsInitialized bool
 
 func init() {
+	ensureRootFlags()
+}
+
+func ensureRootFlags() {
+	if rootFlagsInitialized {
+		return
+	}
 	rootCmd.PersistentFlags().StringVarP(&fileFlag, "file", "f", "", "task file name (without .laps/ path)")
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json-output", false, "emit structured JSON output")
+	rootFlagsInitialized = true
 }
 
 var rootCmd = &cobra.Command{
@@ -84,6 +93,9 @@ func Execute(v string) error {
 	// Hook-only command handling
 	cmdName, hookArgs, hookFileValue := splitArgs(os.Args[1:])
 	if cmdName != "" && !isKnownCommand(cmdName) {
+		if scopeFlagName, ok := scopeFlagInArgs(os.Args[1:]); ok {
+			return fmt.Errorf("unknown flag: %s", scopeFlagName)
+		}
 		repoRoot, beadsDir, err := store.DiscoverRepoRoot()
 		if err != nil {
 			exit(2, "%v", err)
@@ -128,8 +140,7 @@ func getStorePath() (path, repoRoot, beadsDir string) {
 	if err != nil {
 		exit(2, "%v", err)
 	}
-	fileName := store.ResolveFile(fileFlag)
-	path = filepath.Join(beadsDir, fileName)
+	path = scopedStorePath(beadsDir)
 	return path, repoRoot, beadsDir
 }
 

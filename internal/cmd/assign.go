@@ -24,5 +24,6 @@ warning and does not reopen it. Prints the affected task id on success.`,
 }
 
 func init() {
+	addScopeFlags(assignCmd)
 	rootCmd.AddCommand(assignCmd)
 }

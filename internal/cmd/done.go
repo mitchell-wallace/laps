@@ -203,6 +203,7 @@ func hookCommandName(cmd *cobra.Command) string {
 }
 
 func init() {
+	addScopeFlags(doneCmd)
 	rootCmd.AddCommand(doneCmd)
 	doneCmd.AddCommand(doneUndoCmd)
 	doneUndoCmd.Flags().BoolVarP(&forceUndo, "yes", "y", false, "force undo even if completed more than 5 minutes ago")

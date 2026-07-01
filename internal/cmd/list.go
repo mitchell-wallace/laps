@@ -118,6 +118,7 @@ func init() {
 	listCmd.Flags().BoolVar(&listAll, "all", false, "include done tasks")
 	listCmd.Flags().BoolVar(&listDone, "done", false, "show only done tasks")
 	listCmd.Flags().BoolVar(&listOneline, "oneline", false, "render each lap on a single line (prior format)")
+	addScopeFlags(listCmd)
 	rootCmd.AddCommand(listCmd)
 }
 

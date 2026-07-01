@@ -287,5 +287,6 @@ func init() {
 	addCmd.Flags().StringVar(&addAssignee, "assignee", "", "task assignee")
 	addCmd.Flags().StringVar(&addJSON, "json", "", "task as json object")
 	addCmd.Flags().BoolVar(&addStdin, "stdin", false, "read description from stdin")
+	addScopeFlags(addCmd)
 	rootCmd.AddCommand(addCmd)
 }
