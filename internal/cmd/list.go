@@ -29,6 +29,7 @@ Default shows todo tasks only, head first.
 		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
 		file := loadFile(path, repoRoot, beadsDir)
+		hookScope := "root"
 		if !listTree {
 			ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
 			if err != nil {
@@ -36,13 +37,14 @@ Default shows todo tasks only, head first.
 			}
 			path = ctx.Path
 			file = ctx.File
+			hookScope = ctx.Scope
 		}
 
 		exitCode := 0
 		var output string
 		var task *store.Task
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
+		defer runAfterHooksDeferredScoped(cmd.Name(), beadsDir, path, hookScope, &task, &output, &exitCode, args)()
+		runBeforeHooksScoped(cmd.Name(), beadsDir, path, hookScope, nil, args)
 
 		claim, err := store.ReadClaim(beadsDir, fileNameForClaim(beadsDir, path))
 		if err != nil {

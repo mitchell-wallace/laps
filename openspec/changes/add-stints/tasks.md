@@ -68,11 +68,11 @@
 
 ## 9. Log & status integration
 
-- [ ] 9.1 Populate the event-log `scope` with the resolved context; add `stint.enqueued`/`completed`/`archived`
-- [ ] 9.2 `status` reports the active stint and per-stint progress
-- [ ] 9.3 Hook variables under scoped operations: `$file` is the resolved physical task file and `$scope` is the canonical logical scope (`buildHookVars` at `hooks.go:53` has no `scope` today). Also decide the hook-only (unknown-command) path, which builds its vars map inline at `root.go:96-105` and bypasses `buildHookVars`: add `$scope` there defaulting to `root` (or document that hook-only commands do not receive `$scope`)
-- [ ] 9.4 Use canonical scope strings everywhere: `root`, root-level stint names, and slash paths for nesting such as `auth/search`
-- [ ] 9.5 Tests: scope reflects the stint; stint events logged; status shows active stint; hook variables under scoped `done`; nested scope encoding
+- [x] 9.1 Populate the event-log `scope` with the resolved context; add `stint.enqueued`/`completed`/`archived`
+- [x] 9.2 `status` reports the active stint and per-stint progress
+- [x] 9.3 Hook variables under scoped operations: `$file` is the resolved physical task file and `$scope` is the canonical logical scope (`buildHookVars` at `hooks.go:53` has no `scope` today). Also decide the hook-only (unknown-command) path, which builds its vars map inline at `root.go:96-105` and bypasses `buildHookVars`: add `$scope` there defaulting to `root` (or document that hook-only commands do not receive `$scope`)
+- [x] 9.4 Use canonical scope strings everywhere: `root`, root-level stint names, and slash paths for nesting such as `auth/search`
+- [x] 9.5 Tests: scope reflects the stint; stint events logged; status shows active stint; hook variables under scoped `done`; nested scope encoding
 
 ## 10. Cross-change dependency
 

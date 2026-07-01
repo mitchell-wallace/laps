@@ -44,8 +44,8 @@ task to complete.`,
 
 		exitCode := 0
 		var output string
-		defer runAfterHooksDeferred(hookCommandName(cmd), beadsDir, path, &task, &output, &exitCode, args)()
-		runBeforeHooks(hookCommandName(cmd), beadsDir, path, task, args)
+		defer runAfterHooksDeferredScoped(hookCommandName(cmd), beadsDir, path, ctx.Scope, &task, &output, &exitCode, args)()
+		runBeforeHooksScoped(hookCommandName(cmd), beadsDir, path, ctx.Scope, task, args)
 
 		if task == nil {
 			exitCode = 3
@@ -85,16 +85,16 @@ task to complete.`,
 					Event:    "unclaimed",
 					Cmd:      "claim",
 					File:     existing.File,
+					Scope:    normalizeClaimScope(existing),
 					Lap:      existing.Lap,
 					Title:    prevTitle,
 					Assignee: prevAssignee,
 					Detail:   map[string]interface{}{"reason": "replaced"},
 				})
 			}
-			logEvent(beadsDir, &eventlog.Entry{
+			logScopedEvent(beadsDir, ctx, &eventlog.Entry{
 				Event:    "claimed",
 				Cmd:      "claim",
-				File:     newClaim.File,
 				Lap:      task.ID,
 				Title:    task.Title,
 				Assignee: task.Assignee,
@@ -151,6 +151,7 @@ var claimUndoCmd = &cobra.Command{
 			Event:    "unclaimed",
 			Cmd:      "claim-undo",
 			File:     claim.File,
+			Scope:    normalizeClaimScope(claim),
 			Lap:      claimedID,
 			Title:    title,
 			Assignee: assignee,

@@ -91,8 +91,8 @@ func runEdit(cmd *cobra.Command, args []string, fields editFields) {
 
 	exitCode := 0
 	var output string
-	defer runAfterHooksDeferred(name, beadsDir, path, &task, &output, &exitCode, args)()
-	runBeforeHooks(name, beadsDir, path, task, args)
+	defer runAfterHooksDeferredScoped(name, beadsDir, path, ctx.Scope, &task, &output, &exitCode, args)()
+	runBeforeHooksScoped(name, beadsDir, path, ctx.Scope, task, args)
 
 	if task.IsDone {
 		fmt.Fprintf(os.Stderr, "laps: lap %s is already complete; editing in place without reopening.\n", task.ID)
@@ -128,7 +128,7 @@ func runEdit(cmd *cobra.Command, args []string, fields editFields) {
 	if fields.setAssignee {
 		changedFields = append(changedFields, "assignee")
 	}
-	logEvent(beadsDir, &eventlog.Entry{
+	logScopedEvent(beadsDir, ctx, &eventlog.Entry{
 		Event:    "edited",
 		Cmd:      name,
 		Lap:      task.ID,

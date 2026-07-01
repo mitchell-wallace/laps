@@ -48,8 +48,10 @@ Prints each new task id on success.`,
 		exitCode := 0
 		var output string
 		var task *store.Task
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
+		hookScope := "root"
+		defer func() {
+			runAfterHooksDeferredScoped(cmd.Name(), beadsDir, path, hookScope, &task, &output, &exitCode, args)()
+		}()
 
 		if len(args) == 0 {
 			exitCode = 1
@@ -141,6 +143,8 @@ Prints each new task id on success.`,
 		}
 		path = ctx.Path
 		file = ctx.File
+		hookScope = ctx.Scope
+		runBeforeHooksScoped(cmd.Name(), beadsDir, path, hookScope, nil, args)
 		if afterID != "" && findScopedTask(ctx, afterID) == nil {
 			exitIfOutOfScope(beadsDir, repoRoot, ctx, afterID)
 		}
@@ -203,7 +207,7 @@ Prints each new task id on success.`,
 		}
 
 		for i := range tasks {
-			logEvent(beadsDir, &eventlog.Entry{
+			logScopedEvent(beadsDir, ctx, &eventlog.Entry{
 				Event:    "created",
 				Cmd:      "add",
 				Lap:      tasks[i].ID,

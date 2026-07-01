@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -236,6 +237,17 @@ var stintsEnqueueCmd = &cobra.Command{
 		if err := store.Save(rootPath, rootFile); err != nil {
 			exit(2, "stints enqueue: %v", err)
 		}
+		logEvent(beadsDir, &eventlog.Entry{
+			Event: "stint.enqueued",
+			Cmd:   "stints-enqueue",
+			File:  store.ResolveFile(""),
+			Scope: "root",
+			Detail: map[string]interface{}{
+				"stint":    name,
+				"ref":      ref.ID,
+				"position": position,
+			},
+		})
 
 		if jsonOutput {
 			printJSON(map[string]interface{}{"stint": name, "ref": ref})

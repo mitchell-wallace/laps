@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -44,16 +45,30 @@ type statusHead struct {
 	Assignee string `json:"assignee,omitempty"`
 }
 
+type statusStint struct {
+	Name     string `json:"name"`
+	Scope    string `json:"scope"`
+	File     string `json:"file"`
+	Todo     int    `json:"todo"`
+	Done     int    `json:"done"`
+	Total    int    `json:"total"`
+	Queued   bool   `json:"queued"`
+	Archived bool   `json:"archived"`
+	Active   bool   `json:"active"`
+}
+
 // statusSnapshot is the stable JSON shape consumed by Rally. file is the
 // selected task file identity; state is the queue taxonomy
 // (active|ready|empty|complete).
 type statusSnapshot struct {
-	File      string           `json:"file"`
-	State     string           `json:"state"`
-	Counts    statusCounts     `json:"counts"`
-	Head      *statusHead      `json:"head"`
-	Claim     statusClaim      `json:"claim"`
-	Assignees []statusAssignee `json:"assignees"`
+	File        string           `json:"file"`
+	State       string           `json:"state"`
+	Counts      statusCounts     `json:"counts"`
+	Head        *statusHead      `json:"head"`
+	Claim       statusClaim      `json:"claim"`
+	Assignees   []statusAssignee `json:"assignees"`
+	ActiveStint *statusStint     `json:"activeStint"`
+	Stints      []statusStint    `json:"stints"`
 }
 
 var statusCmd = &cobra.Command{
@@ -83,6 +98,11 @@ snapshot with claim.valid=false; it is reported, never silently cleared.`,
 		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
 
 		selectedFile := store.ResolveFile(fileFlag)
+		activeCtx, err := resolveActiveContext(scopedRootPath(beadsDir), repoRoot, beadsDir, loadFile(scopedRootPath(beadsDir), repoRoot, beadsDir))
+		if err != nil {
+			exitCode = 2
+			exit(2, "%v", err)
+		}
 
 		// A malformed claim is a real error, not a hidden-healthy snapshot: surface
 		// it on the normal (non-zero) error path. A missing/empty claim reads back
@@ -157,14 +177,21 @@ snapshot with claim.valid=false; it is reported, never silently cleared.`,
 		sort.Slice(assignees, func(i, j int) bool {
 			return assignees[i].Assignee < assignees[j].Assignee
 		})
+		stints, activeStint, err := statusStints(beadsDir, repoRoot, activeCtx)
+		if err != nil {
+			exitCode = 2
+			exit(2, "status: %v", err)
+		}
 
 		snapshot := statusSnapshot{
-			File:      selectedFile,
-			State:     state,
-			Counts:    counts,
-			Head:      head,
-			Claim:     sc,
-			Assignees: assignees,
+			File:        selectedFile,
+			State:       state,
+			Counts:      counts,
+			Head:        head,
+			Claim:       sc,
+			Assignees:   assignees,
+			ActiveStint: activeStint,
+			Stints:      stints,
 		}
 
 		output = formatStatusHuman(&snapshot)
@@ -186,6 +213,9 @@ func formatStatusHuman(s *statusSnapshot) string {
 		lines = append(lines, fmt.Sprintf("Head: %s — %s", s.Head.ID, s.Head.Title))
 	} else {
 		lines = append(lines, "Head: none")
+	}
+	if s.ActiveStint != nil {
+		lines = append(lines, fmt.Sprintf("Active stint: %s (%d todo, %d done, %d total)", s.ActiveStint.Scope, s.ActiveStint.Todo, s.ActiveStint.Done, s.ActiveStint.Total))
 	}
 
 	switch s.Claim.Lap {
@@ -214,6 +244,75 @@ func formatStatusHuman(s *statusSnapshot) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func statusStints(beadsDir, repoRoot string, activeCtx *activeContext) ([]statusStint, *statusStint, error) {
+	rootFile, err := loadExistingFile(scopedRootPath(beadsDir), repoRoot, beadsDir)
+	if err != nil {
+		if !errors.Is(err, store.ErrEmptyFile) {
+			return nil, nil, err
+		}
+		rootFile = &store.File{Version: store.CurrentVersion, Tasks: []store.Task{}}
+	}
+	queued := queuedStintNames(rootFile)
+	activeScope := ""
+	activeName := ""
+	if activeCtx != nil && activeCtx.Scope != "" && activeCtx.Scope != "root" {
+		activeScope = activeCtx.Scope
+		parts := strings.Split(activeScope, "/")
+		activeName = parts[len(parts)-1]
+	}
+
+	var stints []statusStint
+	var active *statusStint
+	if err := walkStintFiles(beadsDir, func(path, name string, archived bool) error {
+		file, err := loadExistingFile(path, repoRoot, beadsDir)
+		if err != nil {
+			return err
+		}
+		var todo, done int
+		for i := range file.Tasks {
+			if file.Tasks[i].Kind != store.KindLap {
+				continue
+			}
+			if file.Tasks[i].IsDone {
+				done++
+			} else {
+				todo++
+			}
+		}
+		scope := name
+		isActive := !archived && name == activeName
+		if isActive && activeScope != "" {
+			scope = activeScope
+		}
+		row := statusStint{
+			Name:     name,
+			Scope:    scope,
+			File:     fileNameForClaim(beadsDir, path),
+			Todo:     todo,
+			Done:     done,
+			Total:    todo + done,
+			Queued:   queued[name],
+			Archived: archived,
+			Active:   isActive,
+		}
+		stints = append(stints, row)
+		if isActive {
+			copy := row
+			active = &copy
+		}
+		return nil
+	}); err != nil {
+		return nil, nil, err
+	}
+	sort.Slice(stints, func(i, j int) bool {
+		if stints[i].Name != stints[j].Name {
+			return stints[i].Name < stints[j].Name
+		}
+		return !stints[i].Archived && stints[j].Archived
+	})
+	return stints, active, nil
 }
 
 func init() {

@@ -108,6 +108,7 @@ func Execute(v string) error {
 		vars := map[string]string{
 			"command":   cmdName,
 			"file":      path,
+			"scope":     "root",
 			"exit_code": "",
 			"output":    "",
 			"args":      shellQuoteArgs(hookArgs),

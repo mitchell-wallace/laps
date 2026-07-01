@@ -74,8 +74,8 @@ Prints the moved task id on success.`,
 
 		exitCode := 0
 		var output string
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, task, args)
+		defer runAfterHooksDeferredScoped(cmd.Name(), beadsDir, path, ctx.Scope, &task, &output, &exitCode, args)()
+		runBeforeHooksScoped(cmd.Name(), beadsDir, path, ctx.Scope, task, args)
 
 		order, fallbackHead, err := store.ComputeInsertOrder(file, position, afterID)
 		if err != nil {
@@ -106,7 +106,7 @@ Prints the moved task id on success.`,
 		if position == "after" {
 			detail["after"] = afterID
 		}
-		logEvent(beadsDir, &eventlog.Entry{
+		logScopedEvent(beadsDir, ctx, &eventlog.Entry{
 			Event:    "moved",
 			Cmd:      "move",
 			Lap:      task.ID,

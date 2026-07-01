@@ -35,8 +35,8 @@ var deleteCmd = &cobra.Command{
 
 		exitCode := 0
 		var output string
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, task, args)
+		defer runAfterHooksDeferredScoped(cmd.Name(), beadsDir, path, ctx.Scope, &task, &output, &exitCode, args)()
+		runBeforeHooksScoped(cmd.Name(), beadsDir, path, ctx.Scope, task, args)
 
 		if task == nil {
 			exitIfOutOfScope(beadsDir, repoRoot, ctx, id)
@@ -75,7 +75,7 @@ var deleteCmd = &cobra.Command{
 				exit(2, "delete: clear claim: %v", err)
 			}
 		}
-		logEvent(beadsDir, &eventlog.Entry{
+		logScopedEvent(beadsDir, ctx, &eventlog.Entry{
 			Event:    "deleted",
 			Cmd:      "delete",
 			Lap:      task.ID,

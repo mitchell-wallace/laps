@@ -27,8 +27,8 @@ var countCmd = &cobra.Command{
 		exitCode := 0
 		var output string
 		var task *store.Task
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
+		defer runAfterHooksDeferredScoped(cmd.Name(), beadsDir, path, ctx.Scope, &task, &output, &exitCode, args)()
+		runBeforeHooksScoped(cmd.Name(), beadsDir, path, ctx.Scope, nil, args)
 
 		var doneCount, totalCount int
 		type roleStats struct {

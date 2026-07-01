@@ -1118,6 +1118,162 @@ func TestDoneLastLapDrainsAndArchives(t *testing.T) {
 	}
 }
 
+// TestStintDoneLogsScopeAndDrainEvents asserts scoped done events carry the
+// canonical stint scope, and draining emits the stint lifecycle events. (task 9.5)
+func TestStintDoneLogsScopeAndDrainEvents(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+
+	if _, errStr, code := runMB("done", authLapID); code != 0 {
+		t.Fatalf("done final stint lap exit %d, stderr: %s", code, errStr)
+	}
+
+	events := readLogEvents(t, beadsDir)
+	completed := findLogEvent(t, events, "completed")
+	if completed["scope"] != "auth" {
+		t.Fatalf("completed scope = %v, want auth; event=%#v", completed["scope"], completed)
+	}
+	if completed["file"] != "stints/auth.laps.json" {
+		t.Fatalf("completed file = %v, want stints/auth.laps.json", completed["file"])
+	}
+	stintCompleted := findLogEvent(t, events, "stint.completed")
+	if stintCompleted["scope"] != "auth" {
+		t.Fatalf("stint.completed scope = %v, want auth", stintCompleted["scope"])
+	}
+	if detail := stintCompleted["detail"].(map[string]interface{}); detail["stint"] != "auth" || detail["ref"] != "root-auth" {
+		t.Fatalf("unexpected stint.completed detail: %#v", detail)
+	}
+	stintArchived := findLogEvent(t, events, "stint.archived")
+	if stintArchived["scope"] != "auth" {
+		t.Fatalf("stint.archived scope = %v, want auth", stintArchived["scope"])
+	}
+	if detail := stintArchived["detail"].(map[string]interface{}); detail["to"] != "stints/archive/auth.laps.json" {
+		t.Fatalf("unexpected stint.archived detail: %#v", detail)
+	}
+}
+
+func TestStintsEnqueueLogsEvent(t *testing.T) {
+	beadsDir, _ := setupActiveStintRepo(t)
+
+	if _, errStr, code := runMB("stints", "new", "search"); code != 0 {
+		t.Fatalf("stints new exit %d, stderr: %s", code, errStr)
+	}
+	if _, errStr, code := runMB("stints", "enqueue", "search", "head"); code != 0 {
+		t.Fatalf("stints enqueue exit %d, stderr: %s", code, errStr)
+	}
+
+	events := readLogEvents(t, beadsDir)
+	enqueued := findLogEvent(t, events, "stint.enqueued")
+	if enqueued["scope"] != "root" {
+		t.Fatalf("stint.enqueued scope = %v, want root", enqueued["scope"])
+	}
+	if enqueued["file"] != "laps.json" {
+		t.Fatalf("stint.enqueued file = %v, want laps.json", enqueued["file"])
+	}
+	if detail := enqueued["detail"].(map[string]interface{}); detail["stint"] != "search" || detail["position"] != "head" {
+		t.Fatalf("unexpected stint.enqueued detail: %#v", detail)
+	}
+}
+
+func TestStatusReportsActiveStintProgress(t *testing.T) {
+	_, _ = setupActiveStintRepo(t)
+
+	out, errStr, code := runMB("status")
+	if code != 0 {
+		t.Fatalf("status exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "Active stint: auth (1 todo, 0 done, 1 total)") {
+		t.Fatalf("status should show active stint progress, got: %s", out)
+	}
+
+	out, errStr, code = runMB("status", "--json-output")
+	if code != 0 {
+		t.Fatalf("status json exit %d, stderr: %s", code, errStr)
+	}
+	m := parseStatusJSON(t, out)
+	active, ok := m["activeStint"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("activeStint missing from status JSON: %#v", m["activeStint"])
+	}
+	if active["scope"] != "auth" || active["todo"] != float64(1) || active["done"] != float64(0) || active["active"] != true {
+		t.Fatalf("unexpected activeStint JSON: %#v", active)
+	}
+	stints, ok := m["stints"].([]interface{})
+	if !ok || len(stints) == 0 {
+		t.Fatalf("expected per-stint progress rows, got: %#v", m["stints"])
+	}
+}
+
+func TestScopedDoneHookVars(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+
+	hooks := `{"version":1,"hooks":[{"title":"done-scope","command":"done","when":"before","run":"printf '%s\n' '$file|$scope|$id'","passback":true}]}`
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errStr, code := runMB("done", authLapID)
+	if code != 0 {
+		t.Fatalf("done exit %d, stderr: %s", code, errStr)
+	}
+	want := filepath.Join(beadsDir, "stints", "auth.laps.json") + "|auth|" + authLapID
+	if !strings.Contains(out, want) {
+		t.Fatalf("done hook did not receive scoped vars %q, got: %s", want, out)
+	}
+}
+
+func TestHookOnlyCommandGetsRootScope(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	hooks := `{"version":1,"hooks":[{"title":"scope","command":"customcmd","when":"before","run":"echo $scope","passback":true}]}`
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errStr, err := runMBExecute("customcmd")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v, stderr: %s", err, errStr)
+	}
+	if strings.TrimSpace(out) != "root" {
+		t.Fatalf("hook-only scope = %q, want root", strings.TrimSpace(out))
+	}
+}
+
+func TestNestedScopeEncodingForLogAndHooks(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "",
+		store.Task{Kind: store.KindStint, ID: "root-auth", Ref: "auth", Title: "Auth stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth",
+		store.Task{Kind: store.KindStint, ID: "auth-search", Ref: "search", Title: "Search stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch",
+		store.Task{Kind: store.KindLap, ID: "srch-aaaa", Title: "Search lap", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	hooks := `{"version":1,"hooks":[{"title":"done-scope","command":"done","when":"before","run":"echo $scope","passback":true}]}`
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errStr, code := runMB("done", "srch-aaaa")
+	if code != 0 {
+		t.Fatalf("nested done exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "auth/search") {
+		t.Fatalf("nested done hook scope should be auth/search, got: %s", out)
+	}
+	events := readLogEvents(t, beadsDir)
+	completed := findLogEvent(t, events, "completed")
+	if completed["scope"] != "auth/search" {
+		t.Fatalf("nested completed scope = %v, want auth/search", completed["scope"])
+	}
+	if completed["file"] != "stints/search.laps.json" {
+		t.Fatalf("nested completed file = %v, want stints/search.laps.json", completed["file"])
+	}
+}
+
 // TestDoneNonHeadStintDrainsContentBased asserts a preempted/non-head stint
 // still drains when its final lap is completed explicitly in that stint scope.
 // (task 7.5)
@@ -5331,6 +5487,37 @@ func writeTestLog(t *testing.T, beadsDir string, lines []string) {
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write test log: %v", err)
 	}
+}
+
+func readLogEvents(t *testing.T, beadsDir string) []map[string]interface{} {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(beadsDir, eventlog.LogFileName))
+	if err != nil {
+		t.Fatalf("read event log: %v", err)
+	}
+	var events []map[string]interface{}
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		var event map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("parse event log line %q: %v", line, err)
+		}
+		events = append(events, event)
+	}
+	return events
+}
+
+func findLogEvent(t *testing.T, events []map[string]interface{}, eventName string) map[string]interface{} {
+	t.Helper()
+	for _, event := range events {
+		if event["event"] == eventName {
+			return event
+		}
+	}
+	t.Fatalf("missing event %q in %#v", eventName, events)
+	return nil
 }
 
 func TestLogBasic(t *testing.T) {

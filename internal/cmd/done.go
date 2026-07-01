@@ -30,6 +30,8 @@ When a claimed task is completed, .laps/claim is cleared.`,
 		var task *store.Task
 		selectedFile := store.ResolveFile(fileFlag)
 		claimFile := selectedFile
+		hookScope := "root"
+		eventScope := "root"
 
 		if len(args) > 0 {
 			id := args[0]
@@ -41,6 +43,8 @@ When a claimed task is completed, .laps/claim is cleared.`,
 			file = ctx.File
 			claimFile = fileNameForClaim(beadsDir, path)
 			selectedFile = claimFile
+			hookScope = ctx.Scope
+			eventScope = ctx.Scope
 			task = findScopedTask(ctx, id)
 			if task == nil {
 				exitIfOutOfScope(beadsDir, repoRoot, ctx, id)
@@ -71,6 +75,8 @@ When a claimed task is completed, .laps/claim is cleared.`,
 			}
 
 			claimFile = claim.File
+			hookScope = normalizeClaimScope(claim)
+			eventScope = hookScope
 			path, err = pathForClaim(beadsDir, claim)
 			if err != nil {
 				exit(2, "read claim: %v", err)
@@ -92,8 +98,8 @@ When a claimed task is completed, .laps/claim is cleared.`,
 
 		exitCode := 0
 		var output string
-		defer runAfterHooksDeferred(hookCommandName(cmd), beadsDir, path, &task, &output, &exitCode, args)()
-		runBeforeHooks(hookCommandName(cmd), beadsDir, path, task, args)
+		defer runAfterHooksDeferredScoped(hookCommandName(cmd), beadsDir, path, hookScope, &task, &output, &exitCode, args)()
+		runBeforeHooksScoped(hookCommandName(cmd), beadsDir, path, hookScope, task, args)
 
 		now := time.Now().UTC()
 		task.IsDone = true
@@ -117,10 +123,35 @@ When a claimed task is completed, .laps/claim is cleared.`,
 		logEvent(beadsDir, &eventlog.Entry{
 			Event:    "completed",
 			Cmd:      "done",
+			File:     claimFile,
+			Scope:    eventScope,
 			Lap:      task.ID,
 			Title:    task.Title,
 			Assignee: task.Assignee,
 		})
+		if drain != nil {
+			logEvent(beadsDir, &eventlog.Entry{
+				Event: "stint.completed",
+				Cmd:   "done",
+				File:  store.ResolveFile(""),
+				Scope: eventScope,
+				Detail: map[string]interface{}{
+					"stint": drain.Stint,
+					"ref":   drain.RootRef.ID,
+				},
+			})
+			logEvent(beadsDir, &eventlog.Entry{
+				Event: "stint.archived",
+				Cmd:   "done",
+				File:  fileNameForClaim(beadsDir, drain.Dst),
+				Scope: eventScope,
+				Detail: map[string]interface{}{
+					"stint": drain.Stint,
+					"from":  fileNameForClaim(beadsDir, drain.Src),
+					"to":    fileNameForClaim(beadsDir, drain.Dst),
+				},
+			})
+		}
 
 		// Best-effort: clearing the claim must not block a completed done. When the
 		// claim is actually removed, emit a SEPARATE unclaimed event tagged
@@ -131,6 +162,8 @@ When a claimed task is completed, .laps/claim is cleared.`,
 				logEvent(beadsDir, &eventlog.Entry{
 					Event:    "unclaimed",
 					Cmd:      "done",
+					File:     claimFile,
+					Scope:    eventScope,
 					Lap:      task.ID,
 					Title:    task.Title,
 					Assignee: task.Assignee,

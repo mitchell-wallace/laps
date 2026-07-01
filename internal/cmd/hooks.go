@@ -12,6 +12,10 @@ import (
 )
 
 func runBeforeHooks(cmdName, beadsDir, path string, task *store.Task, args []string) {
+	runBeforeHooksScoped(cmdName, beadsDir, path, "", task, args)
+}
+
+func runBeforeHooksScoped(cmdName, beadsDir, path, scope string, task *store.Task, args []string) {
 	hf, err := hooks.Load(beadsDir)
 	if err != nil {
 		exit(2, "hooks: %v", err)
@@ -19,7 +23,7 @@ func runBeforeHooks(cmdName, beadsDir, path string, task *store.Task, args []str
 	if hf == nil {
 		return
 	}
-	vars := buildHookVars(task, path, cmdName, "", "", args)
+	vars := buildHookVars(task, path, scope, cmdName, "", "", args)
 	passback, err := hooks.Dispatch(hf, cmdName, "before", vars, filepath.Dir(beadsDir))
 	if err != nil {
 		exit(4, "hook: %v", err)
@@ -30,6 +34,10 @@ func runBeforeHooks(cmdName, beadsDir, path string, task *store.Task, args []str
 }
 
 func runAfterHooksDeferred(cmdName, beadsDir, path string, task **store.Task, output *string, exitCode *int, args []string) func() {
+	return runAfterHooksDeferredScoped(cmdName, beadsDir, path, "", task, output, exitCode, args)
+}
+
+func runAfterHooksDeferredScoped(cmdName, beadsDir, path, scope string, task **store.Task, output *string, exitCode *int, args []string) func() {
 	return func() {
 		hf, err := hooks.Load(beadsDir)
 		if err != nil || hf == nil {
@@ -39,7 +47,7 @@ func runAfterHooksDeferred(cmdName, beadsDir, path string, task **store.Task, ou
 		if task != nil {
 			t = *task
 		}
-		vars := buildHookVars(t, path, cmdName, fmt.Sprintf("%d", *exitCode), *output, args)
+		vars := buildHookVars(t, path, scope, cmdName, fmt.Sprintf("%d", *exitCode), *output, args)
 		passback, err := hooks.Dispatch(hf, cmdName, "after", vars, filepath.Dir(beadsDir))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "laps: after hook: %v\n", err)
@@ -50,10 +58,14 @@ func runAfterHooksDeferred(cmdName, beadsDir, path string, task **store.Task, ou
 	}
 }
 
-func buildHookVars(task *store.Task, file, command, exitCode, output string, args []string) map[string]string {
+func buildHookVars(task *store.Task, file, scope, command, exitCode, output string, args []string) map[string]string {
+	if scope == "" {
+		scope = "root"
+	}
 	vars := map[string]string{
 		"command":     command,
 		"file":        file,
+		"scope":       scope,
 		"exit_code":   exitCode,
 		"output":      output,
 		"id":          "",

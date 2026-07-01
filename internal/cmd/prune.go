@@ -41,8 +41,8 @@ Prints the number of tasks removed.`,
 		exitCode := 0
 		var output string
 		var task *store.Task
-		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
-		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
+		defer runAfterHooksDeferredScoped(cmd.Name(), beadsDir, path, ctx.Scope, &task, &output, &exitCode, args)()
+		runBeforeHooksScoped(cmd.Name(), beadsDir, path, ctx.Scope, nil, args)
 
 		var done []int
 		var todo []store.Task
@@ -89,7 +89,7 @@ Prints the number of tasks removed.`,
 			exit(2, "prune: %v", err)
 		}
 		for i := range pruned {
-			logEvent(beadsDir, &eventlog.Entry{
+			logScopedEvent(beadsDir, ctx, &eventlog.Entry{
 				Event:    "pruned",
 				Cmd:      "prune",
 				Lap:      pruned[i].ID,

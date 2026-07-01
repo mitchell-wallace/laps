@@ -22,6 +22,18 @@ func logEvent(beadsDir string, e *eventlog.Entry) {
 	eventlog.Append(beadsDir, e)
 }
 
+func logScopedEvent(beadsDir string, ctx *activeContext, e *eventlog.Entry) {
+	if ctx != nil {
+		if e.File == "" {
+			e.File = fileNameForClaim(beadsDir, ctx.Path)
+		}
+		if e.Scope == "" {
+			e.Scope = ctx.Scope
+		}
+	}
+	logEvent(beadsDir, e)
+}
+
 // lapMeta best-effort resolves the title and assignee of lap within the given
 // .laps-relative task file under beadsDir. It is used to denormalize event-log
 // metadata for a lap that may live in a different file than the one currently
