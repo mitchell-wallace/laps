@@ -45,6 +45,16 @@ type exitError struct {
 
 func (e *exitError) Error() string { return fmt.Sprintf("exit %d", e.code) }
 
+var capturedExitCode *int
+
+func captureExitCode(exitCode *int) func() {
+	previous := capturedExitCode
+	capturedExitCode = exitCode
+	return func() {
+		capturedExitCode = previous
+	}
+}
+
 func exit(code int, format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	if jsonOutput {
@@ -57,6 +67,32 @@ func exit(code int, format string, args ...interface{}) {
 		fmt.Fprintf(os.Stderr, "laps: %s\n", msg)
 	}
 	panic(&exitError{code: code})
+}
+
+func exitState(code int) {
+	if capturedExitCode != nil {
+		*capturedExitCode = code
+	}
+	if jsonOutput {
+		printJSON(map[string]interface{}{
+			"state":    queueStateForExitCode(code),
+			"exitCode": code,
+		})
+	}
+	panic(&exitError{code: code})
+}
+
+func queueStateForExitCode(code int) string {
+	switch code {
+	case 10:
+		return string(queueStateHeld)
+	case 11:
+		return string(queueStateEmpty)
+	case 12:
+		return string(queueStateComplete)
+	default:
+		return "unknown"
+	}
 }
 
 func Execute(v string) error {

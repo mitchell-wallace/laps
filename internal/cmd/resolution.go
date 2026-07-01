@@ -59,6 +59,28 @@ type activeContext struct {
 	Chain []stintDescent
 }
 
+type queueState string
+
+const (
+	queueStateLap      queueState = "lap"
+	queueStateHeld     queueState = "held"
+	queueStateEmpty    queueState = "empty"
+	queueStateComplete queueState = "complete"
+)
+
+type flowResolution struct {
+	State queueState
+	Ctx   *activeContext
+	Held  *heldGate
+}
+
+type heldGate struct {
+	Stint string
+	Ref   *store.Task
+	Scope string
+	Path  string
+}
+
 type stintDescent struct {
 	ParentPath string
 	ParentFile *store.File
@@ -133,6 +155,14 @@ func idPrefix(id string) (string, bool) {
 }
 
 func resolveActiveContext(rootPath, repoRoot, beadsDir string, rootFile *store.File) (*activeContext, error) {
+	resolved, err := resolveFlowStart(rootPath, repoRoot, beadsDir, rootFile, false)
+	if err != nil {
+		return nil, err
+	}
+	return resolved.Ctx, nil
+}
+
+func resolveFlowStart(rootPath, repoRoot, beadsDir string, rootFile *store.File, stopOnHeld bool) (*flowResolution, error) {
 	scope := "root"
 	if name, ok := store.ActiveStintNameForPath(beadsDir, rootPath); ok {
 		scope = name
@@ -171,9 +201,22 @@ func resolveActiveContext(rootPath, repoRoot, beadsDir string, rootFile *store.F
 		if err != nil {
 			return nil, &resolverError{Kind: resolverFailureMalformedFile, Ref: ref, Path: childPath, Err: err}
 		}
+		childScope := appendScope(ctx.Scope, ref)
+		if stopOnHeld && childFile.Held {
+			return &flowResolution{
+				State: queueStateHeld,
+				Ctx:   ctx,
+				Held: &heldGate{
+					Stint: ref,
+					Ref:   ctx.Head,
+					Scope: childScope,
+					Path:  childPath,
+				},
+			}, nil
+		}
 		ctx = &activeContext{
 			Path:  childPath,
-			Scope: appendScope(ctx.Scope, ref),
+			Scope: childScope,
 			File:  childFile,
 			Head:  firstTodo(childFile),
 			Chain: append(append([]stintDescent(nil), ctx.Chain...), stintDescent{
@@ -183,12 +226,25 @@ func resolveActiveContext(rootPath, repoRoot, beadsDir string, rootFile *store.F
 				Ref:        ctx.Head,
 				ChildPath:  childPath,
 				ChildName:  ref,
-				Scope:      appendScope(ctx.Scope, ref),
+				Scope:      childScope,
 			}),
 		}
 	}
 
-	return ctx, nil
+	return &flowResolution{
+		State: queueStateForContext(ctx),
+		Ctx:   ctx,
+	}, nil
+}
+
+func queueStateForContext(ctx *activeContext) queueState {
+	if ctx == nil || ctx.File == nil || len(ctx.File.Tasks) == 0 {
+		return queueStateEmpty
+	}
+	if ctx.Head == nil {
+		return queueStateComplete
+	}
+	return queueStateLap
 }
 
 func resolvePhysicalStintChain(beadsDir, repoRoot, targetName string, includeArchived bool) ([]stintDescent, bool, error) {

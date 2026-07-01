@@ -175,6 +175,19 @@ func writeResolverQueue(t *testing.T, path, prefix string, tasks ...store.Task) 
 	}
 }
 
+func writeHeldResolverQueue(t *testing.T, path, prefix string, held bool, tasks ...store.Task) {
+	t.Helper()
+
+	if err := store.Save(path, &store.File{
+		Version: store.CurrentVersion,
+		Prefix:  prefix,
+		Held:    held,
+		Tasks:   tasks,
+	}); err != nil {
+		t.Fatalf("Save %s: %v", path, err)
+	}
+}
+
 func readResolverFiles(t *testing.T, paths ...string) map[string]string {
 	t.Helper()
 
@@ -187,6 +200,60 @@ func readResolverFiles(t *testing.T, paths ...string) map[string]string {
 		files[path] = string(data)
 	}
 	return files
+}
+
+func TestExitStateAfterHookObservesExitCode(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	hooks := `{"version":1,"hooks":[{"title":"state-exit","command":"get","when":"after","run":"printf '%s' \"$exit_code\"","passback":true}]}`
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(hooks), 0644); err != nil {
+		t.Fatalf("write hooks: %v", err)
+	}
+
+	oldOut := os.Stdout
+	oldErr := os.Stderr
+	rOut, wOut, _ := os.Pipe()
+	rErr, wErr, _ := os.Pipe()
+	os.Stdout = wOut
+	os.Stderr = wErr
+	defer func() {
+		os.Stdout = oldOut
+		os.Stderr = oldErr
+	}()
+
+	jsonOutput = false
+	exitCode := 0
+	output := ""
+	func() {
+		defer func() {
+			r := recover()
+			if ee, ok := r.(*exitError); !ok || ee.code != 11 {
+				t.Fatalf("exitState panic = %#v, want exitError 11", r)
+			}
+		}()
+		restoreCapture := captureExitCode(&exitCode)
+		defer restoreCapture()
+		defer runAfterHooksDeferredScoped("get", beadsDir, filepath.Join(beadsDir, "laps.json"), "root", nil, &output, &exitCode, nil)()
+		exitState(11)
+	}()
+
+	wOut.Close()
+	wErr.Close()
+	os.Stdout = oldOut
+	os.Stderr = oldErr
+
+	outBuf, _ := io.ReadAll(rOut)
+	errBuf, _ := io.ReadAll(rErr)
+	if got := string(outBuf); got != "11" {
+		t.Fatalf("after hook stdout = %q, want 11", got)
+	}
+	if got := string(errBuf); got != "" {
+		t.Fatalf("exitState should not emit stderr, got %q", got)
+	}
+	if exitCode != 11 {
+		t.Fatalf("captured exit code = %d, want 11", exitCode)
+	}
 }
 
 func TestAddHead(t *testing.T) {
@@ -555,6 +622,66 @@ func setupNestedStintRepo(t *testing.T, authHasRemainingLap bool) (beadsDir, sea
 		UpdatedAt:   resolverTestTime,
 	})
 	return beadsDir, "srch-1111"
+}
+
+func TestFlowStartHeldStintDoesNotDescendIntoChild(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	rootPath := filepath.Join(beadsDir, "laps.json")
+	authPath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	searchPath := filepath.Join(beadsDir, "stints", "search.laps.json")
+	writeResolverQueue(t, rootPath, "", store.Task{
+		Kind:      store.KindStint,
+		ID:        "root-auth",
+		Ref:       "auth",
+		Title:     "Auth stint",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+	writeResolverQueue(t, authPath, "auth", store.Task{
+		Kind:      store.KindStint,
+		ID:        "auth-search",
+		Ref:       "search",
+		Title:     "Search stint",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+	writeHeldResolverQueue(t, searchPath, "srch", true, store.Task{
+		Kind:        store.KindLap,
+		ID:          "srch-held",
+		Title:       "Held child lap",
+		Description: "must not be selected",
+		Order:       1,
+		CreatedAt:   resolverTestTime,
+		UpdatedAt:   resolverTestTime,
+	})
+
+	rootFile, err := store.Load(rootPath)
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	resolved, err := resolveFlowStart(rootPath, filepath.Dir(beadsDir), beadsDir, rootFile, true)
+	if err != nil {
+		t.Fatalf("resolveFlowStart: %v", err)
+	}
+	if resolved.State != queueStateHeld {
+		t.Fatalf("state = %q, want held", resolved.State)
+	}
+	if resolved.Held == nil || resolved.Held.Stint != "search" || resolved.Held.Scope != "auth/search" {
+		t.Fatalf("held gate = %+v, want search at auth/search", resolved.Held)
+	}
+	if resolved.Ctx == nil || resolved.Ctx.Path != authPath {
+		t.Fatalf("context path = %v, want auth path %s", resolved.Ctx, authPath)
+	}
+	if resolved.Ctx.Head == nil || resolved.Ctx.Head.ID != "auth-search" || resolved.Ctx.Head.Kind != store.KindStint {
+		t.Fatalf("resolved head = %+v, want auth's search stint ref", resolved.Ctx.Head)
+	}
+	if resolved.Ctx.Head.ID == "srch-held" {
+		t.Fatalf("held child lap was selected: %+v", resolved.Ctx.Head)
+	}
 }
 
 // TestAddHeadDefaultsToActiveStint verifies the default scope (--active) lands
