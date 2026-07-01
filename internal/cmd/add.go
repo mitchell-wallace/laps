@@ -134,6 +134,16 @@ Prints each new task id on success.`,
 		}
 
 		file := loadFile(path, repoRoot, beadsDir)
+		ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
+		if err != nil {
+			exitCode = 2
+			exit(2, "%v", err)
+		}
+		path = ctx.Path
+		file = ctx.File
+		if afterID != "" && findScopedTask(ctx, afterID) == nil {
+			exitIfOutOfScope(beadsDir, repoRoot, ctx, afterID)
+		}
 		scopePrefix := store.RepoPrefix(repoRoot)
 		if file.Prefix != "" {
 			scopePrefix = file.Prefix

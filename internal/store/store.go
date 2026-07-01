@@ -652,10 +652,25 @@ func ExistingPrefixes(beadsDir, repoRoot string) (map[string]struct{}, error) {
 		RepoPrefix(repoRoot): {},
 	}
 
+	owners, err := StintPrefixMap(beadsDir)
+	if err != nil {
+		return nil, err
+	}
+	for prefix := range owners {
+		used[prefix] = struct{}{}
+	}
+
+	return used, nil
+}
+
+// StintPrefixMap returns an id-prefix to stint-name map for all active and
+// archived stint files that carry prefix metadata.
+func StintPrefixMap(beadsDir string) (map[string]string, error) {
+	owners := map[string]string{}
 	stintsDir := StintsDir(beadsDir)
 	if _, err := os.Stat(stintsDir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return used, nil
+			return owners, nil
 		}
 		return nil, fmt.Errorf("%w: stat %s: %v", ErrStore, stintsDir, err)
 	}
@@ -677,14 +692,14 @@ func ExistingPrefixes(beadsDir, repoRoot string) (map[string]struct{}, error) {
 		if err := validatePrefix(data.Prefix); err != nil {
 			return fmt.Errorf("%w: read stint prefix %s: %v", ErrStore, path, err)
 		}
-		used[data.Prefix] = struct{}{}
+		name := strings.TrimSuffix(d.Name(), stintFileSuffix)
+		owners[data.Prefix] = name
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	return used, nil
+	return owners, nil
 }
 
 func validatePrefix(prefix string) error {

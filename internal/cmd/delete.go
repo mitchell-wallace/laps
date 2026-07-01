@@ -1,15 +1,20 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
 
+var deleteForce bool
+
 var deleteCmd = &cobra.Command{
 	Use:   "delete <id>",
 	Short: "Delete a task",
-	Long:  `Delete a task by id, regardless of whether it is todo or done.`,
+	Long:  `Delete a task by id, regardless of whether it is todo or done. A claimed lap requires --force.`,
 	Args:  cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 1 {
@@ -19,14 +24,14 @@ var deleteCmd = &cobra.Command{
 		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
 		file := loadFile(path, repoRoot, beadsDir)
-
-		var task *store.Task
-		for i := range file.Tasks {
-			if file.Tasks[i].ID == id {
-				task = &file.Tasks[i]
-				break
-			}
+		ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
+		if err != nil {
+			exit(2, "%v", err)
 		}
+		path = ctx.Path
+		file = ctx.File
+
+		task := findScopedTask(ctx, id)
 
 		exitCode := 0
 		var output string
@@ -34,8 +39,22 @@ var deleteCmd = &cobra.Command{
 		runBeforeHooks(cmd.Name(), beadsDir, path, task, args)
 
 		if task == nil {
+			exitIfOutOfScope(beadsDir, repoRoot, ctx, id)
 			exitCode = 3
 			exit(3, "task not found")
+		}
+
+		claimFile := fileNameForClaim(beadsDir, path)
+		claim, err := store.ReadClaim(beadsDir, claimFile)
+		if err != nil {
+			exitCode = 2
+			exit(2, "read claim: %v", err)
+		}
+		deletingClaimed := claim.Lap == task.ID && claim.File == claimFile
+		if deletingClaimed && !deleteForce {
+			exitCode = 1
+			fmt.Fprintf(os.Stderr, "laps: lap %s is currently claimed; use 'laps delete --force %s' to delete it and clear the claim.\n", task.ID, task.ID)
+			exit(1, "delete: claimed lap requires --force")
 		}
 
 		var tasks []store.Task
@@ -49,6 +68,12 @@ var deleteCmd = &cobra.Command{
 		if err := store.Save(path, file); err != nil {
 			exitCode = 2
 			exit(2, "delete: %v", err)
+		}
+		if deletingClaimed {
+			if err := store.RemoveClaim(beadsDir); err != nil {
+				exitCode = 2
+				exit(2, "delete: clear claim: %v", err)
+			}
 		}
 		logEvent(beadsDir, &eventlog.Entry{
 			Event:    "deleted",
@@ -64,6 +89,7 @@ var deleteCmd = &cobra.Command{
 }
 
 func init() {
+	deleteCmd.Flags().BoolVar(&deleteForce, "force", false, "delete a claimed lap and clear its claim")
 	addScopeFlags(deleteCmd)
 	rootCmd.AddCommand(deleteCmd)
 }

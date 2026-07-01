@@ -53,6 +53,7 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	addStdin = false
 	updateYes = false
 	forceUndo = false
+	deleteForce = false
 	editTitle = ""
 	editDescription = ""
 	editAssignee = ""
@@ -118,6 +119,7 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	addStdin = false
 	updateYes = false
 	forceUndo = false
+	deleteForce = false
 	editTitle = ""
 	editDescription = ""
 	editAssignee = ""
@@ -1064,19 +1066,19 @@ func TestListNoMarkerWithoutClaim(t *testing.T) {
 }
 
 func TestListNoMarkerWhenClaimOutsideResult(t *testing.T) {
-	_, cleanup := setupTempRepo(t)
+	beadsDir, cleanup := setupTempRepo(t)
 	defer cleanup()
 
 	runMB("add", "head", "--title", "A")
 	outB, _, _ := runMB("add", "tail", "--title", "B")
 	idB := strings.TrimSpace(outB)
-	if _, _, code := runMB("claim", idB); code != 0 {
-		t.Fatalf("claim failed, code %d", code)
-	}
-	// Delete the claimed lap. The claim still points at B, but B is no longer in
-	// the rendered result, so no marker may appear.
+	// Delete B, then write a stale claim pointing at it. The claim is outside the
+	// rendered result, so no marker may appear.
 	if _, _, code := runMB("delete", idB); code != 0 {
 		t.Fatalf("delete failed, code %d", code)
+	}
+	if err := store.WriteClaim(beadsDir, store.Claim{Lap: idB, File: "laps.json"}); err != nil {
+		t.Fatalf("write stale claim: %v", err)
 	}
 
 	out, _, code := runMB("list")
@@ -4744,12 +4746,11 @@ func TestStatusDanglingClaimIsDegradedNoAutoClear(t *testing.T) {
 
 	outA, _, _ := runMB("add", "head", "--title", "Alpha")
 	idA := strings.TrimSpace(outA)
-	if _, _, code := runMB("claim", idA); code != 0 {
-		t.Fatalf("claim failed, code %d", code)
-	}
-	// Delete the claimed lap: the claim now dangles.
 	if _, _, code := runMB("delete", idA); code != 0 {
 		t.Fatalf("delete failed, code %d", code)
+	}
+	if err := store.WriteClaim(beadsDir, store.Claim{Lap: idA, File: "laps.json"}); err != nil {
+		t.Fatalf("write stale claim: %v", err)
 	}
 
 	claimPath := filepath.Join(beadsDir, "claim")

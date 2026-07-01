@@ -33,7 +33,7 @@ When a claimed task is completed, .laps/claim is cleared.`,
 
 		if len(args) > 0 {
 			id := args[0]
-			ctx, err := resolveActiveContext(path, repoRoot, beadsDir, file)
+			ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
 			if err != nil {
 				exit(2, "%v", err)
 			}
@@ -41,11 +41,9 @@ When a claimed task is completed, .laps/claim is cleared.`,
 			file = ctx.File
 			claimFile = fileNameForClaim(beadsDir, path)
 			selectedFile = claimFile
-			for i := range file.Tasks {
-				if file.Tasks[i].ID == id {
-					task = &file.Tasks[i]
-					break
-				}
+			task = findScopedTask(ctx, id)
+			if task == nil {
+				exitIfOutOfScope(beadsDir, repoRoot, ctx, id)
 			}
 			if task == nil {
 				exit(3, "task not found")

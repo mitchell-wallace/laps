@@ -27,9 +27,9 @@
 
 ## 4. Scoped structure ops & id resolution
 
-- [ ] 4.1 Default `add`/`move`/`edit`/`assign`/`delete` to the active scope (`assign` is an `edit` shortcut, so it follows the same default-active rule — it was missing from the structure-op list)
-- [ ] 4.2 Resolve every id-taking queue command within the selected scope first (`get`, `claim`, `done`, `add after`, `move`, `edit`, `assign`, `delete`); when an id exists in another stint, fail with a message naming that stint
-- [ ] 4.3 Add `delete --force`; default `delete` refuses a claimed lap with a stderr warning, while forced delete removes it and clears the matching claim
+- [x] 4.1 Default `add`/`move`/`edit`/`assign`/`delete` to the active scope (`assign` is an `edit` shortcut, so it follows the same default-active rule — it was missing from the structure-op list)
+- [x] 4.2 Resolve every id-taking queue command within the selected scope first (`get`, `claim`, `done`, `add after`, `move`, `edit`, `assign`, `delete`); when an id exists in another stint, fail with a message naming that stint
+- [x] 4.3 Add `delete --force`; default `delete` refuses a claimed lap with a stderr warning, while forced delete removes it and clears the matching claim
 - [ ] 4.4 Tests: `add head` lands in the active stint; `add --root` lands in root; out-of-scope id error names the stint for each id-taking command group; claimed delete refuses; forced claimed delete clears claim
 
 ## 5. Claim scope (preemption-safety)
@@ -76,7 +76,7 @@
 
 ## 10. Cross-change dependency
 
-- [ ] 10.1 Confirm `improve-cli-ergonomics` has landed before implementing scoped `move`/`edit`/`assign`, or route those command hooks to a follow-up
+- [x] 10.1 Confirm `improve-cli-ergonomics` has landed before implementing scoped `move`/`edit`/`assign`, or route those command hooks to a follow-up
 
 ## 11. Docs & release
 

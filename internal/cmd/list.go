@@ -28,7 +28,7 @@ Default shows todo tasks only, head first.
 		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
 		file := loadFile(path, repoRoot, beadsDir)
-		ctx, err := resolveActiveContext(path, repoRoot, beadsDir, file)
+		ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
 		if err != nil {
 			exit(2, "%v", err)
 		}

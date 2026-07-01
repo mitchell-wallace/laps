@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mitchell-wallace/laps/internal/store"
 )
@@ -55,6 +56,69 @@ type activeContext struct {
 	Scope string
 	File  *store.File
 	Head  *store.Task
+}
+
+func resolveSelectedContext(path, repoRoot, beadsDir string, file *store.File) (*activeContext, error) {
+	if activeScopeSelected() {
+		return resolveActiveContext(path, repoRoot, beadsDir, file)
+	}
+	scope := "root"
+	if name, ok := store.ActiveStintNameForPath(beadsDir, path); ok {
+		scope = name
+	} else if fileFlag != "" {
+		scope = fileNameForClaim(beadsDir, path)
+	}
+	return &activeContext{
+		Path:  path,
+		Scope: scope,
+		File:  file,
+		Head:  firstTodo(file),
+	}, nil
+}
+
+func activeScopeSelected() bool {
+	return scopeActive || (fileFlag == "" && !scopeRoot && scopeStint == "")
+}
+
+func findScopedTask(ctx *activeContext, id string) *store.Task {
+	for i := range ctx.File.Tasks {
+		if ctx.File.Tasks[i].ID == id {
+			return &ctx.File.Tasks[i]
+		}
+	}
+	return nil
+}
+
+func exitIfOutOfScope(beadsDir, repoRoot string, ctx *activeContext, id string) {
+	prefix, ok := idPrefix(id)
+	if !ok {
+		return
+	}
+	selectedPrefix := store.RepoPrefix(repoRoot)
+	if ctx.File.Prefix != "" {
+		selectedPrefix = ctx.File.Prefix
+	}
+	if prefix == selectedPrefix {
+		return
+	}
+	if prefix == store.RepoPrefix(repoRoot) {
+		exit(3, "%s is in root - re-run with --root", id)
+	}
+	owners, err := store.StintPrefixMap(beadsDir)
+	if err != nil {
+		exit(2, "%v", err)
+	}
+	if stint, ok := owners[prefix]; ok {
+		exit(3, "%s is in stint %s - re-run with -s %s", id, stint, stint)
+	}
+}
+
+func idPrefix(id string) (string, bool) {
+	prefix, _, ok := strings.Cut(id, "-")
+	if !ok || prefix == "" {
+		return "", false
+	}
+	return prefix, true
 }
 
 func resolveActiveContext(rootPath, repoRoot, beadsDir string, rootFile *store.File) (*activeContext, error) {

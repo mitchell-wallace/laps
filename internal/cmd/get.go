@@ -24,7 +24,7 @@ Output is title, blank line, description — nothing else.`,
 		checkDefault(beadsDir)
 		file := loadFile(path, repoRoot, beadsDir)
 
-		ctx, err := resolveActiveContext(path, repoRoot, beadsDir, file)
+		ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
 		if err != nil {
 			exit(2, "%v", err)
 		}
@@ -35,11 +35,9 @@ Output is title, blank line, description — nothing else.`,
 		if target == "head" {
 			task = ctx.Head
 		} else {
-			for i := range file.Tasks {
-				if file.Tasks[i].ID == target {
-					task = &file.Tasks[i]
-					break
-				}
+			task = findScopedTask(ctx, target)
+			if task == nil {
+				exitIfOutOfScope(beadsDir, repoRoot, ctx, target)
 			}
 		}
 

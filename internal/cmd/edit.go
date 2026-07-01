@@ -71,20 +71,21 @@ func runEdit(cmd *cobra.Command, args []string, fields editFields) {
 	path, repoRoot, beadsDir := getStorePath()
 	checkDefault(beadsDir)
 	file := loadFile(path, repoRoot, beadsDir)
+	ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
+	if err != nil {
+		exit(2, "%v", err)
+	}
+	path = ctx.Path
+	file = ctx.File
 
 	if len(args) < 1 {
 		exit(1, "%s: a task id is required", name)
 	}
 	id := args[0]
 
-	var task *store.Task
-	for i := range file.Tasks {
-		if file.Tasks[i].ID == id {
-			task = &file.Tasks[i]
-			break
-		}
-	}
+	task := findScopedTask(ctx, id)
 	if task == nil {
+		exitIfOutOfScope(beadsDir, repoRoot, ctx, id)
 		exit(1, "%s: task %s not found", name, id)
 	}
 

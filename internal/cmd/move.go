@@ -27,6 +27,12 @@ Prints the moved task id on success.`,
 		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
 		file := loadFile(path, repoRoot, beadsDir)
+		ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
+		if err != nil {
+			exit(2, "%v", err)
+		}
+		path = ctx.Path
+		file = ctx.File
 
 		if len(args) < 2 {
 			exit(1, "move: usage: move <id> <head|tail|after> [target]")
@@ -54,18 +60,16 @@ Prints the moved task id on success.`,
 			}
 		}
 
-		var task *store.Task
-		for i := range file.Tasks {
-			if file.Tasks[i].ID == moveID {
-				task = &file.Tasks[i]
-				break
-			}
-		}
+		task := findScopedTask(ctx, moveID)
 		if task == nil {
+			exitIfOutOfScope(beadsDir, repoRoot, ctx, moveID)
 			exit(1, "move: task %s not found", moveID)
 		}
 		if task.IsDone {
 			exit(1, "move: task %s (%s) is already done", task.ID, task.Title)
+		}
+		if afterID != "" && findScopedTask(ctx, afterID) == nil {
+			exitIfOutOfScope(beadsDir, repoRoot, ctx, afterID)
 		}
 
 		exitCode := 0
