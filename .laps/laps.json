@@ -83,11 +83,11 @@
       "title": "Add held-head non-flow command regressions",
       "description": "Context: VERIFY confirmed the shared held-aware resolver and exit-state routing are implemented, but section 2 remains under-tested in two places. internal/cmd/cmd_test.go covers resolver-level nested-held no-descent and the core get/claim/status exits, but it does not yet prove the CLI commands themselves exit 10 when a held stint is encountered during multi-step descent, and it does not cover the DECIDED 2.4a contract that non-flow-start commands remain unaffected under a held head.\n\nOutcome: add command-level regressions for laps get and laps claim through root -\u003e auth -\u003e search(held) proving nested held descent stops with exit 10 and warning, plus tests that at least list, add, edit, and delete operate normally under a held head with no held warning, no exit-code change, and expected mutations. Update openspec/changes/add-stints-gating/tasks.md to tick 2.4a and 2.5 only once those tests are in place.\n\nAcceptance: go test ./... and golangci-lint run ./... green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-07-01T09:06:53.526777498Z",
-      "updatedAt": "2026-07-01T09:06:53.526777498Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T09:10:08.099750417Z",
+      "completedAt": "2026-07-01T09:10:08.099750417Z"
     },
     {
       "id": "laps-e063",
