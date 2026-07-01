@@ -66,8 +66,23 @@ Get a task by id, or read the head task if no argument is given.
 
 Output is title, optional assignee, blank line, description.
 
+A head `get` (no explicit id) signals queue state through its **exit code**:
+`0` a lap was returned, `10` the head is held/gated, `11` the queue is empty,
+`12` every lap is complete (see [Queue-state exit codes](#queue-state-exit-codes)).
+Text mode prints nothing to stdout for `10`/`11`/`12` and warns on stderr for
+held; JSON mode prints a small `{"state","exitCode"}` object to stdout.
+Explicit `get <id>` (including one inside a held stint) stays its normal
+result, warning on stderr when the target stint is held.
+
 ### `laps claim [head|<id>]`
 Claim a task for the current session. Writes the claim to `.laps/claim` as a structured JSON object so that a subsequent bare `laps done` knows which task to complete and when it was claimed. Defaults to the head task.
+
+A head `claim` (no explicit id) signals queue state through its **exit code**:
+`0` a lap was claimed, `10` the head is held/gated, `11` the queue is empty,
+`12` every lap is complete (see [Queue-state exit codes](#queue-state-exit-codes)).
+Held cases leave the existing claim unchanged and warn on stderr. An explicit
+`claim <id>` targeting a lap inside a held stint also exits `10`, leaves the
+claim unchanged, and warns on stderr.
 
 After claiming, a hint is printed suggesting `laps claim undo` if the wrong
 task was claimed.
@@ -133,8 +148,17 @@ Show a snapshot of the lap queue status. Reports the selected task file path, th
 Queue state is one of:
 - `active` — a valid todo lap is currently claimed (work in progress).
 - `ready` — todo laps exist but nothing valid is currently claimed.
+- `held` — the next flow-start operation is gated by a held stint (no valid
+  active claim takes precedence). The held stint, scope, and gate message are
+  surfaced separately (the `gate` field in JSON; a `Gate:` line in text).
 - `empty` — no laps exist in the file.
 - `complete` — laps exist and all of them are marked done.
+
+Consumers (orchestrators, dashboards) SHALL NOT treat the four states
+`active`/`ready`/`empty`/`complete` as a closed list — `held` extends the
+taxonomy. A valid active claim keeps `status.state=active` even when the next
+head is held; in that case the held gate is reported separately rather than as
+the primary state.
 
 If there is an active claim pointing to a deleted task, a completed task, or a task in a different file, it is considered a "dangling" claim. In this case, the claim is surfaced with `valid: false` (in JSON) or `invalid` (in human-readable output) without being silently/automatically cleared, and the command exits successfully with a degraded status snapshot.
 
@@ -178,9 +202,14 @@ With the global `--json-output` flag, the output is a single JSON object with th
 
 Fields in JSON:
 - `file` — the relative path of the active task file.
-- `state` — the queue state string (`active` | `ready` | `empty` | `complete`).
+- `state` — the queue state string (`active` | `ready` | `held` | `empty` | `complete`).
 - `counts` — object containing `todo`, `done`, and `total` lap counts.
 - `head` — object containing `id`, `title`, and `assignee` of the first todo task (null if none).
+- `gate` — present only when the resolved head is a held stint. A
+  `{state, stint, scope, file, message}` object describing the held gate,
+  where `state` is `"held"`, `stint` is the held stint name, `scope` is its
+  canonical scope, and `message` is a human-readable gate message. Surfaced
+  separately even when an active claim keeps `state` as `active`.
 - `claim` — object representing the active claim:
   - `valid` — boolean indicating if the claim is valid (names a todo lap in the current task file).
   - `lap` — the claimed task ID.
@@ -283,12 +312,14 @@ Remove old done tasks, keeping the `N` most recent. Default `N` is 20.
 
 Prints the number of tasks removed.
 
-### `laps stints <ls|new|enqueue|show|rm>`
+### `laps stints <ls|new|enqueue|show|hold|release|rm>`
 Manage stints (prepared per-change queues). `st` is an alias for `stints`.
 See [Stints](#stints) for the model behind these commands.
 
 - `stints ls` — list every stint file with its lap count and `queued`/
-  `archived` flags. With `--json-output`, returns `{"stints": [...]}`.
+  `archived` flags plus a `held` marker for any held stint
+  (`held=true`). With `--json-output`, returns `{"stints": [...]}` (each entry
+  carries a `held` boolean).
 - `stints new <name>` — create an empty stint file at
   `.laps/stints/<name>.laps.json` and allocate its id prefix. Prints the
   allocated 4-character prefix.
@@ -299,6 +330,16 @@ See [Stints](#stints) for the model behind these commands.
   the id lives inside a stint, the command fails naming that stint. Prints the
   new stint-ref id.
 - `stints show <name>` — print a stint's queue (active or archived).
+- `stints hold <name>` — mark a non-archived stint **held** so the queue stops
+  once a reference to that stint reaches the head during flow resolution (see
+  [Holding a stint](#holding-a-stint-gating)). Works on any non-archived
+  stint, including one that is not yet enqueued; archived stints are refused.
+  Idempotent — holding an already-held stint is a no-op. Appends a
+  `stint.held` event only when the state actually changes. Prints the stint
+  name.
+- `stints release <name>` — clear the held flag so the stint resumes flowing.
+  Same refusals and idempotency as `hold`; appends a `stint.released` event
+  only when the state changes. Prints the stint name.
 - `stints rm <name>` — remove a stint file. By default this allows unqueued
   non-archived stints and archived stints (including archived stints that still
   have a done root ref), and refuses non-archived queued/active/claimed stints
@@ -397,13 +438,83 @@ advance. `done undo` scans all queue files (root, active stints, and the
 archive) for the globally latest completion and unarchives when that lap lives
 in a drained stint (the 5-minute age gate still applies).
 
+### Holding a stint (gating)
+
+A **held** stint pauses the pipeline at stint granularity. Mark a non-archived
+stint held with `laps stints hold <name>` and resume it with
+`laps stints release <name>`. The held flag lives on the stint file metadata,
+defaults to `false` when absent, and is **orthogonal to lifecycle** — a stint
+can be held-and-queued, held-and-active, or held-and-done, and `stints ls`
+shows the held marker alongside the `queued`/`archived` lifecycle value.
+
+The flag only takes effect once a reference to the held stint is encountered
+at the **current context head** during flow resolution. A held stint deeper in
+the pipeline (not yet at the head) has no effect until descent reaches it.
+
+- **Hold blocks starting, not finishing.** A hold gates `get`/`claim`
+  (starting the next lap) but never `done` for the already-claimed lap. An
+  agent mid-lap can always finish and record, even while the stint is held.
+- **Final-lap drain still wins.** Completing the claimed final lap of a held
+  stint runs normal drain/archive behavior, so a drained held stint never
+  becomes a permanent gate.
+- **Explicit ids.** `get <id>` may inspect a lap inside a held stint (with a
+  warning); `claim <id>` into a held stint is blocked — it exits `10`, leaves
+  the claim unchanged, and warns.
+- **Only `get`/`claim` flow-start are gated.** `list`, `count`, `add`,
+  `edit`, `assign`, and `delete` operate normally inside or under a held
+  stint: no exit-code change, no held warning, no mutation block.
+
+Held interactions warn on stderr:
+
+```
+laps: stint <scope> is held; do not implement laps in it yet.
+```
+
+`stint.held` and `stint.released` events are appended to the event log, but
+**only when the state actually changes** — holding an already-held stint (or
+releasing an already-released one) is idempotent and does not double-log.
+
+### Queue-state exit codes
+
+Head/flow `laps get` and `laps claim` signal queue state through their exit
+code, replacing the prior single `3` ("no head task") for the empty/complete
+head cases. The codes are chosen to avoid the existing `2`/`3`/`4` failure
+codes:
+
+| Exit | Meaning for head `get`/`claim` |
+|------|--------------------------------|
+| `0`  | A lap was returned/claimed. |
+| `10` | The head is **held** (gated by a held stint). |
+| `11` | The queue is **empty** — nothing was ever enqueued (resolves to zero todo). |
+| `12` | The queue is **complete** — every lap resolvable from the root head is done and nothing enqueueable remains. |
+
+- `11` (empty) and `12` (complete) apply only to head/flow operations that are
+  not targeting an explicit id. `10` also applies to an explicit
+  `claim <id>` attempt into a held stint.
+- Explicit-id **not found** remains exit `3`; store/io failures remain `2`;
+  hook failures remain `4`.
+- Text mode emits **no stdout** for `10`/`11`/`12`; held cases warn on stderr.
+  JSON mode emits a small queue-state object on stdout instead:
+  ```json
+  {"state":"held","exitCode":10}
+  ```
+  where `state` is `held`, `empty`, or `complete` matching the code.
+- After-hooks still observe the final exit code (clean-state exits are routed
+  through the normal exit path), so any consumer keying off `$exit_code` sees
+  `10`/`11`/`12`.
+
+`laps status` reports the same taxonomy (a primary `held` state when the head
+is gated and no active claim takes precedence) but always exits `0` for valid
+snapshots — see [`laps status`](#laps-status).
+
 ### Schema version
-The on-disk schema reaches **v3** with this feature: queue entries gain a
-`kind` discriminator (`lap` by default, `stint` for refs), and existing
-entries are migrated to `kind:"lap"`. The binary `VERSION`, however, stays at
-`0.8.1` until a later change bumps `0.9.0`, so a v3-writing build still reports
-`0.8.1`. An entry with no `kind` is treated as a `lap`, so older data files
-remain readable.
+The on-disk schema reaches **v3**: queue entries gain a `kind` discriminator
+(`lap` by default, `stint` for refs), existing entries are migrated to
+`kind:"lap"`, and non-archived stint file metadata carries a `held` boolean
+(defaulting to `false` when absent). An entry with no `kind` is treated as a
+`lap`, and a stint file with no `held` field is treated as not held, so older
+data files remain readable. The binary `VERSION` is **`0.9.0`**, so a v3 build
+reports `0.9.0` and writes v3 data.
 
 ## Hooks
 
@@ -505,6 +616,49 @@ Each line in `.laps/log.jsonl` is a JSON object with the following fields:
 - `scope` — the canonical logical scope of the event (`root`, a stint name like `auth`, or a slash path for nesting like `auth/search`).
 - `detail` — an object containing additional event-specific details.
 - `session` — the session ID from the `LAPS_SESSION` environment variable (empty string if unset).
+
+## Orchestrator & Rally coordination
+
+`laps` is driven by an orchestrator relay loop (e.g. **Rally**): a loop of
+`get`/`claim` → run agent → `done`. **0.9.0 makes a deliberate, breaking
+contract change to that loop's exit-code signals.**
+
+### Contract change: `get`/`claim` exit codes
+
+Before 0.9.0, head `get`/`claim` exited `3` on an empty/complete queue
+("no head task"). 0.9.0 replaces that single signal with distinct
+queue-state exit codes so an orchestrator can tell **gated** from **empty**
+from **complete** instead of guessing:
+
+| Old (≤ 0.8.1) | New (0.9.0) | Meaning |
+|---------------|-------------|---------|
+| `3` | `10` | Head is **held** — stop on the gate, do not start work. |
+| `3` | `11` | Queue is **empty** — idle, wait for work to be enqueued. |
+| `3` | `12` | Queue is **complete** — the pipeline is finished, stop. |
+| `0` | `0`  | A lap was returned — run it. |
+| `3` (explicit id not found) | `3` | Unchanged. |
+| `2` (store/io), `4` (hook) | `2` / `4` | Unchanged. |
+
+Relay loops that previously branched on "exit `3` ⇒ nothing to do" **must** be
+updated to handle `10`/`11`/`12` distinctly. In JSON mode the same signal is
+`{"state":"held|empty|complete","exitCode":N}` on stdout, and `laps status`
+exits `0` with the same state in `state` (plus a `gate` object when held) for
+any consumer that prefers parsing over exit codes.
+
+### Operator action required (external to this repo)
+
+The Rally-side relay-loop update is **not** part of this repository. Operators
+coordinating the 0.9.0 release **must**:
+
+1. Update the Rally relay loop to branch on `10`/`11`/`12` (or to read
+   `laps status`/the JSON queue-state object) before upgrading laps to 0.9.0.
+2. Treat `held` (`10`) as a hard stop on starting new laps while a stint is
+   gated — finishing the already-claimed lap remains valid.
+3. Ship the updated relay loop in lockstep with the 0.9.0 laps binary, since
+   the empty/complete cases no longer surface as `3`.
+
+This section flags the coordination need; the relay-loop implementation itself
+lives outside this repo.
 
 ## Versioning
 

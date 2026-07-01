@@ -149,11 +149,11 @@
       "title": "Document gating, coordinate Rally, bump VERSION to 0.9.0",
       "description": "Context: all implementation is done; this is the FINAL change (#4 of 4), so the 0.9.0 VERSION bump lands here. Read AGENTS.md 'Releasing'. Read design.md 'Rally contract change'.\n\nOutcome: README documents hold/release, the 10/11/12 gate exit codes (vs the old 3), and the held status state (5.1). Surface the get/claim exit-code CONTRACT CHANGE for the Rally relay loop and the coordination need (5.2) — a README section plus a clear operator note (the actual Rally-side relay-loop update is external to this repo; flag it for the operator, do not block on it here). Bump VERSION to 0.9.0 per the release process (5.3).\n\nFiles \u0026 scope: README.md; the Rally coordination note (place per repo convention — check for an existing relay-loop/agent doc; otherwise README + an operator-visible note); VERSION (repo root).\n\nDesign: the VERSION bump triggers the auto-tag workflow (`^[0-9]+\\.[0-9]+\\.[0-9]+$` validation) which creates `v0.9.0`, pushes it, and dispatches release.yml (GoReleaser, idempotent). Do NOT push to main or commit unless the operator explicitly asks — stage the VERSION + README changes and hand off.\n\nAcceptance: `just build` green; `cat VERSION` shows `0.9.0`; README contains the new exit codes and held-status docs. Do not tick tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-29T10:05:58.993490607Z",
-      "updatedAt": "2026-06-29T10:05:58.993490607Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T10:38:27.589390155Z",
+      "completedAt": "2026-07-01T10:38:27.589390155Z"
     },
     {
       "id": "laps-60da",
