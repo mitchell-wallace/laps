@@ -356,7 +356,7 @@ func collectStintSummaries(beadsDir, repoRoot string) ([]stintSummary, error) {
 			Laps:     len(file.Tasks),
 			Queued:   queued[name],
 			Archived: archived,
-			Held:     !archived && file.Held,
+			Held:     file.Held,
 		})
 		return nil
 	}); err != nil {

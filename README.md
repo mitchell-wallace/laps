@@ -69,8 +69,9 @@ Output is title, optional assignee, blank line, description.
 A head `get` (no explicit id) signals queue state through its **exit code**:
 `0` a lap was returned, `10` the head is held/gated, `11` the queue is empty,
 `12` every lap is complete (see [Queue-state exit codes](#queue-state-exit-codes)).
-Text mode prints nothing to stdout for `10`/`11`/`12` and warns on stderr for
-held; JSON mode prints a small `{"state","exitCode"}` object to stdout.
+Text mode prints no command output to stdout for `10`/`11`/`12` and warns on
+stderr for held; JSON mode prints a small `{"state","exitCode"}` object to
+stdout. Hook passback, if configured, may still write its own stdout.
 Explicit `get <id>` (including one inside a held stint) stays its normal
 result, warning on stderr when the target stint is held.
 
@@ -430,13 +431,15 @@ enqueue preempts the active stint; because each stint's progress lives in its
 own file, preemption is non-destructive and the paused stint resumes when the
 interloper drains.
 
-A stint with no todo laps left is **drained**: the draining operation flips its
-root ref to done and moves the file to `.laps/stints/archive/`. Draining is
-content-based and position-independent — a preempted, non-head stint still
-drains when its last lap completes, and a done ref is skipped on later
-advance. `done undo` scans all queue files (root, active stints, and the
-archive) for the globally latest completion and unarchives when that lap lives
-in a drained stint (the 5-minute age gate still applies).
+A stint with no todo laps left is **drained**: the draining operation flips the
+reference in its immediate parent queue to done, moves the file to
+`.laps/stints/archive/`, and cascades toward root while parent stints also have
+no todo laps left. Draining is content-based and position-independent — a
+preempted, non-head stint still drains when its last lap completes, and a done
+ref is skipped on later advance. `done undo` scans all queue files (root,
+active stints, and the archive) for the globally latest completion and
+unarchives when that lap lives in a drained stint (the 5-minute age gate still
+applies).
 
 ### Holding a stint (gating)
 
@@ -493,8 +496,9 @@ codes:
   `claim <id>` attempt into a held stint.
 - Explicit-id **not found** remains exit `3`; store/io failures remain `2`;
   hook failures remain `4`.
-- Text mode emits **no stdout** for `10`/`11`/`12`; held cases warn on stderr.
-  JSON mode emits a small queue-state object on stdout instead:
+- Text mode emits **no command stdout** for `10`/`11`/`12`; held cases warn on
+  stderr. Hook passback, if configured, may still write its own stdout. JSON
+  mode emits a small queue-state object on stdout instead:
   ```json
   {"state":"held","exitCode":10}
   ```

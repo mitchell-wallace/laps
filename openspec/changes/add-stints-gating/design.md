@@ -28,8 +28,9 @@ relay loop can stop on a gate, finish on completion, or idle on an empty queue w
   stint deeper in the pipeline has no effect until descent reaches its parent context.
 - **Exit codes carry queue state.** `get`/`claim` return `0` (lap), `10` (held), `11` (empty),
   `12` (complete), chosen to avoid the existing `2`/`3`/`4` (io/store, not-found/empty,
-  hook). Text mode emits no stdout for `10`/`11`/`12`; held cases warn on stderr that the stint
-  is held and should not be implemented yet. JSON mode emits a small state object on stdout.
+  hook). Text mode emits no command stdout for `10`/`11`/`12`; held cases warn on stderr that
+  the stint is held and should not be implemented yet. Hook passback, if configured, may still
+  write its own stdout. JSON mode emits a small state object on stdout.
   `status` stays exit-0 for valid snapshots and reports the same state in text and
   `--json-output`.
 - **Hold blocks starting, not finishing.** A hold gates `get`/`claim` (starting the next lap)

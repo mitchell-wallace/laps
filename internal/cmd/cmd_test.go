@@ -732,6 +732,42 @@ func TestClaimHeldHeadExitsTenAndLeavesClaimUnchanged(t *testing.T) {
 	}
 }
 
+func TestScopedHeldStintHeadFlowStartExitsTen(t *testing.T) {
+	cases := []struct {
+		name string
+		args func(verb string) []string
+	}{
+		{name: "scope flag", args: func(verb string) []string { return []string{verb, "--stint", "auth"} }},
+		{name: "raw file", args: func(verb string) []string { return []string{"--file", "stints/auth.laps.json", verb} }},
+	}
+	for _, tc := range cases {
+		for _, verb := range []string{"get", "claim"} {
+			verb := verb
+			tc := tc
+			t.Run(tc.name+" "+verb, func(t *testing.T) {
+				beadsDir, _ := setupActiveStintRepo(t)
+				setStintHeld(t, beadsDir, "auth", true)
+
+				out, errStr, code := runMB(tc.args(verb)...)
+				if code != 10 {
+					t.Fatalf("%s held scoped head exit %d, want 10; stdout: %q stderr: %q", verb, code, out, errStr)
+				}
+				if out != "" {
+					t.Fatalf("%s held scoped head must emit no task, got stdout %q", verb, out)
+				}
+				if !strings.Contains(errStr, "auth") || !strings.Contains(errStr, "held") {
+					t.Fatalf("%s held scoped head should warn about auth hold, got: %s", verb, errStr)
+				}
+				if verb == "claim" {
+					if _, err := os.Stat(filepath.Join(beadsDir, "claim")); !os.IsNotExist(err) {
+						t.Fatalf("held scoped claim must leave claim absent, stat err: %v", err)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestGetNestedHeldStintExitsTenAndWarns(t *testing.T) {
 	beadsDir, _ := setupNestedStintRepo(t, true)
 	setStintHeld(t, beadsDir, "search", true)
@@ -2221,6 +2257,31 @@ func TestStatusHeldStateAndGateMetadata(t *testing.T) {
 	}
 }
 
+func TestStatusFileUsesSelectedHeldState(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeHeldResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth", true,
+		store.Task{Kind: store.KindLap, ID: "auth-aaaa", Title: "Inside auth", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+
+	out, errStr, code := runMB("--file", "stints/auth.laps.json", "status", "--json-output")
+	if code != 0 {
+		t.Fatalf("status selected held file exit %d, stderr: %s", code, errStr)
+	}
+	m := parseStatusJSON(t, out)
+	if m["file"] != "stints/auth.laps.json" {
+		t.Fatalf("status file = %v, want selected stint file", m["file"])
+	}
+	if m["state"] != "held" {
+		t.Fatalf("status selected held file state = %v, want held; snapshot: %#v", m["state"], m)
+	}
+	gate, ok := m["gate"].(map[string]interface{})
+	if !ok || gate["stint"] != "auth" || gate["scope"] != "auth" {
+		t.Fatalf("status selected held file gate = %#v, want auth gate", m["gate"])
+	}
+}
+
 func TestStatusActiveClaimPrecedesHeldGate(t *testing.T) {
 	beadsDir, authLapID := setupActiveStintRepo(t)
 	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth",
@@ -2876,6 +2937,37 @@ func TestStintsLsShowsHeldBadge(t *testing.T) {
 	}
 	if !strings.Contains(out, "queued=true\tarchived=false\n") || strings.Contains(out, "held=") {
 		t.Fatalf("released queued stint should show queued=true archived=false with no held badge, got: %s", out)
+	}
+}
+
+func TestStintsLsShowsHeldBadgeForArchivedHeldStint(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeHeldResolverQueue(t, filepath.Join(beadsDir, "stints", "archive", "auth.laps.json"), "auth", true,
+		store.Task{Kind: store.KindLap, ID: "auth-done", Title: "Done auth", IsDone: true, CompletedAt: &resolverTestTime, Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+
+	out, errStr, code := runMB("stints", "ls")
+	if code != 0 {
+		t.Fatalf("stints ls archived held exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "queued=false\tarchived=true\theld=true") {
+		t.Fatalf("archived held stint should show held badge, got: %s", out)
+	}
+
+	jsonOut, _, code := runMB("--json-output", "stints", "ls")
+	if code != 0 {
+		t.Fatalf("stints ls archived held json exit %d", code)
+	}
+	var parsed struct {
+		Stints []stintSummary `json:"stints"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &parsed); err != nil {
+		t.Fatalf("unmarshal archived held stints ls json: %v\n%s", err, jsonOut)
+	}
+	if len(parsed.Stints) != 1 || !parsed.Stints[0].Archived || !parsed.Stints[0].Held {
+		t.Fatalf("json stints = %+v, want single archived held auth", parsed.Stints)
 	}
 }
 

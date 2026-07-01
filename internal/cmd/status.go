@@ -109,9 +109,8 @@ separately in the snapshot.`,
 		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
 		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
 
-		selectedFile := store.ResolveFile(fileFlag)
-		rootPath := scopedRootPath(beadsDir)
-		flow, err := resolveFlowStart(rootPath, repoRoot, beadsDir, loadFile(rootPath, repoRoot, beadsDir), true)
+		selectedFile := fileNameForClaim(beadsDir, path)
+		flow, err := resolveSelectedFlowStart(path, repoRoot, beadsDir, file, true)
 		if err != nil {
 			exitCode = 2
 			exit(2, "%v", err)

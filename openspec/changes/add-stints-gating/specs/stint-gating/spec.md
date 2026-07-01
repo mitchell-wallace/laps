@@ -90,8 +90,9 @@ closed: only `get` and `claim` flow-start are gated by hold. `list`, `count`, `a
 complete. Exit `11` and `12` SHALL apply only to head/flow operations that are not targeting an
 explicit id; exit `10` SHALL also apply to explicit `claim <id>` attempts into a held stint.
 Explicit-id not-found errors SHALL continue to use exit `3`, store/io failures exit `2`, and
-hook failures exit `4`. Text mode SHALL emit no stdout for `10`/`11`/`12`; JSON mode SHALL emit a
-small queue-state object on stdout. Held cases SHALL warn on stderr.
+hook failures exit `4`. Text mode SHALL emit no command stdout for `10`/`11`/`12`; hook passback,
+if configured, MAY still write its own stdout. JSON mode SHALL emit a small queue-state object on
+stdout. Held cases SHALL warn on stderr.
 
 #### Scenario: Lap returned
 - **WHEN** `laps get` resolves a lap

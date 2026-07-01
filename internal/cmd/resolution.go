@@ -171,6 +171,19 @@ func resolveSelectedFlowStart(path, repoRoot, beadsDir string, file *store.File,
 	if err != nil {
 		return nil, err
 	}
+	if stopOnHeld && ctx.File.Held {
+		if name, ok := store.ActiveStintNameForPath(beadsDir, ctx.Path); ok {
+			return &flowResolution{
+				State: queueStateHeld,
+				Ctx:   ctx,
+				Held: &heldGate{
+					Stint: name,
+					Scope: ctx.Scope,
+					Path:  ctx.Path,
+				},
+			}, nil
+		}
+	}
 	return &flowResolution{
 		State: queueStateForContext(ctx),
 		Ctx:   ctx,
