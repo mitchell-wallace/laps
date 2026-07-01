@@ -214,11 +214,11 @@
       "title": "Implement log/status scope integration and hook $scope",
       "description": "Context: Stints commands complete. Now integration with the event log, status, and hooks (all from add-event-log-and-status). Implements tasks 9.1, 9.2, 9.3, 9.4, 9.5 (tests bundled).\n\nOutcome: Event-log entries carry the resolved scope (canonical slash path: root, auth, auth/search). New events: stint.enqueued, stint.completed, stint.archived. status reports the active stint and per-stint progress. Hook vars under scoped operations: $file is the resolved physical task file and $scope is the canonical logical scope. The hook-only (unknown-command) path either gains $scope defaulting to root OR documents that hook-only commands do not receive $scope (one chosen, implemented consistently).\n\nFiles \u0026 scope: internal/cmd/hooks.go:buildHookVars (hooks.go:53) adds $scope. internal/cmd/root.go:96-105 (the hook-only vars map built inline, bypassing buildHookVars) gets $scope=root or a documented omission. internal/store or internal/cmd event-logging path adds scope to events and the three stint.* event types. internal/cmd/status.go (from add-event-log-and-status) reports active stint + per-stint progress.\n\nDesign: Canonical scope strings everywhere (design.md Canonical scope strings + spec): `root`, root-level stint names, slash paths for nesting (auth/search). CRITICAL: the cycle-detection visited set from lap 5 is a SEPARATE concept and MUST NOT use the slash-path string. Do not conflate the canonical scope string with the visited-set key. Hook-only path decision (task 9.3): the inline vars map at root.go:96-105 bypasses buildHookVars. Either add $scope=root there, or document explicitly that hook-only commands do not receive $scope. Pick one and apply it consistently across the code and tests. stint.completed fires on drain; stint.archived fires on the archive move; stint.enqueued fires on enqueue.\n\nAcceptance: `just build`, `just test`, `just lint` clean. Task 9.5 tests bundled: scope reflects the stint; stint events logged; status shows the active stint; hook variables under a scoped done include $scope; nested scope encoding uses slash paths (auth/search).",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1114112,
       "createdAt": "2026-06-29T10:09:28.111371512Z",
-      "updatedAt": "2026-06-29T10:09:28.111371512Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T03:19:37.743464228Z",
+      "completedAt": "2026-07-01T03:19:37.743464228Z"
     },
     {
       "id": "laps-3fa1",
