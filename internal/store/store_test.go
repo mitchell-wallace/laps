@@ -925,8 +925,7 @@ func TestReadClaimIgnoresUnknownFields(t *testing.T) {
 	if err := os.MkdirAll(beadsDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	// A future writer adds a "scope" field that this reader does not know.
-	body := `{"lap":"lap-9","file":"laps.json","scope":"root","claimedAt":null}`
+	body := `{"lap":"lap-9","file":"laps.json","scope":"root","claimedAt":null,"futureMode":"delegated"}`
 	if err := os.WriteFile(ClaimPath(beadsDir), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -935,7 +934,7 @@ func TestReadClaimIgnoresUnknownFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadClaim with unknown field should not error: %v", err)
 	}
-	if claim.Lap != "lap-9" || claim.File != "laps.json" {
+	if claim.Lap != "lap-9" || claim.File != "laps.json" || claim.Scope != "root" {
 		t.Fatalf("unexpected claim: %+v", claim)
 	}
 }

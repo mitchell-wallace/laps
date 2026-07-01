@@ -873,6 +873,213 @@ func TestPruneScopeActiveDescends(t *testing.T) {
 	}
 }
 
+// TestClaimRecordsScope asserts a claim taken from an active stint persists the
+// canonical logical scope alongside the lap and physical file. (task 5.5)
+func TestClaimRecordsScope(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+
+	if _, errStr, code := runMB("claim"); code != 0 {
+		t.Fatalf("claim exit %d, stderr: %s", code, errStr)
+	}
+
+	claim, err := store.ReadClaim(beadsDir, "laps.json")
+	if err != nil {
+		t.Fatalf("ReadClaim: %v", err)
+	}
+	if claim.Lap != authLapID {
+		t.Fatalf("claim lap = %q, want %q", claim.Lap, authLapID)
+	}
+	if claim.File != "stints/auth.laps.json" {
+		t.Fatalf("claim file = %q, want stints/auth.laps.json", claim.File)
+	}
+	if claim.Scope != "auth" {
+		t.Fatalf("claim scope = %q, want auth", claim.Scope)
+	}
+}
+
+// TestDoneCompletesClaimedLapAfterEnqueueHeadPreemption is the headline
+// preemption-safety scenario: a bare done follows the recorded claim scope, not
+// the new root head introduced by enqueue head. (task 5.5)
+func TestDoneCompletesClaimedLapAfterEnqueueHeadPreemption(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch",
+		store.Task{Kind: store.KindLap, ID: "srch-bbbb", Title: "Search head", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+
+	if _, errStr, code := runMB("claim"); code != 0 {
+		t.Fatalf("claim exit %d, stderr: %s", code, errStr)
+	}
+	if _, errStr, code := runMB("stints", "enqueue", "search", "head"); code != 0 {
+		t.Fatalf("stints enqueue head exit %d, stderr: %s", code, errStr)
+	}
+
+	if _, errStr, code := runMB("done"); code != 0 {
+		t.Fatalf("bare done exit %d, stderr: %s", code, errStr)
+	}
+
+	authFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load auth stint file: %v", err)
+	}
+	authLap := taskByIDInFile(t, authFile, authLapID)
+	if !authLap.IsDone {
+		t.Fatalf("bare done must complete originally claimed auth lap %s", authLapID)
+	}
+
+	searchFile, err := store.Load(filepath.Join(beadsDir, "stints", "search.laps.json"))
+	if err != nil {
+		t.Fatalf("Load search stint file: %v", err)
+	}
+	searchLap := taskByIDInFile(t, searchFile, "srch-bbbb")
+	if searchLap.IsDone {
+		t.Fatalf("bare done must not complete preempting search head")
+	}
+}
+
+// TestStintsEnqueueDefaultsToTail asserts omitted enqueue position appends the
+// stint reference after existing root queue entries. (task 6.5)
+func TestStintsEnqueueDefaultsToTail(t *testing.T) {
+	beadsDir, _ := setupActiveStintRepo(t)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch")
+
+	out, errStr, code := runMB("stints", "enqueue", "search")
+	if code != 0 {
+		t.Fatalf("stints enqueue default exit %d, stderr: %s", code, errStr)
+	}
+	searchRefID := strings.TrimSpace(out)
+
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	if got := rootTodoIDs(rootFile); len(got) != 2 || got[0] != "root-auth" || got[1] != searchRefID {
+		t.Fatalf("root todo order = %v, want [root-auth %s]", got, searchRefID)
+	}
+	searchRef := taskByIDInFile(t, rootFile, searchRefID)
+	if searchRef.Kind != store.KindStint || searchRef.Ref != "search" {
+		t.Fatalf("enqueued task = %+v, want search stint ref", searchRef)
+	}
+}
+
+// TestStintsEnqueueHeadPreemptsAndLaterResumesWithProgress asserts head enqueue
+// makes a new stint active without changing the paused stint file, and once the
+// preempting root ref is drained, the original stint resumes with its remaining
+// todo progress intact. (task 6.5)
+func TestStintsEnqueueHeadPreemptsAndLaterResumesWithProgress(t *testing.T) {
+	beadsDir, _ := setupActiveStintRepo(t)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth",
+		store.Task{Kind: store.KindLap, ID: "auth-done", Title: "Auth done", IsDone: true, CompletedAt: &resolverTestTime, Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+		store.Task{Kind: store.KindLap, ID: "auth-next", Title: "Auth next", Order: 2, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch",
+		store.Task{Kind: store.KindLap, ID: "srch-next", Title: "Search next", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+
+	out, errStr, code := runMB("stints", "enqueue", "search", "head")
+	if code != 0 {
+		t.Fatalf("stints enqueue head exit %d, stderr: %s", code, errStr)
+	}
+	searchRefID := strings.TrimSpace(out)
+
+	out, errStr, code = runMB("get")
+	if code != 0 {
+		t.Fatalf("get after preemption exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "Search next") {
+		t.Fatalf("head enqueue must make search active, got: %s", out)
+	}
+
+	authFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load auth stint file: %v", err)
+	}
+	if !taskByIDInFile(t, authFile, "auth-done").IsDone || taskByIDInFile(t, authFile, "auth-next").IsDone {
+		t.Fatalf("preemption must preserve auth progress, tasks = %#v", authFile.Tasks)
+	}
+
+	// Drain/archive is a later OpenSpec task. Mark the preempting root ref done
+	// here to model the post-drain root queue state and prove active resolution
+	// resumes the paused stint with its existing progress.
+	rootPath := filepath.Join(beadsDir, "laps.json")
+	rootFile, err := store.Load(rootPath)
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	now := resolverTestTime.Add(time.Minute)
+	searchRef := taskByIDInFile(t, rootFile, searchRefID)
+	searchRef.IsDone = true
+	searchRef.CompletedAt = &now
+	searchRef.UpdatedAt = now
+	if err := store.Save(rootPath, rootFile); err != nil {
+		t.Fatalf("Save drained root file: %v", err)
+	}
+
+	out, errStr, code = runMB("get")
+	if code != 0 {
+		t.Fatalf("get after simulated drain exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "Auth next") {
+		t.Fatalf("after drain, active scope must resume auth's remaining lap, got: %s", out)
+	}
+}
+
+// TestStintsEnqueueAfterIsRootOnly asserts enqueue after never resolves through
+// the active stint; a stint-owned id is out of root scope and the enqueue is
+// rejected without mutation. (task 6.5)
+func TestStintsEnqueueAfterIsRootOnly(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch")
+	before := readResolverFiles(t, filepath.Join(beadsDir, "laps.json"))
+
+	_, errStr, code := runMB("stints", "enqueue", "search", "after", authLapID)
+	if code == 0 {
+		t.Fatalf("expected root-only enqueue after to fail, got exit 0")
+	}
+	if !strings.Contains(errStr, authLapID) || !strings.Contains(errStr, "auth") {
+		t.Fatalf("error must name out-of-root auth lap and owning stint, got: %s", errStr)
+	}
+
+	after := readResolverFiles(t, filepath.Join(beadsDir, "laps.json"))
+	if after[filepath.Join(beadsDir, "laps.json")] != before[filepath.Join(beadsDir, "laps.json")] {
+		t.Fatalf("failed root-only enqueue after must not mutate root\nbefore: %s\nafter:  %s",
+			before[filepath.Join(beadsDir, "laps.json")],
+			after[filepath.Join(beadsDir, "laps.json")])
+	}
+}
+
+// TestEmptyStintEnqueuesAndResolvesAsNoHead asserts an empty stint is accepted
+// as an ordinary queued stint file; active resolution then reaches that empty
+// file and reports the normal no-head condition rather than a special enqueue
+// error. (task 6.5)
+func TestEmptyStintEnqueuesAndResolvesAsNoHead(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "empty.laps.json"), "empt")
+	out, errStr, code := runMB("stints", "enqueue", "empty", "head")
+	if code != 0 {
+		t.Fatalf("stints enqueue empty exit %d, stderr: %s", code, errStr)
+	}
+	emptyRefID := strings.TrimSpace(out)
+
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	emptyRef := taskByIDInFile(t, rootFile, emptyRefID)
+	if emptyRef.Kind != store.KindStint || emptyRef.Ref != "empty" || emptyRef.IsDone {
+		t.Fatalf("empty enqueue ref = %+v, want todo empty stint ref", emptyRef)
+	}
+
+	_, errStr, code = runMB("get")
+	if code != 3 {
+		t.Fatalf("get through empty active stint exit %d, want 3; stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "no head task") {
+		t.Fatalf("empty active stint should use normal no-head error, got: %s", errStr)
+	}
+}
+
 func TestAddMissingPosition(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
@@ -2428,6 +2635,31 @@ func fileContainsID(f *store.File, id string) bool {
 		}
 	}
 	return false
+}
+
+// taskByIDInFile returns the task with id from an already loaded file, failing
+// the test if it is absent.
+func taskByIDInFile(t *testing.T, f *store.File, id string) *store.Task {
+	t.Helper()
+	for i := range f.Tasks {
+		if f.Tasks[i].ID == id {
+			return &f.Tasks[i]
+		}
+	}
+	t.Fatalf("task %s not found in file: %#v", id, f.Tasks)
+	return nil
+}
+
+// rootTodoIDs returns unfinished task ids in normalized root queue order.
+func rootTodoIDs(f *store.File) []string {
+	store.Normalize(f)
+	var ids []string
+	for i := range f.Tasks {
+		if !f.Tasks[i].IsDone {
+			ids = append(ids, f.Tasks[i].ID)
+		}
+	}
+	return ids
 }
 
 // taskByID loads the laps store under beadsDir and returns the task with the
