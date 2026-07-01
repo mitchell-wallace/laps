@@ -31,6 +31,12 @@ Prints the number of tasks removed.`,
 		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
 		file := loadFile(path, repoRoot, beadsDir)
+		ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
+		if err != nil {
+			exit(2, "%v", err)
+		}
+		path = ctx.Path
+		file = ctx.File
 
 		exitCode := 0
 		var output string

@@ -714,6 +714,165 @@ func TestDeleteForceClearsClaim(t *testing.T) {
 	}
 }
 
+// writeScopeCountFixture seeds a repo whose root, active auth stint, and an
+// inactive search stint each carry a distinct lap set, so a scope-aware command
+// can be told apart by its counts. Root's head is the auth stint ref, so the
+// default --active scope descends into auth; root also holds one root lap.
+func writeScopeCountFixture(t *testing.T) (beadsDir string) {
+	t.Helper()
+	beadsDir, cleanup := setupTempRepo(t)
+	t.Cleanup(cleanup)
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "",
+		store.Task{Kind: store.KindStint, ID: "root-auth", Ref: "auth", Title: "Auth stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+		store.Task{Kind: store.KindLap, ID: "root-0001", Title: "Root lap", Assignee: "rooty", Order: 2, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth",
+		store.Task{Kind: store.KindLap, ID: "auth-d1", Title: "Auth done", Assignee: "coder", IsDone: true, CompletedAt: &resolverTestTime, Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+		store.Task{Kind: store.KindLap, ID: "auth-t1", Title: "Auth todo", Assignee: "reviewer", Order: 2, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch",
+		store.Task{Kind: store.KindLap, ID: "srch-1", Title: "Search done", Assignee: "qa", IsDone: true, CompletedAt: &resolverTestTime, Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	return beadsDir
+}
+
+// TestCountScopeActiveDescends asserts the default scope descends into the
+// deepest active stint (auth) while --root and -s <stint> remain direct, by
+// reading each scope's distinct counts/breakdown. Regression for count bypassing
+// active-context resolution. (task: count/prune --active handling)
+func TestCountScopeActiveDescends(t *testing.T) {
+	writeScopeCountFixture(t)
+
+	// Default (--active) resolves into the auth stint: 1 done / 2 total.
+	out, errStr, code := runMB("count")
+	if code != 0 {
+		t.Fatalf("count (active) exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "Laps done: 1 out of 2") {
+		t.Fatalf("active count must reflect auth stint, got: %s", out)
+	}
+	if !strings.Contains(out, "coder: 1 complete, 0 incomplete") {
+		t.Fatalf("active count must show auth coder breakdown, got: %s", out)
+	}
+
+	// --root targets the root queue directly: 0 done / 2 total (stint ref + lap).
+	out, errStr, code = runMB("count", "--root")
+	if code != 0 {
+		t.Fatalf("count --root exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "Laps done: 0 out of 2") {
+		t.Fatalf("root count must reflect root queue, got: %s", out)
+	}
+	if !strings.Contains(out, "rooty: 0 complete, 1 incomplete") {
+		t.Fatalf("root count must show rooty breakdown, got: %s", out)
+	}
+
+	// -s search targets the inactive search stint directly: 1 done / 1 total.
+	out, errStr, code = runMB("count", "-s", "search")
+	if code != 0 {
+		t.Fatalf("count -s search exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "Laps done: 1 out of 1") {
+		t.Fatalf("search count must reflect search stint, got: %s", out)
+	}
+	if !strings.Contains(out, "qa: 1 complete, 0 incomplete") {
+		t.Fatalf("search count must show qa breakdown, got: %s", out)
+	}
+}
+
+// TestCountExplicitActiveFlagMatchesDefault asserts --active behaves identically
+// to the implicit default descent, so the flag is genuinely wired (not just the
+// default path). (task: count/prune --active handling)
+func TestCountExplicitActiveFlagMatchesDefault(t *testing.T) {
+	writeScopeCountFixture(t)
+
+	defOut, _, defCode := runMB("count")
+	if defCode != 0 {
+		t.Fatalf("count default exit %d", defCode)
+	}
+	flagOut, errStr, flagCode := runMB("count", "--active")
+	if flagCode != 0 {
+		t.Fatalf("count --active exit %d, stderr: %s", flagCode, errStr)
+	}
+	if defOut != flagOut {
+		t.Fatalf("--active must match default descent\n default: %q\n active:  %q", defOut, flagOut)
+	}
+}
+
+// TestPruneScopeActiveDescends asserts prune with the default scope prunes only
+// the deepest active stint's done laps while leaving the root queue untouched,
+// and that --root prunes root directly. The active stint carries 2 done laps
+// while root carries 1, so the removed count itself proves which file was
+// targeted. Regression for prune bypassing active-context resolution.
+// (task: count/prune --active handling)
+func TestPruneScopeActiveDescends(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "",
+		store.Task{Kind: store.KindStint, ID: "root-auth", Ref: "auth", Title: "Auth stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+		store.Task{Kind: store.KindLap, ID: "root-0001", Title: "Root done", IsDone: true, CompletedAt: &resolverTestTime, Order: 2, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth",
+		store.Task{Kind: store.KindLap, ID: "auth-d1", Title: "Auth done 1", IsDone: true, CompletedAt: &resolverTestTime, Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+		store.Task{Kind: store.KindLap, ID: "auth-d2", Title: "Auth done 2", IsDone: true, CompletedAt: &resolverTestTime, Order: 2, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+
+	// Default (--active) descends into auth: prune 0 removes its 2 done laps.
+	out, errStr, code := runMB("prune", "0")
+	if code != 0 {
+		t.Fatalf("prune 0 (active) exit %d, stderr: %s", code, errStr)
+	}
+	if strings.TrimSpace(out) != "2" {
+		t.Fatalf("active prune must remove the 2 auth done laps, got: %s", out)
+	}
+
+	authFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load auth stint file: %v", err)
+	}
+	for _, tk := range authFile.Tasks {
+		if tk.IsDone {
+			t.Fatalf("active prune must clear auth done tasks, got %#v", authFile.Tasks)
+		}
+	}
+
+	// Root's done lap must survive an active-scope prune (root has 1 done, so a
+	// misrouted prune would have reported 1 above and removed root-0001 here).
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	rootDoneSurvives := false
+	for _, tk := range rootFile.Tasks {
+		if tk.ID == "root-0001" && tk.IsDone {
+			rootDoneSurvives = true
+		}
+	}
+	if !rootDoneSurvives {
+		t.Fatalf("active prune must not touch root done lap, root tasks = %#v", rootFile.Tasks)
+	}
+
+	// --root prunes the root queue directly: removes root-0001, leaves auth empty.
+	out, errStr, code = runMB("prune", "0", "--root")
+	if code != 0 {
+		t.Fatalf("prune 0 --root exit %d, stderr: %s", code, errStr)
+	}
+	if strings.TrimSpace(out) != "1" {
+		t.Fatalf("root prune must remove the 1 root done lap, got: %s", out)
+	}
+	rootFile, err = store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	for _, tk := range rootFile.Tasks {
+		if tk.ID == "root-0001" {
+			t.Fatalf("root prune must remove root-0001, root tasks = %#v", rootFile.Tasks)
+		}
+	}
+}
+
 func TestAddMissingPosition(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()

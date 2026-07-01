@@ -137,11 +137,11 @@
       "id": "work-be07",
       "title": "Fix --active handling for count/prune scopes",
       "description": "`count` and `prune` currently add the scope flags but still operate on the raw path from `getStorePath()`, so the default active scope does not descend into the deepest active stint. Wire both commands through active-context resolution (active resolves to the deepest active file; root/stint remain direct) and add regression coverage for count/prune scope behavior.",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-07-01T01:53:55.027708085Z",
-      "updatedAt": "2026-07-01T01:53:55.027708085Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T02:03:14.984429094Z",
+      "completedAt": "2026-07-01T02:03:14.984429094Z"
     },
     {
       "id": "laps-2600",
