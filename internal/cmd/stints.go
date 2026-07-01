@@ -5,16 +5,44 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
 
+var stintsRmForce bool
+
 var stintsCmd = &cobra.Command{
 	Use:     "stints",
 	Aliases: []string{"st"},
 	Short:   "Manage stints",
+}
+
+var stintsLsCmd = &cobra.Command{
+	Use:   "ls",
+	Short: "List stint files",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		repoRoot, beadsDir, err := store.DiscoverRepoRoot()
+		if err != nil {
+			exit(2, "%v", err)
+		}
+		stints, err := collectStintSummaries(beadsDir, repoRoot)
+		if err != nil {
+			exit(2, "stints ls: %v", err)
+		}
+
+		if jsonOutput {
+			printJSON(map[string]interface{}{"stints": stints})
+			return
+		}
+		for _, stint := range stints {
+			fmt.Printf("%s\tlaps=%d\tqueued=%t\tarchived=%t\n", stint.Name, stint.Laps, stint.Queued, stint.Archived)
+		}
+	},
 }
 
 var stintsNewCmd = &cobra.Command{
@@ -49,6 +77,79 @@ var stintsNewCmd = &cobra.Command{
 		}
 		fmt.Println(prefix)
 	},
+}
+
+var stintsShowCmd = &cobra.Command{
+	Use:   "show <name>",
+	Short: "Show a stint queue",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		name := args[0]
+		repoRoot, beadsDir, err := store.DiscoverRepoRoot()
+		if err != nil {
+			exit(2, "%v", err)
+		}
+		path, archived, err := existingStintPath(beadsDir, name)
+		if err != nil {
+			exit(2, "stints show: %v", err)
+		}
+		if path == "" {
+			exit(3, "stints show: stint %s not found", name)
+		}
+		file := loadFile(path, repoRoot, beadsDir)
+		if jsonOutput {
+			printJSON(map[string]interface{}{"name": name, "archived": archived, "tasks": file.Tasks})
+			return
+		}
+		if archived {
+			fmt.Printf("%s/ (archived)\n", name)
+		} else {
+			fmt.Printf("%s/\n", name)
+		}
+		for i := range file.Tasks {
+			fmt.Println(formatListEntryWithContext(&file.Tasks[i], i+1, file.Tasks[i].IsDone, "", beadsDir, repoRoot))
+		}
+	},
+}
+
+var stintsRmCmd = &cobra.Command{
+	Use:   "rm <name>",
+	Short: "Remove a stint file",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		name := args[0]
+		repoRoot, beadsDir, err := store.DiscoverRepoRoot()
+		if err != nil {
+			exit(2, "%v", err)
+		}
+		if err := removeStint(beadsDir, repoRoot, name, stintsRmForce); err != nil {
+			var refusal *stintRemoveRefusal
+			if errors.As(err, &refusal) {
+				exit(3, "stints rm: %v", err)
+			}
+			exit(2, "stints rm: %v", err)
+		}
+		if jsonOutput {
+			printJSON(map[string]interface{}{"removed": name, "force": stintsRmForce})
+			return
+		}
+		fmt.Println(name)
+	},
+}
+
+type stintSummary struct {
+	Name     string `json:"name"`
+	Laps     int    `json:"laps"`
+	Queued   bool   `json:"queued"`
+	Archived bool   `json:"archived"`
+}
+
+type stintRemoveRefusal struct {
+	reasons []string
+}
+
+func (e *stintRemoveRefusal) Error() string {
+	return fmt.Sprintf("%s is protected (%s); use --force to remove it", e.reasons[0], strings.Join(e.reasons[1:], ", "))
 }
 
 var stintsEnqueueCmd = &cobra.Command{
@@ -148,8 +249,239 @@ func scopedRootPath(beadsDir string) string {
 	return filepath.Join(beadsDir, store.ResolveFile(""))
 }
 
+func collectStintSummaries(beadsDir, repoRoot string) ([]stintSummary, error) {
+	rootFile, err := loadExistingFile(scopedRootPath(beadsDir), repoRoot, beadsDir)
+	if err != nil {
+		if !errors.Is(err, store.ErrEmptyFile) {
+			return nil, err
+		}
+		rootFile = &store.File{Version: store.CurrentVersion, Tasks: []store.Task{}}
+	}
+	queued := queuedStintNames(rootFile)
+
+	var stints []stintSummary
+	if err := walkStintFiles(beadsDir, func(path, name string, archived bool) error {
+		file, err := loadExistingFile(path, repoRoot, beadsDir)
+		if err != nil {
+			return err
+		}
+		stints = append(stints, stintSummary{
+			Name:     name,
+			Laps:     len(file.Tasks),
+			Queued:   queued[name],
+			Archived: archived,
+		})
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	sort.Slice(stints, func(i, j int) bool {
+		if stints[i].Name != stints[j].Name {
+			return stints[i].Name < stints[j].Name
+		}
+		return !stints[i].Archived && stints[j].Archived
+	})
+	return stints, nil
+}
+
+func walkStintFiles(beadsDir string, visit func(path, name string, archived bool) error) error {
+	stintsDir := store.StintsDir(beadsDir)
+	if _, err := os.Stat(stintsDir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	return filepath.WalkDir(stintsDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".laps.json") {
+			return nil
+		}
+		if name, ok := store.ActiveStintNameForPath(beadsDir, path); ok {
+			return visit(path, name, false)
+		}
+		if name, ok := store.ArchivedStintNameForPath(beadsDir, path); ok {
+			return visit(path, name, true)
+		}
+		return nil
+	})
+}
+
+func queuedStintNames(rootFile *store.File) map[string]bool {
+	queued := make(map[string]bool)
+	for _, task := range rootFile.Tasks {
+		if task.Kind == store.KindStint && task.Ref != "" {
+			queued[task.Ref] = true
+		}
+	}
+	return queued
+}
+
+func existingStintPath(beadsDir, name string) (path string, archived bool, err error) {
+	activePath, err := store.ResolveStintFile(beadsDir, name)
+	if err != nil {
+		return "", false, err
+	}
+	if _, err := os.Stat(activePath); err == nil {
+		return activePath, false, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", false, err
+	}
+
+	archivedPath, err := store.ResolveArchivedStintFile(beadsDir, name)
+	if err != nil {
+		return "", false, err
+	}
+	if _, err := os.Stat(archivedPath); err == nil {
+		return archivedPath, true, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", false, err
+	}
+	return "", false, nil
+}
+
+func removeStint(beadsDir, repoRoot, name string, force bool) error {
+	activePath, err := store.ResolveStintFile(beadsDir, name)
+	if err != nil {
+		return err
+	}
+	archivedPath, err := store.ResolveArchivedStintFile(beadsDir, name)
+	if err != nil {
+		return err
+	}
+	activeExists, err := fileExists(activePath)
+	if err != nil {
+		return err
+	}
+	archivedExists, err := fileExists(archivedPath)
+	if err != nil {
+		return err
+	}
+	if !activeExists && !archivedExists {
+		return &stintRemoveRefusal{reasons: []string{name, "not found"}}
+	}
+
+	rootPath := scopedRootPath(beadsDir)
+	rootFile := loadFile(rootPath, repoRoot, beadsDir)
+	matchingRefs := findStintRefs(rootFile, name)
+	claimMatches, err := claimMatchesStint(beadsDir, name, activePath)
+	if err != nil {
+		return err
+	}
+	if activeExists && !force {
+		var reasons []string
+		if hasTodoRef(matchingRefs) {
+			reasons = append(reasons, "queued")
+		}
+		if isActiveStint(rootFile, name) {
+			reasons = append(reasons, "active")
+		}
+		if claimMatches {
+			reasons = append(reasons, "claimed")
+		}
+		if len(reasons) > 0 {
+			return &stintRemoveRefusal{reasons: append([]string{name}, reasons...)}
+		}
+	}
+
+	if activeExists {
+		if err := os.Remove(activePath); err != nil {
+			return err
+		}
+	}
+	if archivedExists {
+		if err := os.Remove(archivedPath); err != nil {
+			return err
+		}
+	}
+	if len(matchingRefs) > 0 && (force || archivedExists) {
+		rootFile.Tasks = removeStintRefs(rootFile.Tasks, name)
+		if err := store.Save(rootPath, rootFile); err != nil {
+			return err
+		}
+	}
+	if force && claimMatches {
+		if err := store.RemoveClaim(beadsDir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func fileExists(path string) (bool, error) {
+	if _, err := os.Stat(path); err == nil {
+		return true, nil
+	} else if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	} else {
+		return false, err
+	}
+}
+
+func findStintRefs(file *store.File, name string) []*store.Task {
+	var refs []*store.Task
+	for i := range file.Tasks {
+		if file.Tasks[i].Kind == store.KindStint && file.Tasks[i].Ref == name {
+			refs = append(refs, &file.Tasks[i])
+		}
+	}
+	return refs
+}
+
+func hasTodoRef(refs []*store.Task) bool {
+	for _, ref := range refs {
+		if !ref.IsDone {
+			return true
+		}
+	}
+	return false
+}
+
+func isActiveStint(rootFile *store.File, name string) bool {
+	head := firstTodo(rootFile)
+	return head != nil && head.Kind == store.KindStint && head.Ref == name
+}
+
+func removeStintRefs(tasks []store.Task, name string) []store.Task {
+	filtered := tasks[:0]
+	for _, task := range tasks {
+		if task.Kind == store.KindStint && task.Ref == name {
+			continue
+		}
+		filtered = append(filtered, task)
+	}
+	return filtered
+}
+
+func claimMatchesStint(beadsDir, name, activePath string) (bool, error) {
+	claim, err := store.ReadClaim(beadsDir, store.ResolveFile(""))
+	if err != nil {
+		return false, err
+	}
+	if claim.IsZero() {
+		return false, nil
+	}
+	if normalizeClaimScope(claim) == name {
+		return true, nil
+	}
+	if strings.HasSuffix(normalizeClaimScope(claim), "/"+name) {
+		return true, nil
+	}
+	claimPath, err := pathForClaim(beadsDir, claim)
+	if err == nil && filepath.Clean(claimPath) == filepath.Clean(activePath) {
+		return true, nil
+	}
+	return false, nil
+}
+
 func init() {
+	stintsCmd.AddCommand(stintsLsCmd)
 	stintsCmd.AddCommand(stintsNewCmd)
 	stintsCmd.AddCommand(stintsEnqueueCmd)
+	stintsCmd.AddCommand(stintsShowCmd)
+	stintsRmCmd.Flags().BoolVar(&stintsRmForce, "force", false, "remove a queued or claimed stint and clear matching state")
+	stintsCmd.AddCommand(stintsRmCmd)
 	rootCmd.AddCommand(stintsCmd)
 }

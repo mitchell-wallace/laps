@@ -46,6 +46,7 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	listAll = false
 	listDone = false
 	listOneline = false
+	listTree = false
 	addTitle = ""
 	addDescription = ""
 	addAssignee = ""
@@ -54,6 +55,7 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	updateYes = false
 	forceUndo = false
 	deleteForce = false
+	stintsRmForce = false
 	editTitle = ""
 	editDescription = ""
 	editAssignee = ""
@@ -112,6 +114,7 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	listAll = false
 	listDone = false
 	listOneline = false
+	listTree = false
 	addTitle = ""
 	addDescription = ""
 	addAssignee = ""
@@ -120,6 +123,7 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	updateYes = false
 	forceUndo = false
 	deleteForce = false
+	stintsRmForce = false
 	editTitle = ""
 	editDescription = ""
 	editAssignee = ""
@@ -1219,6 +1223,189 @@ func TestDoneUndoUnarchivesAndReopensArchivedStint(t *testing.T) {
 	if rootRef.IsDone || rootRef.CompletedAt != nil {
 		t.Fatalf("forced undo should reopen root stint ref, got %+v", rootRef)
 	}
+}
+
+// TestStintsLifecycleLsShowAliasAndUnqueuedDisplay covers the task-8 command
+// surface for creating, listing, showing, enqueueing, and the `st` alias.
+func TestStintsLifecycleLsShowAliasAndUnqueuedDisplay(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	if out, errStr, code := runMB("stints", "new", "auth"); code != 0 {
+		t.Fatalf("stints new exit %d, stderr: %s, stdout: %s", code, errStr, out)
+	}
+	if out, errStr, code := runMB("add", "head", "--stint", "auth", "--title", "Inside auth"); code != 0 {
+		t.Fatalf("add --stint exit %d, stderr: %s, stdout: %s", code, errStr, out)
+	}
+
+	out, errStr, code := runMB("stints", "ls")
+	if code != 0 {
+		t.Fatalf("stints ls exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "auth") || !strings.Contains(out, "laps=1") || !strings.Contains(out, "queued=false") {
+		t.Fatalf("unqueued stint should be listed as ordinary queued=false file, got: %s", out)
+	}
+
+	aliasOut, aliasErr, err := runMBExecute("st", "ls")
+	if err != nil {
+		t.Fatalf("st alias Execute returned error: %v, stderr: %s", err, aliasErr)
+	}
+	if aliasOut != out {
+		t.Fatalf("st alias output mismatch\nstints: %q\nst:     %q", out, aliasOut)
+	}
+
+	out, errStr, code = runMB("stints", "show", "auth")
+	if code != 0 {
+		t.Fatalf("stints show exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "auth/") || !strings.Contains(out, "Inside auth") {
+		t.Fatalf("stints show output should include name and lap, got: %s", out)
+	}
+
+	if out, errStr, code := runMB("stints", "enqueue", "auth"); code != 0 {
+		t.Fatalf("stints enqueue exit %d, stderr: %s, stdout: %s", code, errStr, out)
+	}
+	out, errStr, code = runMB("stints", "ls")
+	if code != 0 {
+		t.Fatalf("stints ls queued exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "queued=true") {
+		t.Fatalf("enqueued stint should list queued=true, got: %s", out)
+	}
+
+	if _, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json")); err != nil {
+		t.Fatalf("lifecycle should leave auth stint readable: %v", err)
+	}
+}
+
+// TestListTreeAndStintRefLineRendering verifies the mixed root queue remains
+// legible without --tree and --tree descends through nested stint refs.
+func TestListTreeAndStintRefLineRendering(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "",
+		store.Task{Kind: store.KindStint, ID: "root-auth", Ref: "auth", Title: "Auth stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+		store.Task{Kind: store.KindLap, ID: "root-lap", Title: "Root work", Order: 2, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth",
+		store.Task{Kind: store.KindLap, ID: "auth-lap", Title: "Auth work", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+		store.Task{Kind: store.KindStint, ID: "auth-search", Ref: "search", Title: "Search stint", Order: 2, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch",
+		store.Task{Kind: store.KindLap, ID: "srch-lap", Title: "Search work", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+
+	out, errStr, code := runMB("list", "--root")
+	if code != 0 {
+		t.Fatalf("list --root exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "auth/ (stint - 2 laps)") || !strings.Contains(out, "Root work") {
+		t.Fatalf("mixed root list should render stint ref as one summary line, got: %s", out)
+	}
+	if strings.Contains(out, "Auth work") {
+		t.Fatalf("non-tree root list should not descend into auth, got: %s", out)
+	}
+
+	out, errStr, code = runMB("list", "--tree", "--root")
+	if code != 0 {
+		t.Fatalf("list --tree --root exit %d, stderr: %s", code, errStr)
+	}
+	for _, want := range []string{"auth/ (stint - 2 laps)", "Auth work", "search/ (stint - 1 laps)", "Search work", "Root work"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("tree output missing %q:\n%s", want, out)
+		}
+	}
+	if !idxBefore(out, "auth/ (stint - 2 laps)", "Auth work") || !idxBefore(out, "search/ (stint - 1 laps)", "Search work") {
+		t.Fatalf("tree output should nest children after their refs, got:\n%s", out)
+	}
+}
+
+// TestStintsRmSafetyMatrix covers default refusal for non-archived queued or
+// claimed stints, --force root-ref and claim cleanup, default unqueued removal,
+// and default archived cleanup including a done root ref.
+func TestStintsRmSafetyMatrix(t *testing.T) {
+	t.Run("refuses queued active by default", func(t *testing.T) {
+		beadsDir, _ := setupActiveStintRepo(t)
+
+		_, errStr, code := runMB("stints", "rm", "auth")
+		if code == 0 {
+			t.Fatalf("expected queued active rm to fail")
+		}
+		if !strings.Contains(errStr, "queued") || !strings.Contains(errStr, "--force") {
+			t.Fatalf("queued refusal should name --force, got: %s", errStr)
+		}
+		if _, err := os.Stat(filepath.Join(beadsDir, "stints", "auth.laps.json")); err != nil {
+			t.Fatalf("refused rm should leave active file: %v", err)
+		}
+		rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+		if err != nil {
+			t.Fatalf("Load root file: %v", err)
+		}
+		if findStintRef(rootFile, "auth") == nil {
+			t.Fatalf("refused rm should leave root ref, tasks = %#v", rootFile.Tasks)
+		}
+	})
+
+	t.Run("force removes queued and clears claim", func(t *testing.T) {
+		beadsDir, authLapID := setupActiveStintRepo(t)
+		if _, errStr, code := runMB("claim", authLapID); code != 0 {
+			t.Fatalf("claim setup failed, code %d, stderr: %s", code, errStr)
+		}
+
+		if _, errStr, code := runMB("stints", "rm", "auth", "--force"); code != 0 {
+			t.Fatalf("forced rm exit %d, stderr: %s", code, errStr)
+		}
+		if _, err := os.Stat(filepath.Join(beadsDir, "stints", "auth.laps.json")); !os.IsNotExist(err) {
+			t.Fatalf("forced rm should remove active file, stat err: %v", err)
+		}
+		rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+		if err != nil {
+			t.Fatalf("Load root file: %v", err)
+		}
+		if findStintRef(rootFile, "auth") != nil {
+			t.Fatalf("forced rm should remove matching root refs, tasks = %#v", rootFile.Tasks)
+		}
+		if _, err := os.Stat(filepath.Join(beadsDir, "claim")); !os.IsNotExist(err) {
+			t.Fatalf("forced rm should clear matching claim, stat err: %v", err)
+		}
+	})
+
+	t.Run("removes unqueued non archived by default", func(t *testing.T) {
+		beadsDir, cleanup := setupTempRepo(t)
+		defer cleanup()
+		writeResolverQueue(t, filepath.Join(beadsDir, "stints", "draft.laps.json"), "drft",
+			store.Task{Kind: store.KindLap, ID: "drft-lap", Title: "Draft", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+		)
+
+		if _, errStr, code := runMB("stints", "rm", "draft"); code != 0 {
+			t.Fatalf("unqueued rm exit %d, stderr: %s", code, errStr)
+		}
+		if _, err := os.Stat(filepath.Join(beadsDir, "stints", "draft.laps.json")); !os.IsNotExist(err) {
+			t.Fatalf("unqueued rm should remove active file, stat err: %v", err)
+		}
+	})
+
+	t.Run("removes archived with done ref by default", func(t *testing.T) {
+		beadsDir, authLapID := setupActiveStintRepo(t)
+		if _, errStr, code := runMB("done", authLapID); code != 0 {
+			t.Fatalf("done setup exit %d, stderr: %s", code, errStr)
+		}
+
+		if _, errStr, code := runMB("stints", "rm", "auth"); code != 0 {
+			t.Fatalf("archived rm exit %d, stderr: %s", code, errStr)
+		}
+		if _, err := os.Stat(filepath.Join(beadsDir, "stints", "archive", "auth.laps.json")); !os.IsNotExist(err) {
+			t.Fatalf("archived rm should remove archived file, stat err: %v", err)
+		}
+		rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+		if err != nil {
+			t.Fatalf("Load root file: %v", err)
+		}
+		if findStintRef(rootFile, "auth") != nil {
+			t.Fatalf("archived rm should remove done root ref, tasks = %#v", rootFile.Tasks)
+		}
+	})
 }
 
 // TestDoneArchiveCollisionIsRefusedWithoutOverwriting asserts a drain blocked

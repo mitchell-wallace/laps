@@ -58,13 +58,13 @@
 
 ## 8. Commands & rendering
 
-- [ ] 8.1 `laps stints ls|new <name>|enqueue <name> [pos]|show <name>|rm <name>`; `st` alias for `stints`
-- [ ] 8.2 `stints ls` lists stint files, shows lap counts for each, and shows whether each stint is queued
-- [ ] 8.3 `list --tree` renders the full recursive overview
-- [ ] 8.4 Add `stints rm --force`; default removal allows unqueued non-archived stints and archived stints (including archived stints with done refs), and refuses non-archived queued/active/claimed stints unless forced
-- [ ] 8.5 Treat unqueued stints as ordinary listed stint files with `queued=false`; no draft/unqueued lifecycle state
-- [ ] 8.6 Update `internal/cmd/hooks.go:isKnownCommand` so `stints` and `st` are treated as built-ins
-- [ ] 8.7 Tests: stints lifecycle commands; `st` alias through `runMBExecute`; `--tree` rendering; `rm` safety behavior including force, archived with done ref, and claim clearing; unqueued display/state behavior
+- [x] 8.1 `laps stints ls|new <name>|enqueue <name> [pos]|show <name>|rm <name>`; `st` alias for `stints`
+- [x] 8.2 `stints ls` lists stint files, shows lap counts for each, and shows whether each stint is queued
+- [x] 8.3 `list --tree` renders the full recursive overview
+- [x] 8.4 Add `stints rm --force`; default removal allows unqueued non-archived stints and archived stints (including archived stints with done refs), and refuses non-archived queued/active/claimed stints unless forced
+- [x] 8.5 Treat unqueued stints as ordinary listed stint files with `queued=false`; no draft/unqueued lifecycle state
+- [x] 8.6 Update `internal/cmd/hooks.go:isKnownCommand` so `stints` and `st` are treated as built-ins
+- [x] 8.7 Tests: stints lifecycle commands; `st` alias through `runMBExecute`; `--tree` rendering; `rm` safety behavior including force, archived with done ref, and claim clearing; unqueued display/state behavior
 
 ## 9. Log & status integration
 
