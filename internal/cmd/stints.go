@@ -41,7 +41,11 @@ var stintsLsCmd = &cobra.Command{
 			return
 		}
 		for _, stint := range stints {
-			fmt.Printf("%s\tlaps=%d\tqueued=%t\tarchived=%t\n", stint.Name, stint.Laps, stint.Queued, stint.Archived)
+			heldBadge := ""
+			if stint.Held {
+				heldBadge = "\theld=true"
+			}
+			fmt.Printf("%s\tlaps=%d\tqueued=%t\tarchived=%t%s\n", stint.Name, stint.Laps, stint.Queued, stint.Archived, heldBadge)
 		}
 	},
 }
@@ -143,6 +147,7 @@ type stintSummary struct {
 	Laps     int    `json:"laps"`
 	Queued   bool   `json:"queued"`
 	Archived bool   `json:"archived"`
+	Held     bool   `json:"held"`
 }
 
 type stintRemoveRefusal struct {
@@ -151,6 +156,72 @@ type stintRemoveRefusal struct {
 
 func (e *stintRemoveRefusal) Error() string {
 	return fmt.Sprintf("%s is protected (%s); use --force to remove it", e.reasons[0], strings.Join(e.reasons[1:], ", "))
+}
+
+var stintsHoldCmd = &cobra.Command{
+	Use:   "hold <name>",
+	Short: "Hold a stint so it stops the queue once it reaches the head",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		applyStintHold(args[0], true, "stints-hold", "stint.held")
+		if jsonOutput {
+			printJSON(map[string]interface{}{"stint": args[0], "held": true})
+			return
+		}
+		fmt.Println(args[0])
+	},
+}
+
+var stintsReleaseCmd = &cobra.Command{
+	Use:   "release <name>",
+	Short: "Clear a held stint so it resumes flowing through the queue",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		applyStintHold(args[0], false, "stints-release", "stint.released")
+		if jsonOutput {
+			printJSON(map[string]interface{}{"stint": args[0], "held": false})
+			return
+		}
+		fmt.Println(args[0])
+	},
+}
+
+// applyStintHold loads a non-archived stint file, sets its held flag to held,
+// and persists it. It refuses archived stints and missing stints. The
+// stint.held/stint.released event is appended ONLY when the flag actually
+// changed, so idempotent operations never double-log.
+func applyStintHold(name string, held bool, cmdName, event string) {
+	repoRoot, beadsDir, err := store.DiscoverRepoRoot()
+	if err != nil {
+		exit(2, "%v", err)
+	}
+	path, archived, err := existingStintPath(beadsDir, name)
+	if err != nil {
+		exit(2, "stints: %v", err)
+	}
+	if path == "" {
+		exit(3, "stints: stint %s not found", name)
+	}
+	if archived {
+		exit(3, "stints: stint %s is archived; cannot change its hold state", name)
+	}
+	file := loadFile(path, repoRoot, beadsDir)
+	if file.Held == held {
+		return
+	}
+	file.Held = held
+	if err := store.Save(path, file); err != nil {
+		exit(2, "stints: %v", err)
+	}
+	logEvent(beadsDir, &eventlog.Entry{
+		Event: event,
+		Cmd:   cmdName,
+		File:  fileNameForClaim(beadsDir, path),
+		Scope: name,
+		Detail: map[string]interface{}{
+			"stint": name,
+		},
+	})
 }
 
 var stintsEnqueueCmd = &cobra.Command{
@@ -285,6 +356,7 @@ func collectStintSummaries(beadsDir, repoRoot string) ([]stintSummary, error) {
 			Laps:     len(file.Tasks),
 			Queued:   queued[name],
 			Archived: archived,
+			Held:     !archived && file.Held,
 		})
 		return nil
 	}); err != nil {
@@ -487,6 +559,8 @@ func init() {
 	stintsCmd.AddCommand(stintsNewCmd)
 	stintsCmd.AddCommand(stintsEnqueueCmd)
 	stintsCmd.AddCommand(stintsShowCmd)
+	stintsCmd.AddCommand(stintsHoldCmd)
+	stintsCmd.AddCommand(stintsReleaseCmd)
 	stintsRmCmd.Flags().BoolVar(&stintsRmForce, "force", false, "remove a queued or claimed stint and clear matching state")
 	stintsCmd.AddCommand(stintsRmCmd)
 	rootCmd.AddCommand(stintsCmd)

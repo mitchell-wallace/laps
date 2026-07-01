@@ -28,11 +28,11 @@
       "title": "Add hold/release with held metadata and ls badge",
       "description": "Context: Change #4 of 4 (FINAL) in the laps repo. Assumes add-stints (stint files, schema v3, the flow-start resolver) and add-event-log-and-status (event log, status taxonomy) are merged and working — plan from that post-merge tree. Read openspec/changes/add-stints-gating/{design.md Decisions + Resolved Product Calls, specs/stint-gating/spec.md, tasks.md §1} before starting.\n\nOutcome: A held flag on non-archived stint file metadata (defaults false when absent, folded into schema v3) plus `laps stints hold \u003cname\u003e` / `laps stints release \u003cname\u003e` that target any non-archived stint (including not-yet-enqueued) and refuse archived stints. Operations are idempotent and append `stint.held` / `stint.released` events ONLY when state changes. `laps stints ls` renders held as a SEPARATE badge alongside the queued/active/done lifecycle state (DECIDED: hold is orthogonal to lifecycle — the lifecycle column keeps its value and an additional held marker flags held metadata regardless of whether the hold has taken effect at the head).\n\nFiles \u0026 scope: stint metadata + schema v3 fold in internal/store; the hold/release subcommands in internal/cmd/stints.go following the existing stints subcommand pattern; event-log append for stint.held/stint.released; stints ls rendering. Do NOT touch get/claim/status (later laps).\n\nAcceptance: `just test` + `just lint` green. Unit tests covering tasks 1.6: hold sets / release clears before and after enqueue; default missing held is false; archived target refused; idempotent ops do not double-log; held shown in stints ls. Do NOT tick tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-29T10:05:58.993467807Z",
-      "updatedAt": "2026-06-29T10:05:58.993467807Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T08:26:49.017610345Z",
+      "completedAt": "2026-07-01T08:26:49.017610345Z"
     },
     {
       "id": "laps-cdc8",

@@ -69,7 +69,10 @@ type Task struct {
 type File struct {
 	Version int    `json:"version"`
 	Prefix  string `json:"prefix,omitempty"`
-	Tasks   []Task `json:"tasks"`
+	// Held flags a non-archived stint as held. It folds into schema v3 and
+	// defaults to false when absent. It has no effect on the root queue.
+	Held  bool   `json:"held,omitempty"`
+	Tasks []Task `json:"tasks"`
 }
 
 // DiscoverRepoRoot walks up from the current working directory looking for a
@@ -380,6 +383,7 @@ func Load(path string) (*File, error) {
 	var raw struct {
 		Version *int   `json:"version"`
 		Prefix  string `json:"prefix,omitempty"`
+		Held    bool   `json:"held,omitempty"`
 		Tasks   []Task `json:"tasks"`
 	}
 	if err := dec.Decode(&raw); err != nil {
@@ -395,7 +399,7 @@ func Load(path string) (*File, error) {
 		return nil, fmt.Errorf("%w: file %s exists but is not a valid laps task file: %v", ErrStore, path, err)
 	}
 
-	return &File{Version: *raw.Version, Prefix: raw.Prefix, Tasks: raw.Tasks}, nil
+	return &File{Version: *raw.Version, Prefix: raw.Prefix, Held: raw.Held, Tasks: raw.Tasks}, nil
 }
 
 // Save marshals and writes a task file, creating parent directories if needed.

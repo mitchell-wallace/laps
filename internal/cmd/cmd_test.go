@@ -1920,6 +1920,235 @@ func TestStintsLifecycleLsShowAliasAndUnqueuedDisplay(t *testing.T) {
 	}
 }
 
+// loadStintHeld reads a stint file's held flag for hold/release tests.
+func loadStintHeld(t *testing.T, beadsDir, name string) bool {
+	t.Helper()
+	file, err := store.Load(filepath.Join(beadsDir, "stints", name+".laps.json"))
+	if err != nil {
+		t.Fatalf("Load stint %s: %v", name, err)
+	}
+	return file.Held
+}
+
+// countEvent returns how many parsed log lines carry eventName.
+func countEvent(events []map[string]interface{}, eventName string) int {
+	n := 0
+	for _, ev := range events {
+		if ev["event"] == eventName {
+			n++
+		}
+	}
+	return n
+}
+
+// TestStintsHoldReleaseTogglesFlag covers task 1.6: hold sets and release clears
+// the held flag both before the stint is enqueued and after it is queued.
+func TestStintsHoldReleaseTogglesFlag(t *testing.T) {
+	t.Run("before enqueue", func(t *testing.T) {
+		beadsDir, cleanup := setupTempRepo(t)
+		defer cleanup()
+
+		if out, errStr, code := runMB("stints", "new", "auth"); code != 0 {
+			t.Fatalf("stints new exit %d, stderr: %s, stdout: %s", code, errStr, out)
+		}
+		if loadStintHeld(t, beadsDir, "auth") {
+			t.Fatal("newly created stint should default to held=false")
+		}
+
+		if out, errStr, code := runMB("stints", "hold", "auth"); code != 0 {
+			t.Fatalf("stints hold exit %d, stderr: %s, stdout: %s", code, errStr, out)
+		}
+		if !loadStintHeld(t, beadsDir, "auth") {
+			t.Fatal("hold should set held=true on unqueued stint")
+		}
+
+		if out, errStr, code := runMB("stints", "release", "auth"); code != 0 {
+			t.Fatalf("stints release exit %d, stderr: %s, stdout: %s", code, errStr, out)
+		}
+		if loadStintHeld(t, beadsDir, "auth") {
+			t.Fatal("release should clear held back to false")
+		}
+	})
+
+	t.Run("after enqueue", func(t *testing.T) {
+		beadsDir, _ := setupActiveStintRepo(t)
+
+		if loadStintHeld(t, beadsDir, "auth") {
+			t.Fatal("enqueued stint should default to held=false")
+		}
+		if out, errStr, code := runMB("stints", "hold", "auth"); code != 0 {
+			t.Fatalf("stints hold exit %d, stderr: %s, stdout: %s", code, errStr, out)
+		}
+		if !loadStintHeld(t, beadsDir, "auth") {
+			t.Fatal("hold should set held=true on queued stint")
+		}
+		if out, errStr, code := runMB("stints", "release", "auth"); code != 0 {
+			t.Fatalf("stints release exit %d, stderr: %s, stdout: %s", code, errStr, out)
+		}
+		if loadStintHeld(t, beadsDir, "auth") {
+			t.Fatal("release should clear held back to false")
+		}
+	})
+}
+
+// TestStintsHoldReleaseRefusesArchived covers task 1.6: hold/release refuse an
+// archived stint with exit 3 and do not mutate it.
+func TestStintsHoldReleaseRefusesArchived(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	// Seed an archived-only auth stint directly in the archive directory.
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "archive", "auth.laps.json"), "auth",
+		store.Task{Kind: store.KindLap, ID: "auth-aaaa", Title: "Done", IsDone: true, CompletedAt: &resolverTestTime, Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+
+	for _, op := range []string{"hold", "release"} {
+		if out, errStr, code := runMB("stints", op, "auth"); code != 3 {
+			t.Fatalf("stints %s archived exit = %d, want 3; stderr: %s, stdout: %s", op, code, errStr, out)
+		}
+	}
+
+	archivedFile, err := store.Load(filepath.Join(beadsDir, "stints", "archive", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load archived auth: %v", err)
+	}
+	if archivedFile.Held {
+		t.Fatal("archived stint must not be mutated by hold/release attempts")
+	}
+}
+
+// TestStintsHoldReleaseIdempotentNoDoubleLog covers task 1.6: already-held /
+// already-released operations do not append a second event, and each
+// state-changing op appends exactly one scoped event with the right shape.
+func TestStintsHoldReleaseIdempotentNoDoubleLog(t *testing.T) {
+	assertNoLAPS_SESSION(t)
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	if out, errStr, code := runMB("stints", "new", "auth"); code != 0 {
+		t.Fatalf("stints new exit %d, stderr: %s, stdout: %s", code, errStr, out)
+	}
+
+	// First hold changes state -> one event; second hold is a no-op -> no event.
+	if _, _, code := runMB("stints", "hold", "auth"); code != 0 {
+		t.Fatalf("first hold exit %d", code)
+	}
+	if _, _, code := runMB("stints", "hold", "auth"); code != 0 {
+		t.Fatalf("idempotent hold exit %d", code)
+	}
+	events := readLogEvents(t, beadsDir)
+	if n := countEvent(events, "stint.held"); n != 1 {
+		t.Fatalf("stint.held count = %d, want 1; events: %v", n, eventsOf(events))
+	}
+	held := findLogEvent(t, events, "stint.held")
+	if held["scope"] != "auth" {
+		t.Fatalf("stint.held scope = %v, want auth", held["scope"])
+	}
+	if held["file"] != "stints/auth.laps.json" {
+		t.Fatalf("stint.held file = %v, want stints/auth.laps.json", held["file"])
+	}
+	if held["cmd"] != "stints-hold" {
+		t.Fatalf("stint.held cmd = %v, want stints-hold", held["cmd"])
+	}
+	if detail := held["detail"].(map[string]interface{}); detail["stint"] != "auth" {
+		t.Fatalf("unexpected stint.held detail: %#v", detail)
+	}
+
+	// First release changes state -> one event; second release is a no-op.
+	if _, _, code := runMB("stints", "release", "auth"); code != 0 {
+		t.Fatalf("first release exit %d", code)
+	}
+	if _, _, code := runMB("stints", "release", "auth"); code != 0 {
+		t.Fatalf("idempotent release exit %d", code)
+	}
+	events = readLogEvents(t, beadsDir)
+	if n := countEvent(events, "stint.released"); n != 1 {
+		t.Fatalf("stint.released count = %d, want 1; events: %v", n, eventsOf(events))
+	}
+	if n := countEvent(events, "stint.held"); n != 1 {
+		t.Fatalf("stint.held count after release = %d, want 1", n)
+	}
+	released := findLogEvent(t, events, "stint.released")
+	if released["scope"] != "auth" {
+		t.Fatalf("stint.released scope = %v, want auth", released["scope"])
+	}
+	if released["cmd"] != "stints-release" {
+		t.Fatalf("stint.released cmd = %v, want stints-release", released["cmd"])
+	}
+}
+
+// TestStintsLsShowsHeldBadge covers task 1.6 / 1.5: held renders as a separate
+// held=true badge alongside queued/archived, a non-held stint shows no badge,
+// and the JSON output carries the held boolean. (Lifecycle state stays queued.)
+func TestStintsLsShowsHeldBadge(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	if out, errStr, code := runMB("stints", "new", "auth"); code != 0 {
+		t.Fatalf("stints new exit %d, stderr: %s, stdout: %s", code, errStr, out)
+	}
+
+	// Pre-hold: no held badge.
+	out, errStr, code := runMB("stints", "ls")
+	if code != 0 {
+		t.Fatalf("stints ls exit %d, stderr: %s", code, errStr)
+	}
+	if strings.Contains(out, "held=") {
+		t.Fatalf("non-held stint should not show held badge, got: %s", out)
+	}
+
+	// Hold, then ls shows the separate held badge while queued stays false.
+	if _, _, code := runMB("stints", "hold", "auth"); code != 0 {
+		t.Fatalf("stints hold exit %d", code)
+	}
+	out, errStr, code = runMB("stints", "ls")
+	if code != 0 {
+		t.Fatalf("stints ls exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "queued=false\tarchived=false\theld=true") {
+		t.Fatalf("held unqueued stint should show queued=false archived=false held=true, got: %s", out)
+	}
+
+	// JSON output carries held=true.
+	jsonOut, _, code := runMB("--json-output", "stints", "ls")
+	if code != 0 {
+		t.Fatalf("stints ls --json-output exit %d", code)
+	}
+	var parsed struct {
+		Stints []stintSummary `json:"stints"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &parsed); err != nil {
+		t.Fatalf("unmarshal stints ls json: %v\n%s", err, jsonOut)
+	}
+	if len(parsed.Stints) != 1 || parsed.Stints[0].Name != "auth" || !parsed.Stints[0].Held {
+		t.Fatalf("json stints = %+v, want single auth with Held=true", parsed.Stints)
+	}
+
+	// Enqueue and hold: lifecycle (queued) is orthogonal to the held badge.
+	if _, _, code := runMB("stints", "enqueue", "auth"); code != 0 {
+		t.Fatalf("stints enqueue exit %d", code)
+	}
+	out, _, code = runMB("stints", "ls")
+	if code != 0 {
+		t.Fatalf("stints ls queued exit %d", code)
+	}
+	if !strings.Contains(out, "queued=true\tarchived=false\theld=true") {
+		t.Fatalf("held queued stint should show queued=true archived=false held=true, got: %s", out)
+	}
+
+	// Release: badge disappears while queued stays true.
+	if _, _, code := runMB("stints", "release", "auth"); code != 0 {
+		t.Fatalf("stints release exit %d", code)
+	}
+	out, _, code = runMB("stints", "ls")
+	if code != 0 {
+		t.Fatalf("stints ls released exit %d", code)
+	}
+	if !strings.Contains(out, "queued=true\tarchived=false\n") || strings.Contains(out, "held=") {
+		t.Fatalf("released queued stint should show queued=true archived=false with no held badge, got: %s", out)
+	}
+}
+
 // TestListTreeAndStintRefLineRendering verifies the mixed root queue remains
 // legible without --tree and --tree descends through nested stint refs.
 func TestListTreeAndStintRefLineRendering(t *testing.T) {

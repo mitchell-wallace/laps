@@ -610,6 +610,63 @@ func TestLoadMissingKindDefaultsToLap(t *testing.T) {
 	}
 }
 
+// TestLoadHeldDefaultsFalseAndRoundTrips asserts the held flag folds into
+// schema v3: a v3 file written without "held" loads as false, an explicit
+// "held":true loads as true, and Save omits the field when false / writes it
+// when true (task 1.1).
+func TestLoadHeldDefaultsFalseAndRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+
+	missingPath := filepath.Join(dir, "missing.json")
+	missing := `{"version":3,"tasks":[{"id":"x","title":"y","isDone":false,"order":1,"createdAt":"2026-04-28T10:15:00Z","updatedAt":"2026-04-28T10:15:00Z"}]}`
+	if err := os.WriteFile(missingPath, []byte(missing), 0644); err != nil {
+		t.Fatal(err)
+	}
+	missingFile, err := Load(missingPath)
+	if err != nil {
+		t.Fatalf("Load missing held: %v", err)
+	}
+	if missingFile.Held {
+		t.Fatalf("file without held field loaded Held=true; want false")
+	}
+	if strings.Contains(missing, "\"held\"") {
+		t.Fatalf("test fixture should not contain a held field")
+	}
+
+	heldPath := filepath.Join(dir, "held.json")
+	held := `{"version":3,"held":true,"tasks":[{"id":"x","title":"y","isDone":false,"order":1,"createdAt":"2026-04-28T10:15:00Z","updatedAt":"2026-04-28T10:15:00Z"}]}`
+	if err := os.WriteFile(heldPath, []byte(held), 0644); err != nil {
+		t.Fatal(err)
+	}
+	heldFile, err := Load(heldPath)
+	if err != nil {
+		t.Fatalf("Load held: %v", err)
+	}
+	if !heldFile.Held {
+		t.Fatalf("file with held:true loaded Held=false; want true")
+	}
+
+	// Round-trip: a held file persists held, a released file omits it.
+	if err := Save(heldPath, heldFile); err != nil {
+		t.Fatalf("Save held: %v", err)
+	}
+	if body, err := os.ReadFile(heldPath); err != nil {
+		t.Fatal(err)
+	} else if !strings.Contains(string(body), "\"held\": true") {
+		t.Fatalf("held file should persist \"held\": true, got: %s", body)
+	}
+
+	heldFile.Held = false
+	if err := Save(heldPath, heldFile); err != nil {
+		t.Fatalf("Save released: %v", err)
+	}
+	if body, err := os.ReadFile(heldPath); err != nil {
+		t.Fatal(err)
+	} else if strings.Contains(string(body), "\"held\"") {
+		t.Fatalf("released file should omit held, got: %s", body)
+	}
+}
+
 func TestMixedQueueRoundTripsLapAndStintRefsOrderedTogether(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "laps.json")
