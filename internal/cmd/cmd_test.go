@@ -510,6 +510,53 @@ func setupTwoStints(t *testing.T) (beadsDir, authLapID, searchLapID, searchStint
 	return beadsDir, authLapID, "srch-bbbb", "search"
 }
 
+func setupNestedStintRepo(t *testing.T, authHasRemainingLap bool) (beadsDir, searchLapID string) {
+	t.Helper()
+	beadsDir, cleanup := setupTempRepo(t)
+	t.Cleanup(cleanup)
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "", store.Task{
+		Kind:      store.KindStint,
+		ID:        "root-auth",
+		Ref:       "auth",
+		Title:     "Auth stint",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+	authTasks := []store.Task{{
+		Kind:      store.KindStint,
+		ID:        "auth-search",
+		Ref:       "search",
+		Title:     "Search stint",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	}}
+	if authHasRemainingLap {
+		authTasks = append(authTasks, store.Task{
+			Kind:        store.KindLap,
+			ID:          "auth-2222",
+			Title:       "Remaining auth",
+			Description: "auth details",
+			Order:       2,
+			CreatedAt:   resolverTestTime,
+			UpdatedAt:   resolverTestTime,
+		})
+	}
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth", authTasks...)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch", store.Task{
+		Kind:        store.KindLap,
+		ID:          "srch-1111",
+		Title:       "Inside search",
+		Description: "search details",
+		Order:       1,
+		CreatedAt:   resolverTestTime,
+		UpdatedAt:   resolverTestTime,
+	})
+	return beadsDir, "srch-1111"
+}
+
 // TestAddHeadDefaultsToActiveStint verifies the default scope (--active) lands
 // a new head lap inside the active stint, not in root, while --root bypasses the
 // descent and writes to root. (task 4.4)
@@ -1186,6 +1233,216 @@ func TestStintDoneLogsScopeAndDrainEvents(t *testing.T) {
 	}
 	if detail := stintArchived["detail"].(map[string]interface{}); detail["to"] != "stints/archive/auth.laps.json" {
 		t.Fatalf("unexpected stint.archived detail: %#v", detail)
+	}
+}
+
+func TestDoneNestedFinalLapDrainsChildThroughParentRef(t *testing.T) {
+	beadsDir, searchLapID := setupNestedStintRepo(t, true)
+
+	if _, errStr, code := runMB("done", searchLapID); code != 0 {
+		t.Fatalf("done nested final stint lap exit %d, stderr: %s", code, errStr)
+	}
+
+	rootPath := filepath.Join(beadsDir, "laps.json")
+	authPath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	searchPath := filepath.Join(beadsDir, "stints", "search.laps.json")
+	searchArchivePath := filepath.Join(beadsDir, "stints", "archive", "search.laps.json")
+	if _, err := os.Stat(searchPath); !os.IsNotExist(err) {
+		t.Fatalf("search active stint file should be archived, stat err: %v", err)
+	}
+	if _, err := os.Stat(searchArchivePath); err != nil {
+		t.Fatalf("search archive should exist: %v", err)
+	}
+	authFile, err := store.Load(authPath)
+	if err != nil {
+		t.Fatalf("Load active auth stint file: %v", err)
+	}
+	searchRef := taskByIDInFile(t, authFile, "auth-search")
+	if !searchRef.IsDone || searchRef.CompletedAt == nil {
+		t.Fatalf("auth search ref should be done after child drain, got %+v", searchRef)
+	}
+	authRemaining := taskByIDInFile(t, authFile, "auth-2222")
+	if authRemaining.IsDone {
+		t.Fatalf("remaining auth lap should keep auth active, got %+v", authRemaining)
+	}
+	rootFile, err := store.Load(rootPath)
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	rootRef := taskByIDInFile(t, rootFile, "root-auth")
+	if rootRef.IsDone || rootRef.CompletedAt != nil {
+		t.Fatalf("root auth ref should remain todo while auth has todo laps, got %+v", rootRef)
+	}
+}
+
+func TestDoneNestedDrainCascadesToArchiveParent(t *testing.T) {
+	beadsDir, searchLapID := setupNestedStintRepo(t, false)
+
+	if _, errStr, code := runMB("done", searchLapID); code != 0 {
+		t.Fatalf("done nested cascading stint lap exit %d, stderr: %s", code, errStr)
+	}
+
+	for _, path := range []string{
+		filepath.Join(beadsDir, "stints", "search.laps.json"),
+		filepath.Join(beadsDir, "stints", "auth.laps.json"),
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("active stint file %s should be archived, stat err: %v", path, err)
+		}
+	}
+	for _, path := range []string{
+		filepath.Join(beadsDir, "stints", "archive", "search.laps.json"),
+		filepath.Join(beadsDir, "stints", "archive", "auth.laps.json"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("archive %s should exist: %v", path, err)
+		}
+	}
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	rootRef := taskByIDInFile(t, rootFile, "root-auth")
+	if !rootRef.IsDone || rootRef.CompletedAt == nil {
+		t.Fatalf("root auth ref should be done after cascading drain, got %+v", rootRef)
+	}
+	authArchive, err := store.Load(filepath.Join(beadsDir, "stints", "archive", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load archived auth stint file: %v", err)
+	}
+	searchRef := taskByIDInFile(t, authArchive, "auth-search")
+	if !searchRef.IsDone || searchRef.CompletedAt == nil {
+		t.Fatalf("archived auth search ref should be done, got %+v", searchRef)
+	}
+}
+
+func TestNestedDrainFailureLeavesNoDanglingParentRef(t *testing.T) {
+	t.Run("archive collision", func(t *testing.T) {
+		beadsDir, searchLapID := setupNestedStintRepo(t, true)
+		authPath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+		searchPath := filepath.Join(beadsDir, "stints", "search.laps.json")
+		searchArchivePath := filepath.Join(beadsDir, "stints", "archive", "search.laps.json")
+		if err := os.MkdirAll(filepath.Dir(searchArchivePath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sentinel := []byte(`{"version":3,"prefix":"old","tasks":[]}`)
+		if err := os.WriteFile(searchArchivePath, sentinel, 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, errStr, code := runMB("done", searchLapID)
+		if code == 0 {
+			t.Fatalf("expected nested archive collision to fail, got exit 0")
+		}
+		if !strings.Contains(errStr, "archived stint file already exists") {
+			t.Fatalf("expected archive collision error, got: %s", errStr)
+		}
+		assertNestedNoDanglingRef(t, authPath, "auth-search", searchPath, searchArchivePath)
+		gotArchive, err := os.ReadFile(searchArchivePath)
+		if err != nil {
+			t.Fatalf("Read archive collision target: %v", err)
+		}
+		if string(gotArchive) != string(sentinel) {
+			t.Fatalf("archive collision target was overwritten: got %s want %s", gotArchive, sentinel)
+		}
+	})
+
+	t.Run("parent save failure", func(t *testing.T) {
+		beadsDir, _ := setupNestedStintRepo(t, true)
+		authPath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+		searchPath := filepath.Join(beadsDir, "stints", "search.laps.json")
+		searchArchivePath := filepath.Join(beadsDir, "stints", "archive", "search.laps.json")
+		now := time.Now().UTC()
+		searchFile, err := store.Load(searchPath)
+		if err != nil {
+			t.Fatalf("Load search stint file: %v", err)
+		}
+		searchLap := taskByIDInFile(t, searchFile, "srch-1111")
+		searchLap.IsDone = true
+		searchLap.CompletedAt = &now
+		searchLap.UpdatedAt = now
+		if err := store.Save(searchPath, searchFile); err != nil {
+			t.Fatalf("Save completed search stint file: %v", err)
+		}
+		authFile, err := store.Load(authPath)
+		if err != nil {
+			t.Fatalf("Load auth stint file: %v", err)
+		}
+		searchRef := taskByIDInFile(t, authFile, "auth-search")
+		err = finishStintDrain(&pendingStintDrain{
+			Chain: []stintDescent{{
+				ParentPath: filepath.Join(authPath, "cannot-save.json"),
+				ParentFile: authFile,
+				RefIndex:   0,
+				Ref:        searchRef,
+				ChildPath:  searchPath,
+				ChildName:  "search",
+				Scope:      "auth/search",
+			}},
+		}, now)
+		if err == nil {
+			t.Fatalf("expected parent save failure")
+		}
+		assertNestedNoDanglingRef(t, authPath, "auth-search", searchPath, searchArchivePath)
+	})
+}
+
+func TestDoneUndoRestoresArchivedNestedStintAndReachability(t *testing.T) {
+	beadsDir, searchLapID := setupNestedStintRepo(t, false)
+
+	if _, errStr, code := runMB("done", searchLapID); code != 0 {
+		t.Fatalf("done nested cascading stint lap exit %d, stderr: %s", code, errStr)
+	}
+	if _, errStr, code := runMB("done", "undo"); code != 0 {
+		t.Fatalf("done undo nested archived lap exit %d, stderr: %s", code, errStr)
+	}
+
+	rootPath := filepath.Join(beadsDir, "laps.json")
+	authPath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	searchPath := filepath.Join(beadsDir, "stints", "search.laps.json")
+	for _, path := range []string{authPath, searchPath} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("active stint file %s should be restored: %v", path, err)
+		}
+	}
+	for _, path := range []string{
+		filepath.Join(beadsDir, "stints", "archive", "auth.laps.json"),
+		filepath.Join(beadsDir, "stints", "archive", "search.laps.json"),
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("archive %s should be removed by restore, stat err: %v", path, err)
+		}
+	}
+	rootFile, err := store.Load(rootPath)
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	rootRef := taskByIDInFile(t, rootFile, "root-auth")
+	if rootRef.IsDone || rootRef.CompletedAt != nil {
+		t.Fatalf("root auth ref should be reopened, got %+v", rootRef)
+	}
+	authFile, err := store.Load(authPath)
+	if err != nil {
+		t.Fatalf("Load restored auth stint file: %v", err)
+	}
+	searchRef := taskByIDInFile(t, authFile, "auth-search")
+	if searchRef.IsDone || searchRef.CompletedAt != nil {
+		t.Fatalf("auth search ref should be reopened, got %+v", searchRef)
+	}
+	searchFile, err := store.Load(searchPath)
+	if err != nil {
+		t.Fatalf("Load restored search stint file: %v", err)
+	}
+	searchLap := taskByIDInFile(t, searchFile, searchLapID)
+	if searchLap.IsDone || searchLap.CompletedAt != nil {
+		t.Fatalf("search lap should be reopened, got %+v", searchLap)
+	}
+	out, errStr, code := runMB("get")
+	if code != 0 {
+		t.Fatalf("get restored nested lap exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "Inside search") {
+		t.Fatalf("restored nested lap should be reachable through active resolution, got: %s", out)
 	}
 }
 
@@ -3509,6 +3766,36 @@ func taskByIDInFile(t *testing.T, f *store.File, id string) *store.Task {
 	}
 	t.Fatalf("task %s not found in file: %#v", id, f.Tasks)
 	return nil
+}
+
+func assertNestedNoDanglingRef(t *testing.T, parentPath, refID, activeChildPath, archivedChildPath string) {
+	t.Helper()
+	parentFile, err := store.Load(parentPath)
+	if err != nil {
+		t.Fatalf("Load parent file %s: %v", parentPath, err)
+	}
+	ref := taskByIDInFile(t, parentFile, refID)
+	activeExists := pathExists(t, activeChildPath)
+	archivedExists := pathExists(t, archivedChildPath)
+	if ref.IsDone && activeExists {
+		t.Fatalf("forbidden state: done parent ref over present active child file; ref=%+v active=%s", ref, activeChildPath)
+	}
+	if !ref.IsDone && !activeExists && archivedExists {
+		t.Fatalf("forbidden state: todo parent ref points at missing active child while archived child exists; ref=%+v archive=%s", ref, archivedChildPath)
+	}
+}
+
+func pathExists(t *testing.T, path string) bool {
+	t.Helper()
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	t.Fatalf("Stat %s: %v", path, err)
+	return false
 }
 
 // rootTodoIDs returns unfinished task ids in normalized root queue order.
