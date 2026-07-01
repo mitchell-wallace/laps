@@ -135,15 +135,27 @@ snapshot with claim.valid=false; it is reported, never silently cleared.`,
 			assigneeTodos[role]++
 		}
 
-		// A claim is valid only when it names a lap in THIS file that is still a
-		// todo. A different-file claim, a deleted/pruned lap, or a completed lap is
-		// a dangling claim: surfaced as valid=false without auto-clearing.
+		// A claim is valid when its recorded scope still contains the claimed lap as
+		// todo. A deleted/pruned lap, completed lap, or missing scope is surfaced as
+		// valid=false without auto-clearing.
 		claimValid := false
-		if claim.Lap != "" && claim.File == selectedFile {
-			for i := range file.Tasks {
-				if file.Tasks[i].ID == claim.Lap {
-					claimValid = !file.Tasks[i].IsDone
-					break
+		if claim.Lap != "" {
+			claimPath, err := pathForClaim(beadsDir, claim)
+			if err == nil {
+				claimFile := file
+				if claimPath != path {
+					claimFile, err = loadExistingFile(claimPath, repoRoot, beadsDir)
+				}
+				if err == nil {
+					for i := range claimFile.Tasks {
+						if claimFile.Tasks[i].ID == claim.Lap {
+							claimValid = !claimFile.Tasks[i].IsDone
+							break
+						}
+					}
+				} else if !errors.Is(err, store.ErrEmptyFile) {
+					exitCode = 2
+					exit(2, "status: %v", err)
 				}
 			}
 		}

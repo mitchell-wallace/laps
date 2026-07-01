@@ -198,6 +198,9 @@ var stintsEnqueueCmd = &cobra.Command{
 
 		rootPath := scopedRootPath(beadsDir)
 		rootFile := loadFile(rootPath, repoRoot, beadsDir)
+		if len(findStintRefs(rootFile, name)) > 0 {
+			exit(3, "stints enqueue: stint %s is already queued", name)
+		}
 		if position == "after" && store.FindTask(rootFile, afterID) == nil {
 			ctx := &activeContext{Path: rootPath, Scope: "root", File: rootFile, Head: firstTodo(rootFile)}
 			exitIfOutOfScope(beadsDir, repoRoot, ctx, afterID)
@@ -384,7 +387,7 @@ func removeStint(beadsDir, repoRoot, name string, force bool) error {
 	}
 	if activeExists && !force {
 		var reasons []string
-		if hasTodoRef(matchingRefs) {
+		if len(matchingRefs) > 0 {
 			reasons = append(reasons, "queued")
 		}
 		if isActiveStint(rootFile, name) {
@@ -398,16 +401,6 @@ func removeStint(beadsDir, repoRoot, name string, force bool) error {
 		}
 	}
 
-	if activeExists {
-		if err := os.Remove(activePath); err != nil {
-			return err
-		}
-	}
-	if archivedExists {
-		if err := os.Remove(archivedPath); err != nil {
-			return err
-		}
-	}
 	if len(matchingRefs) > 0 && (force || archivedExists) {
 		rootFile.Tasks = removeStintRefs(rootFile.Tasks, name)
 		if err := store.Save(rootPath, rootFile); err != nil {
@@ -416,6 +409,16 @@ func removeStint(beadsDir, repoRoot, name string, force bool) error {
 	}
 	if force && claimMatches {
 		if err := store.RemoveClaim(beadsDir); err != nil {
+			return err
+		}
+	}
+	if activeExists {
+		if err := os.Remove(activePath); err != nil {
+			return err
+		}
+	}
+	if archivedExists {
+		if err := os.Remove(archivedPath); err != nil {
 			return err
 		}
 	}
@@ -440,15 +443,6 @@ func findStintRefs(file *store.File, name string) []*store.Task {
 		}
 	}
 	return refs
-}
-
-func hasTodoRef(refs []*store.Task) bool {
-	for _, ref := range refs {
-		if !ref.IsDone {
-			return true
-		}
-	}
-	return false
 }
 
 func isActiveStint(rootFile *store.File, name string) bool {

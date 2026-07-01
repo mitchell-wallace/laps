@@ -362,6 +362,9 @@ func TestScopeFlagsResolveQueuePaths(t *testing.T) {
 		t.Fatalf("root file tasks = %#v", rootFile.Tasks)
 	}
 
+	if out, errStr, code := runMB("stints", "new", "auth"); code != 0 {
+		t.Fatalf("stints new exit %d, stderr: %s, stdout: %s", code, errStr, out)
+	}
 	if out, errStr, code := runMB("add", "head", "--stint", "auth", "--title", "Stint scoped"); code != 0 {
 		t.Fatalf("add --stint exit %d, stderr: %s, stdout: %s", code, errStr, out)
 	}
@@ -377,6 +380,22 @@ func TestScopeFlagsResolveQueuePaths(t *testing.T) {
 		t.Fatalf("list --active exit %d, stderr: %s", code, errStr)
 	} else if !strings.Contains(out, "Root scoped") {
 		t.Fatalf("list --active output = %q, want root task", out)
+	}
+}
+
+func TestScopeStintRequiresExistingActiveFile(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("add", "head", "--stint", "typo", "--title", "Should not create")
+	if code != 3 {
+		t.Fatalf("add --stint missing exit %d, want 3; stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "stint typo not found") {
+		t.Fatalf("missing stint error = %q", errStr)
+	}
+	if _, err := os.Stat(filepath.Join(beadsDir, "stints", "typo.laps.json")); !os.IsNotExist(err) {
+		t.Fatalf("missing --stint must not create stint file, stat err: %v", err)
 	}
 }
 
@@ -965,6 +984,25 @@ func TestStintsEnqueueDefaultsToTail(t *testing.T) {
 	}
 }
 
+func TestStintsEnqueueRejectsDuplicateRef(t *testing.T) {
+	beadsDir, _ := setupActiveStintRepo(t)
+
+	_, errStr, code := runMB("stints", "enqueue", "auth")
+	if code != 3 {
+		t.Fatalf("duplicate enqueue exit %d, want 3; stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "already queued") {
+		t.Fatalf("duplicate enqueue should explain queued stint, got: %s", errStr)
+	}
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	if refs := findStintRefs(rootFile, "auth"); len(refs) != 1 {
+		t.Fatalf("duplicate enqueue should leave exactly one auth ref, got %d in %#v", len(refs), rootFile.Tasks)
+	}
+}
+
 // TestStintsEnqueueHeadPreemptsAndLaterResumesWithProgress asserts head enqueue
 // makes a new stint active without changing the paused stint file, and once the
 // preempting root ref is drained, the original stint resumes with its remaining
@@ -1200,6 +1238,26 @@ func TestStatusReportsActiveStintProgress(t *testing.T) {
 	stints, ok := m["stints"].([]interface{})
 	if !ok || len(stints) == 0 {
 		t.Fatalf("expected per-stint progress rows, got: %#v", m["stints"])
+	}
+}
+
+func TestStatusValidatesClaimInRecordedScope(t *testing.T) {
+	_, authLapID := setupActiveStintRepo(t)
+
+	if _, errStr, code := runMB("claim", authLapID); code != 0 {
+		t.Fatalf("claim exit %d, stderr: %s", code, errStr)
+	}
+	out, errStr, code := runMB("status", "--json-output")
+	if code != 0 {
+		t.Fatalf("status json exit %d, stderr: %s", code, errStr)
+	}
+	m := parseStatusJSON(t, out)
+	claim, ok := m["claim"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("claim missing from status JSON: %#v", m["claim"])
+	}
+	if claim["valid"] != true || claim["lap"] != authLapID || claim["file"] != "stints/auth.laps.json" {
+		t.Fatalf("status should validate scoped claim, got: %#v", claim)
 	}
 }
 
@@ -1547,6 +1605,42 @@ func TestStintsRmSafetyMatrix(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(beadsDir, "stints", "draft.laps.json")); !os.IsNotExist(err) {
 			t.Fatalf("unqueued rm should remove active file, stat err: %v", err)
+		}
+	})
+
+	t.Run("refuses non archived done ref by default", func(t *testing.T) {
+		beadsDir, _ := setupActiveStintRepo(t)
+		rootPath := filepath.Join(beadsDir, "laps.json")
+		rootFile, err := store.Load(rootPath)
+		if err != nil {
+			t.Fatalf("Load root file: %v", err)
+		}
+		ref := findStintRef(rootFile, "auth")
+		if ref == nil {
+			t.Fatalf("missing auth ref in setup")
+		}
+		ref.IsDone = true
+		ref.CompletedAt = &resolverTestTime
+		if err := store.Save(rootPath, rootFile); err != nil {
+			t.Fatalf("Save root file: %v", err)
+		}
+
+		_, errStr, code := runMB("stints", "rm", "auth")
+		if code == 0 {
+			t.Fatalf("expected active stint with done ref to require force")
+		}
+		if !strings.Contains(errStr, "queued") || !strings.Contains(errStr, "--force") {
+			t.Fatalf("done-ref refusal should name queued/--force, got: %s", errStr)
+		}
+		if _, err := os.Stat(filepath.Join(beadsDir, "stints", "auth.laps.json")); err != nil {
+			t.Fatalf("refused rm should leave active file: %v", err)
+		}
+		rootFile, err = store.Load(rootPath)
+		if err != nil {
+			t.Fatalf("Reload root file: %v", err)
+		}
+		if findStintRef(rootFile, "auth") == nil {
+			t.Fatalf("refused rm should leave done root ref, tasks = %#v", rootFile.Tasks)
 		}
 	})
 

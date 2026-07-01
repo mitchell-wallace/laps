@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/mitchell-wallace/laps/internal/store"
@@ -49,6 +51,12 @@ func scopedStorePath(beadsDir string) string {
 		if err != nil {
 			exit(2, "%v", err)
 		}
+		if _, err := os.Stat(path); err != nil {
+			if os.IsNotExist(err) {
+				exit(3, "stint %s not found", scopeStint)
+			}
+			exit(2, "%v", err)
+		}
 		return path
 	}
 	if scopeRoot {
@@ -58,6 +66,9 @@ func scopedStorePath(beadsDir string) string {
 }
 
 func resolveScopeStintPath(beadsDir, name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("stint name cannot be blank")
+	}
 	return store.ResolveStintFile(beadsDir, name)
 }
 

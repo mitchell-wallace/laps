@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/mitchell-wallace/laps/internal/eventlog"
@@ -284,7 +285,15 @@ func finishStintDrain(drain *pendingStintDrain, completedAt time.Time) error {
 	drain.RootRef.IsDone = true
 	drain.RootRef.CompletedAt = &completedAt
 	drain.RootRef.UpdatedAt = completedAt
-	return store.Save(drain.RootPath, drain.RootFile)
+	if err := store.Save(drain.RootPath, drain.RootFile); err != nil {
+		drain.RootRef.IsDone = false
+		drain.RootRef.CompletedAt = nil
+		if rollbackErr := os.Rename(drain.Dst, drain.Src); rollbackErr != nil {
+			return fmt.Errorf("save root ref after archive: %v; additionally failed to restore archived stint: %v", err, rollbackErr)
+		}
+		return err
+	}
+	return nil
 }
 
 func findStintRef(file *store.File, stint string) *store.Task {
