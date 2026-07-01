@@ -127,10 +127,20 @@
       "title": "VERIFY Phase B+C: resolver, scope flags, scoped structure ops",
       "description": "Context: Laps 5-9 complete (resolver, scope flags, scoped structure ops). Natural slice boundary (all user-visible scope UX before the stint-lifecycle infra). Use the openspec-verify-change skill against `add-stints`.\n\nOutcome: Verified report. Check off tasks.md boxes for 2.1-2.4, 3.1-3.5, 4.1-4.4, and 10.1 ONLY if thoroughly done.\n\nFiles \u0026 scope: Read-only review. Identify the branch/merge target BEFORE diffing. Diff \u003ctarget\u003e...HEAD for the Phase B+C changes.\n\nDesign: Do not rewrite history. Highest-priority line to verify: resolver cycle-detection keying MUST be physical stint identity (ref name / child-file path), NOT the slash-path scope string. Construct the A-\u003eB-\u003eA mental model and confirm the implementation keys on ref/child-path. Second: confirm --active is detected via .Changed (not default-true), or cobra mutual exclusion false-positives every invocation. Third: confirm MarkFlagsMutuallyExclusive includes --file on every queue-targeting command, the stint-path helper is distinct from ResolveFile (.laps/stints/X.laps.json vs .laps/X.json), the reset harness covers the new flag sets, out-of-scope errors NAME the stint, and delete --force clears the matching claim. Task 10.1 dependency confirmation must be evident (move/edit/assign present from improve-cli-ergonomics). Pre-existing dependency work in the diff is baseline.\n\nAcceptance: Report identifies correct/missing/blockers. Check 2.*, 3.*, 4.*, and 10.1 boxes. Open head laps for gaps too big for a one-liner.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-29T10:09:28.111365079Z",
-      "updatedAt": "2026-06-29T10:09:28.111365079Z",
+      "updatedAt": "2026-07-01T01:53:55.040350458Z",
+      "completedAt": "2026-07-01T01:53:55.040350458Z"
+    },
+    {
+      "id": "work-be07",
+      "title": "Fix --active handling for count/prune scopes",
+      "description": "`count` and `prune` currently add the scope flags but still operate on the raw path from `getStorePath()`, so the default active scope does not descend into the deepest active stint. Wire both commands through active-context resolution (active resolves to the deepest active file; root/stint remain direct) and add regression coverage for count/prune scope behavior.",
+      "isDone": false,
+      "order": 589824,
+      "createdAt": "2026-07-01T01:53:55.027708085Z",
+      "updatedAt": "2026-07-01T01:53:55.027708085Z",
       "completedAt": null
     },
     {
