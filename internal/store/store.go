@@ -814,7 +814,7 @@ func validatePrefix(prefix string) error {
 		return fmt.Errorf("prefix %q must be 4 lowercase alphanumeric characters", prefix)
 	}
 	for _, r := range prefix {
-		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
 			return fmt.Errorf("prefix %q must be 4 lowercase alphanumeric characters", prefix)
 		}
 	}

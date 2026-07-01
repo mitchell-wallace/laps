@@ -29,9 +29,9 @@ When a claimed task is completed, .laps/claim is cleared.`,
 
 		var task *store.Task
 		selectedFile := store.ResolveFile(fileFlag)
-		claimFile := selectedFile
-		hookScope := "root"
-		eventScope := "root"
+		var claimFile string
+		var hookScope string
+		var eventScope string
 
 		if len(args) > 0 {
 			id := args[0]
@@ -105,7 +105,7 @@ When a claimed task is completed, .laps/claim is cleared.`,
 		task.IsDone = true
 		task.CompletedAt = &now
 		task.UpdatedAt = now
-		drain, err := prepareStintDrain(beadsDir, repoRoot, path, file)
+		drain, shouldDrain, err := prepareStintDrain(beadsDir, repoRoot, path, file)
 		if err != nil {
 			exitCode = 2
 			exit(2, "done: %v", err)
@@ -114,7 +114,7 @@ When a claimed task is completed, .laps/claim is cleared.`,
 			exitCode = 2
 			exit(2, "done: %v", err)
 		}
-		if drain != nil {
+		if shouldDrain {
 			if err := finishStintDrain(drain, now); err != nil {
 				exitCode = 2
 				exit(2, "done: %v", err)
@@ -129,7 +129,7 @@ When a claimed task is completed, .laps/claim is cleared.`,
 			Title:    task.Title,
 			Assignee: task.Assignee,
 		})
-		if drain != nil {
+		if shouldDrain {
 			logEvent(beadsDir, &eventlog.Entry{
 				Event: "stint.completed",
 				Cmd:   "done",
@@ -250,22 +250,22 @@ type pendingStintDrain struct {
 	Dst      string
 }
 
-func prepareStintDrain(beadsDir, repoRoot, path string, file *store.File) (*pendingStintDrain, error) {
+func prepareStintDrain(beadsDir, repoRoot, path string, file *store.File) (*pendingStintDrain, bool, error) {
 	stint, ok := store.ActiveStintNameForPath(beadsDir, path)
 	if !ok || firstTodo(file) != nil {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	rootPath := scopedRootPath(beadsDir)
 	rootFile := loadFile(rootPath, repoRoot, beadsDir)
 	rootRef := findStintRef(rootFile, stint)
 	if rootRef == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	src, dst, err := store.PrepareArchiveStint(beadsDir, stint)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	return &pendingStintDrain{
 		RootPath: rootPath,
@@ -274,7 +274,7 @@ func prepareStintDrain(beadsDir, repoRoot, path string, file *store.File) (*pend
 		Stint:    stint,
 		Src:      src,
 		Dst:      dst,
-	}, nil
+	}, true, nil
 }
 
 func finishStintDrain(drain *pendingStintDrain, completedAt time.Time) error {

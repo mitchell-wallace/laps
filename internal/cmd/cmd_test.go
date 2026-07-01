@@ -1475,6 +1475,14 @@ func TestListTreeAndStintRefLineRendering(t *testing.T) {
 	if !idxBefore(out, "auth/ (stint - 2 laps)", "Auth work") || !idxBefore(out, "search/ (stint - 1 laps)", "Search work") {
 		t.Fatalf("tree output should nest children after their refs, got:\n%s", out)
 	}
+
+	out, errStr, code = runMB("list", "--tree", "--stint", "auth")
+	if code != 0 {
+		t.Fatalf("list --tree --stint auth exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "Root work") || !strings.Contains(out, "auth/ (stint - 2 laps)") {
+		t.Fatalf("tree output should ignore scope flags and start from root, got:\n%s", out)
+	}
 }
 
 // TestStintsRmSafetyMatrix covers default refusal for non-archived queued or

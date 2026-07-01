@@ -29,7 +29,6 @@ Output is title, blank line, description — nothing else.`,
 			exit(2, "%v", err)
 		}
 		path = ctx.Path
-		file = ctx.File
 
 		var task *store.Task
 		if target == "head" {

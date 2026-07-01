@@ -236,11 +236,11 @@
       "title": "VERIFY final whole-outcome for add-stints",
       "description": "Context: All implementation + docs complete. Final full-change verification. Use the openspec-verify-change skill against `add-stints`.\n\nOutcome: Verified report on the ENTIRE add-stints change. Check off ALL remaining tasks.md boxes (8.1-8.7, 9.1-9.5, 10.1, 11.1, 11.2) ONLY if thoroughly and correctly done. Confirm no boxes were ticked by implementation laps.\n\nFiles \u0026 scope: Read-only review of the whole diff. Identify the branch/merge target BEFORE diffing (\u003ctarget\u003e...HEAD). Run `just test`, `just lint`, `just build` end to end. Trace every core dependency line end-to-end: schema v3 decode-order -\u003e migration -\u003e id-prefix allocation -\u003e resolver (cycle keying on PHYSICAL stint identity) -\u003e scope flags (--active via .Changed) -\u003e scoped ops (out-of-scope names the stint) -\u003e claim scope (preemption-safe bare done) -\u003e enqueue (head non-destructive) -\u003e drain (partial-failure ordering) -\u003e undo (all-file scan + unarchive + ref reopen + lap reopen) -\u003e commands (rm safety matrix incl. archived-with-done-ref and --force claim clearing) -\u003e log/status (canonical slash-path scope strings, $scope hook var, hook-only path decision) -\u003e docs.\n\nDesign: Do not rewrite history. Pre-existing dependency work (improve-cli-ergonomics, add-event-log-and-status) in the diff is baseline: flag as pre-existing, do not add cleanup laps unless the user explicitly asks. The four invariants to re-confirm one more time: (1) resolver visited-set keying on physical stint identity, not slash-path scope; (2) drain partial-failure ordering never leaves a done root ref over a still-present non-archived stint file; (3) id-prefix global uniqueness (root + all stint prefixes); (4) --active detected via .Changed, not default-true. If any is wrong, open a head lap rather than fixing inline beyond a safe one-liner.\n\nAcceptance: Full report. All tasks.md boxes for add-stints checked (or gaps flagged with head laps). `just test`, `just lint`, `just build` all green. VERSION still 0.8.1. Confirm no implementation lap ticked a tasks.md box.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1245184,
       "createdAt": "2026-06-29T10:09:28.111378035Z",
-      "updatedAt": "2026-06-29T10:09:28.111378035Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T03:41:10.747419359Z",
+      "completedAt": "2026-07-01T03:41:10.747419359Z"
     }
   ]
 }

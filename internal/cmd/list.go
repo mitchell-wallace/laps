@@ -30,7 +30,10 @@ Default shows todo tasks only, head first.
 		checkDefault(beadsDir)
 		file := loadFile(path, repoRoot, beadsDir)
 		hookScope := "root"
-		if !listTree {
+		if listTree {
+			path = scopedRootPath(beadsDir)
+			file = loadFile(path, repoRoot, beadsDir)
+		} else {
 			ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
 			if err != nil {
 				exit(2, "%v", err)
@@ -131,14 +134,6 @@ func init() {
 	listCmd.Flags().BoolVar(&listTree, "tree", false, "render recursive stint overview")
 	addScopeFlags(listCmd)
 	rootCmd.AddCommand(listCmd)
-}
-
-// formatListEntry renders one lap for `list`. With --oneline it reuses the prior
-// single-line shape (whole-line strike when done); otherwise it renders the
-// two-line default: line 1 holds the position, active marker, and title (struck
-// when done); line 2 holds the id, assignee (em dash when unset), and state.
-func formatListEntry(t *store.Task, num int, done bool, activeID string) string {
-	return formatListEntryWithContext(t, num, done, activeID, "", "")
 }
 
 func formatListEntryWithContext(t *store.Task, num int, done bool, activeID, beadsDir, repoRoot string) string {
@@ -269,8 +264,8 @@ func appendTreeList(lines *[]string, tasks *[]store.Task, beadsDir, repoRoot, pa
 func listIndexes(file *store.File) []int {
 	var indexes []int
 	if listDone {
-		for i, t := range file.Tasks {
-			if t.IsDone {
+		for i := range file.Tasks {
+			if file.Tasks[i].IsDone {
 				indexes = append(indexes, i)
 			}
 		}
@@ -290,14 +285,14 @@ func listIndexes(file *store.File) []int {
 		})
 		return indexes
 	}
-	for i, t := range file.Tasks {
-		if !t.IsDone {
+	for i := range file.Tasks {
+		if !file.Tasks[i].IsDone {
 			indexes = append(indexes, i)
 		}
 	}
 	if listAll {
-		for i, t := range file.Tasks {
-			if t.IsDone {
+		for i := range file.Tasks {
+			if file.Tasks[i].IsDone {
 				indexes = append(indexes, i)
 			}
 		}

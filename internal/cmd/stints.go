@@ -323,9 +323,9 @@ func walkStintFiles(beadsDir string, visit func(path, name string, archived bool
 
 func queuedStintNames(rootFile *store.File) map[string]bool {
 	queued := make(map[string]bool)
-	for _, task := range rootFile.Tasks {
-		if task.Kind == store.KindStint && task.Ref != "" {
-			queued[task.Ref] = true
+	for i := range rootFile.Tasks {
+		if rootFile.Tasks[i].Kind == store.KindStint && rootFile.Tasks[i].Ref != "" {
+			queued[rootFile.Tasks[i].Ref] = true
 		}
 	}
 	return queued
@@ -458,11 +458,11 @@ func isActiveStint(rootFile *store.File, name string) bool {
 
 func removeStintRefs(tasks []store.Task, name string) []store.Task {
 	filtered := tasks[:0]
-	for _, task := range tasks {
-		if task.Kind == store.KindStint && task.Ref == name {
+	for i := range tasks {
+		if tasks[i].Kind == store.KindStint && tasks[i].Ref == name {
 			continue
 		}
-		filtered = append(filtered, task)
+		filtered = append(filtered, tasks[i])
 	}
 	return filtered
 }

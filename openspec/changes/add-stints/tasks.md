@@ -22,7 +22,7 @@
 - [x] 3.1 Add shared local, mutually-exclusive scope flags `--active`/`-c` (default), `--root`/`-r`, `--stint <name>`/`-s` on queue-targeting commands; error when two are combined
 - [x] 3.2 Wire them through only the queue-targeting commands in the design command matrix; non-queue/admin commands reject or omit these flags
 - [x] 3.3 Reject invocations that combine raw `--file` with any scope flag. Mechanism: per queue-targeting command, `cmd.MarkFlagsMutuallyExclusive("file", "root", "stint", "active")` (the persistent `file` flag is visible in each command's merged flag set). Because `--active` is the default, it must be implemented as a flag detected via `.Changed` (not a default-`true` value), or cobra's mutual-exclusion check will false-positive on every invocation
-- [ ] 3.4 Tests: default active, `--root`, `--stint`, scope-flag mutual-exclusion error, non-queue command behavior, `--file` plus scope flag rejection
+- [x] 3.4 Tests: default active, `--root`, `--stint`, scope-flag mutual-exclusion error, non-queue command behavior, `--file` plus scope flag rejection
 - [x] 3.5 Extend the `runMB`/`runMBExecute` reset harness in `cmd_test.go`: the new shared scope-flag package vars and per-command local flag sets (plus the `stints` subcommand flag sets) are not in today's hardcoded reset list (`rootCmd.PersistentFlags`, `addCmd`, `listCmd`, `updateCmd`, `doneUndoCmd`), so a `--root`/`--stint` set in one test leaks `Changed=true` into the next. Add the new flag sets (or replace the hardcoded list with a recursive walk of all command flag sets)
 
 ## 4. Scoped structure ops & id resolution
@@ -30,7 +30,7 @@
 - [x] 4.1 Default `add`/`move`/`edit`/`assign`/`delete` to the active scope (`assign` is an `edit` shortcut, so it follows the same default-active rule — it was missing from the structure-op list)
 - [x] 4.2 Resolve every id-taking queue command within the selected scope first (`get`, `claim`, `done`, `add after`, `move`, `edit`, `assign`, `delete`); when an id exists in another stint, fail with a message naming that stint
 - [x] 4.3 Add `delete --force`; default `delete` refuses a claimed lap with a stderr warning, while forced delete removes it and clears the matching claim
-- [ ] 4.4 Tests: `add head` lands in the active stint; `add --root` lands in root; out-of-scope id error names the stint for each id-taking command group; claimed delete refuses; forced claimed delete clears claim
+- [x] 4.4 Tests: `add head` lands in the active stint; `add --root` lands in root; out-of-scope id error names the stint for each id-taking command group; claimed delete refuses; forced claimed delete clears claim
 
 ## 5. Claim scope (preemption-safety)
 
@@ -80,5 +80,5 @@
 
 ## 11. Docs & release
 
-- [ ] 11.1 Document stints, scope flags, `laps stints`, `list --tree`, the claim `scope` field, and the per-stint id prefix scheme (lap ids are globally unique and encode their owning stint) in `README.md`
-- [ ] 11.2 Do not bump `VERSION` in this change; `add-stints-gating` owns the final 0.9.0 bump after all four changes land
+- [x] 11.1 Document stints, scope flags, `laps stints`, `list --tree`, the claim `scope` field, and the per-stint id prefix scheme (lap ids are globally unique and encode their owning stint) in `README.md`
+- [x] 11.2 Do not bump `VERSION` in this change; `add-stints-gating` owns the final 0.9.0 bump after all four changes land

@@ -30,7 +30,6 @@ task to complete.`,
 			exit(2, "%v", err)
 		}
 		path = ctx.Path
-		file = ctx.File
 
 		var task *store.Task
 		if target == "head" {
