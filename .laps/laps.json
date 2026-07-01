@@ -148,11 +148,11 @@
       "title": "Implement claim scope and enqueue/preemption",
       "description": "Context: Scope flags + scoped ops verified. Now preemption-safety (claim records its scope) and the enqueue command. Implements tasks 5.1, 5.2, 5.4, 6.1, 6.2, 6.3, 6.4. Tests are a separate lap (tasks 5.5, 6.5).\n\nOutcome: Claim record becomes {lap, file, scope, claimedAt} with back-compat reads for older claims lacking scope. Bare `laps done` resolves the claimed lap within its RECORDED scope, regardless of current head (preemption-safe). Claim JSON parsing tolerates future fields. `laps stints enqueue \u003cname\u003e [head|tail|after \u003cid\u003e]` inserts a stint ref into the root queue via ComputeInsertOrder, default tail. head preempts the active stint non-destructively (each stint's progress lives in its own file; the paused stint resumes when the interloper drains). `after \u003cid\u003e` resolves ONLY in root; if the id exists only inside a stint, fail naming that stint. Empty stints are ordinary stint files with no special empty-stint state.\n\nFiles \u0026 scope: internal/store/claim.go (add scope field, back-compat read, future-field tolerance review of any DisallowUnknownFields). internal/cmd/claim.go and done.go (bare done uses recorded scope). internal/cmd/stints.go (enqueue subcommand using ComputeInsertOrder at root). internal/store/store.go (stint-ref insertion helper if cleaner).\n\nDesign: DECIDED (design.md Claim records scope): the single-actor structural guarantee is sufficient. A claimed todo lap blocks its stint from draining (drain = no todo laps), so under one actor doing claim-\u003edone the recorded scope file always still exists when bare done looks. Concurrency is a Non-Goal: an explicit `done \u003cid\u003e` or a second session MAY drain+archive the stint leaving a stale claim, accepted, not guarded (delete is the only guard, already in lap 8). Preemption is non-destructive BECAUSE each stint's progress lives in its own file: there is no separate pause write; the preempted stint simply resumes from its file when the interloper's ref drains. `after` is root-queue structural work: resolve in root only; if the id exists only in a stint, fail naming that stint (design.md Explicit id resolution).\n\nAcceptance: `just build`, `just test`, `just lint` clean. Smoke: claim records scope; bare done after enqueue head completes the ORIGINALLY-claimed lap (not the new head); enqueue tail default; enqueue head preempts; after root-only resolution fails naming the stint; empty stint enqueues. Tasks 5.5, 6.5 tests land in lap 12.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-29T10:09:28.111365791Z",
-      "updatedAt": "2026-06-29T10:09:28.111365791Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T02:08:53.133184901Z",
+      "completedAt": "2026-07-01T02:08:53.133184901Z"
     },
     {
       "id": "laps-61ab",
