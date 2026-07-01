@@ -17,11 +17,11 @@
       "title": "Write nested stint drain and undo regression tests",
       "description": "Context: Test lap for the nested-drain prerequisite added to add-stints-gating section 0. The implementation lap should have made drain parent-chain aware and cascade-safe. This lap pins down the reviewed gap so future gating work cannot regress it. Implements add-stints-gating task 0.5.\n\nOutcome: Focused tests cover nested drain and undo behavior: completing the final lap in root -\u003e auth -\u003e search marks the search ref inside auth done and archives search; draining search cascades to archive auth when auth has no remaining todo laps; archive collision or simulated save failure at a nested level leaves no dangling parent ref; done undo for an archived nested lap restores child file, ancestor refs/files, and the lap.\n\nFiles \u0026 scope: internal/cmd/cmd_test.go and/or focused helper tests near the drain code. No production code changes unless a tiny testability fix is required.\n\nDesign: Tests must inspect both files and refs, not only command output. The partial-failure regression must assert both forbidden states are absent: no done parent ref over a present active child file, and no todo parent ref pointing at a missing active child file when the archived child exists. The undo test must confirm the reopened lap is reachable through active resolution after restore.\n\nAcceptance: just test green. just lint clean if golangci-lint is available.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 32768,
       "createdAt": "2026-07-01T04:10:00Z",
-      "updatedAt": "2026-07-01T04:10:00Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T07:56:06.75880727Z",
+      "completedAt": "2026-07-01T07:56:06.75880727Z"
     },
     {
       "id": "laps-5f31",
