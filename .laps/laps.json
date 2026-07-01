@@ -127,11 +127,11 @@
       "title": "Make done work under hold with drain still winning",
       "description": "Context: gating (§2) is verified. `done` for the already-claimed lap must succeed while a stint is held, and final-lap completion must still drain/archive so a held drained stint does not get stuck as the next gate. Read design.md 'Final-lap drain still wins' and the spec 'Hold blocks starting, not finishing'.\n\nOutcome: `done` for the claimed lap succeeds while its stint (or the head stint) is held (3.1). Final-lap completion under hold runs the normal add-stints drain/archive behavior; the next flow state after a final-lap `done` under hold is next-lap / empty / complete — NOT held-by-the-drained-stint (3.2). Tests for 3.3.\n\nFiles \u0026 scope: done.go and the drain/archive path added by add-stints. The gating resolver from §2 must let a completed-and-drained stint fall out of the head even if its metadata is still held.\n\nDesign: hold blocks STARTING (get/claim), never FINISHING (done). The subtlety is the final-lap case: draining/archiving a held stint on its last lap MUST advance the head past it, otherwise the held drained stint stays the next gate forever. Confirm the resolver's held check only fires for stints that still have a head ref pointing into them — a drained/archived stint no longer does.\n\nAcceptance: `just test` + `just lint` green. Tests (3.3): non-final claimed lap completes under hold and next `get`/`claim` exits 10; final claimed lap completes under hold and next flow state is next-lap/empty/complete rather than held. Do not tick tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-29T10:05:58.993488641Z",
-      "updatedAt": "2026-06-29T10:05:58.993488641Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T10:18:10.425092007Z",
+      "completedAt": "2026-07-01T10:18:10.425092007Z"
     },
     {
       "id": "laps-d41e",

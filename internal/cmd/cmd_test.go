@@ -904,6 +904,121 @@ func TestHeldHeadDoesNotGateNonFlowCommands(t *testing.T) {
 	}
 }
 
+func TestDoneClaimedNonFinalLapUnderHoldThenFlowStartIsHeld(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+	authPath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	authFile, err := store.Load(authPath)
+	if err != nil {
+		t.Fatalf("Load auth stint file: %v", err)
+	}
+	authFile.Tasks = append(authFile.Tasks, store.Task{
+		Kind:      store.KindLap,
+		ID:        "auth-bbbb",
+		Title:     "Second auth",
+		Order:     2,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	})
+	if err := store.Save(authPath, authFile); err != nil {
+		t.Fatalf("Save auth stint file: %v", err)
+	}
+
+	if _, errStr, code := runMB("claim"); code != 0 {
+		t.Fatalf("claim exit %d, stderr: %s", code, errStr)
+	}
+	setStintHeld(t, beadsDir, "auth", true)
+
+	if _, errStr, code := runMB("done"); code != 0 {
+		t.Fatalf("done claimed non-final held lap exit %d, stderr: %s", code, errStr)
+	}
+	authFile, err = store.Load(authPath)
+	if err != nil {
+		t.Fatalf("Load auth stint file after done: %v", err)
+	}
+	if got := taskByIDInFile(t, authFile, authLapID); !got.IsDone || got.CompletedAt == nil {
+		t.Fatalf("claimed held lap should be completed, got %+v", got)
+	}
+	if got := taskByIDInFile(t, authFile, "auth-bbbb"); got.IsDone {
+		t.Fatalf("non-final remaining lap should stay todo, got %+v", got)
+	}
+
+	for _, cmd := range []string{"get", "claim"} {
+		out, errStr, code := runMB(cmd)
+		if code != 10 {
+			t.Fatalf("%s after non-final held done exit %d, want 10; stdout: %q stderr: %q", cmd, code, out, errStr)
+		}
+		if out != "" {
+			t.Fatalf("%s after non-final held done must emit no lap, got %q", cmd, out)
+		}
+		if !strings.Contains(errStr, "auth") || !strings.Contains(errStr, "held") {
+			t.Fatalf("%s after non-final held done should warn about auth hold, got: %s", cmd, errStr)
+		}
+	}
+}
+
+func TestDoneClaimedFinalLapUnderHoldDrainsBeforeNextFlowStart(t *testing.T) {
+	for _, cmd := range []string{"get", "claim"} {
+		cmd := cmd
+		t.Run(cmd, func(t *testing.T) {
+			beadsDir, authLapID := setupActiveStintRepo(t)
+			rootPath := filepath.Join(beadsDir, "laps.json")
+			rootFile, err := store.Load(rootPath)
+			if err != nil {
+				t.Fatalf("Load root file: %v", err)
+			}
+			rootFile.Tasks = append(rootFile.Tasks, store.Task{
+				Kind:      store.KindLap,
+				ID:        "root-next",
+				Title:     "Root next",
+				Order:     2,
+				CreatedAt: resolverTestTime,
+				UpdatedAt: resolverTestTime,
+			})
+			if err := store.Save(rootPath, rootFile); err != nil {
+				t.Fatalf("Save root file: %v", err)
+			}
+
+			if _, errStr, code := runMB("claim"); code != 0 {
+				t.Fatalf("claim exit %d, stderr: %s", code, errStr)
+			}
+			setStintHeld(t, beadsDir, "auth", true)
+
+			if _, errStr, code := runMB("done"); code != 0 {
+				t.Fatalf("done claimed final held lap exit %d, stderr: %s", code, errStr)
+			}
+
+			if _, err := os.Stat(filepath.Join(beadsDir, "stints", "auth.laps.json")); !os.IsNotExist(err) {
+				t.Fatalf("held drained stint should be archived, active stat err: %v", err)
+			}
+			archivedFile, err := store.Load(filepath.Join(beadsDir, "stints", "archive", "auth.laps.json"))
+			if err != nil {
+				t.Fatalf("Load archived auth stint file: %v", err)
+			}
+			if got := taskByIDInFile(t, archivedFile, authLapID); !got.IsDone || got.CompletedAt == nil {
+				t.Fatalf("claimed final held lap should be completed in archive, got %+v", got)
+			}
+			rootFile, err = store.Load(rootPath)
+			if err != nil {
+				t.Fatalf("Load root file after done: %v", err)
+			}
+			if ref := taskByIDInFile(t, rootFile, "root-auth"); !ref.IsDone || ref.CompletedAt == nil {
+				t.Fatalf("held drained stint ref should be done, got %+v", ref)
+			}
+
+			out, errStr, code := runMB(cmd)
+			if code != 0 {
+				t.Fatalf("%s after final held drain exit %d, want 0; stdout: %q stderr: %q", cmd, code, out, errStr)
+			}
+			if !strings.Contains(out, "Root next") {
+				t.Fatalf("%s after final held drain should advance to root next lap, got stdout %q", cmd, out)
+			}
+			if strings.Contains(errStr, "held") {
+				t.Fatalf("%s after final held drain must not be gated by archived held stint, stderr: %q", cmd, errStr)
+			}
+		})
+	}
+}
+
 func TestGetAndClaimCleanQueueStateJSON(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
