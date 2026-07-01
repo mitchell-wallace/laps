@@ -116,11 +116,11 @@
       "title": "Write scope flag and scoped op test suite",
       "description": "Context: Laps 7-8 implemented scope flags and scoped ops. This lap writes the test matrix. Implements tasks 3.4 and 4.4.\n\nOutcome: Named tests in internal/cmd/cmd_test.go covering: default active; --root; --stint; scope-flag mutual-exclusion error; non-queue command behavior; --file plus scope-flag rejection; add head into active stint; add --root into root; out-of-scope id error names the stint for each id-taking command group; claimed delete refuses; forced claimed delete clears claim.\n\nFiles \u0026 scope: internal/cmd/cmd_test.go (extend). No production changes.\n\nDesign: Follow the existing runMB/runMBExecute patterns (cmd_test.go:33, :89). For out-of-scope tests, set up two stints with laps in each and assert the error message contains the owning stint's name. Use the reset harness correctly (extended in lap 7). Keep tests focused: one scenario per test where practical.\n\nAcceptance: `just test` green. Each task-3.4 and task-4.4 scenario has a named test. `just lint` clean.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-29T10:09:28.111363918Z",
-      "updatedAt": "2026-06-29T10:09:28.111363918Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T01:50:02.572055994Z",
+      "completedAt": "2026-07-01T01:50:02.572055994Z"
     },
     {
       "id": "laps-c7df",

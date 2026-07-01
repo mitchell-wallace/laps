@@ -435,6 +435,285 @@ func TestScopeFlagChangedStateDoesNotLeakBetweenRuns(t *testing.T) {
 	}
 }
 
+// setupActiveStintRepo seeds a root queue whose head is an active "auth" stint
+// ref (so the default --active scope descends into auth) plus an auth stint
+// file holding one lap. It returns beadsDir and the id of the lap inside the
+// active auth stint.
+func setupActiveStintRepo(t *testing.T) (beadsDir, authLapID string) {
+	t.Helper()
+	beadsDir, cleanup := setupTempRepo(t)
+	t.Cleanup(cleanup)
+
+	rootTask := store.Task{
+		Kind:      store.KindStint,
+		ID:        "root-auth",
+		Ref:       "auth",
+		Title:     "Auth stint",
+		Order:     1,
+		CreatedAt: resolverTestTime,
+		UpdatedAt: resolverTestTime,
+	}
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "", rootTask)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth", store.Task{
+		Kind:        store.KindLap,
+		ID:          "auth-aaaa",
+		Title:       "Inside auth",
+		Description: "auth details",
+		Order:       1,
+		CreatedAt:   resolverTestTime,
+		UpdatedAt:   resolverTestTime,
+	})
+	return beadsDir, "auth-aaaa"
+}
+
+// setupTwoStints seeds a root queue with an active "auth" stint, an auth stint
+// file with one lap, and a separate "search" stint file with one lap. The
+// search lap is out of scope when the default --active scope resolves into auth.
+// It returns beadsDir, the active auth lap id, the out-of-scope search lap id,
+// and the owning search stint name.
+func setupTwoStints(t *testing.T) (beadsDir, authLapID, searchLapID, searchStint string) {
+	t.Helper()
+	beadsDir, authLapID = setupActiveStintRepo(t)
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch", store.Task{
+		Kind:        store.KindLap,
+		ID:          "srch-bbbb",
+		Title:       "Inside search",
+		Description: "search details",
+		Order:       1,
+		CreatedAt:   resolverTestTime,
+		UpdatedAt:   resolverTestTime,
+	})
+	return beadsDir, authLapID, "srch-bbbb", "search"
+}
+
+// TestAddHeadDefaultsToActiveStint verifies the default scope (--active) lands
+// a new head lap inside the active stint, not in root, while --root bypasses the
+// descent and writes to root. (task 4.4)
+func TestAddHeadDefaultsToActiveStint(t *testing.T) {
+	beadsDir, _ := setupActiveStintRepo(t)
+
+	out, errStr, code := runMB("add", "head", "--title", "Added into active stint")
+	if code != 0 {
+		t.Fatalf("add head (active) exit %d, stderr: %s, stdout: %s", code, errStr, out)
+	}
+	stintFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load auth stint file: %v", err)
+	}
+	found := false
+	for _, task := range stintFile.Tasks {
+		if task.Title == "Added into active stint" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected new head lap in active auth stint, tasks = %#v", stintFile.Tasks)
+	}
+	// The new lap's id must carry the auth stint prefix, proving it was written
+	// under the descended scope rather than root.
+	if id := strings.TrimSpace(out); !strings.HasPrefix(id, "auth-") {
+		t.Fatalf("expected active-add id to use auth prefix, got %q", id)
+	}
+}
+
+// TestAddRootLandsInRootQueue verifies --root bypasses the active-stint descent
+// and writes the new lap into the root queue with the repo prefix. (task 4.4)
+func TestAddRootLandsInRootQueue(t *testing.T) {
+	beadsDir, _ := setupActiveStintRepo(t)
+
+	out, errStr, code := runMB("add", "head", "--root", "--title", "Root not stint")
+	if code != 0 {
+		t.Fatalf("add head --root exit %d, stderr: %s, stdout: %s", code, errStr, out)
+	}
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	found := false
+	for _, task := range rootFile.Tasks {
+		if task.Kind != store.KindLap {
+			continue
+		}
+		if task.Title == "Root not stint" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected --root lap in root queue, tasks = %#v", rootFile.Tasks)
+	}
+	stintFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load auth stint file: %v", err)
+	}
+	for _, task := range stintFile.Tasks {
+		if task.Title == "Root not stint" {
+			t.Fatalf("--root lap leaked into active stint file: %#v", stintFile.Tasks)
+		}
+	}
+	if id := strings.TrimSpace(out); strings.HasPrefix(id, "auth-") {
+		t.Fatalf("expected --root id to use repo prefix, not auth, got %q", id)
+	}
+}
+
+// outOfScopeIDCases exercises every id-taking command group. Each entry is run
+// against the two-stint fixture (default --active scope resolves into auth), so
+// the search lap id is out of scope and the error must name the owning stint.
+func outOfScopeIDCases() []struct {
+	kind string
+	args []string
+} {
+	return []struct {
+		kind string
+		args []string
+	}{
+		{"get", []string{"get", "srch-bbbb"}},
+		{"claim", []string{"claim", "srch-bbbb"}},
+		{"done", []string{"done", "srch-bbbb"}},
+		{"add-after", []string{"add", "after", "srch-bbbb", "--title", "X"}},
+		{"move", []string{"move", "srch-bbbb", "head"}},
+		{"edit", []string{"edit", "srch-bbbb", "--title", "X"}},
+		{"assign", []string{"assign", "srch-bbbb", "role"}},
+		{"delete", []string{"delete", "srch-bbbb"}},
+	}
+}
+
+// TestOutOfScopeIDErrorNamesOwningStint asserts that every id-taking command
+// group fails with a message naming the stint that owns the out-of-scope id,
+// and does not mutate any file. (task 4.4)
+func TestOutOfScopeIDErrorNamesOwningStint(t *testing.T) {
+	for _, tc := range outOfScopeIDCases() {
+		t.Run(tc.kind, func(t *testing.T) {
+			beadsDir, _, searchID, searchStint := setupTwoStints(t)
+
+			before := readResolverFiles(t,
+				filepath.Join(beadsDir, "laps.json"),
+				filepath.Join(beadsDir, "stints", "auth.laps.json"),
+				filepath.Join(beadsDir, "stints", "search.laps.json"),
+			)
+
+			_, errStr, code := runMB(tc.args...)
+			if code == 0 {
+				t.Fatalf("%s: expected non-zero exit, got 0", tc.kind)
+			}
+			if !strings.Contains(errStr, searchID) {
+				t.Fatalf("%s: error must name the out-of-scope id %q, got: %s", tc.kind, searchID, errStr)
+			}
+			if !strings.Contains(errStr, searchStint) {
+				t.Fatalf("%s: error must name the owning stint %q, got: %s", tc.kind, searchStint, errStr)
+			}
+
+			after := readResolverFiles(t,
+				filepath.Join(beadsDir, "laps.json"),
+				filepath.Join(beadsDir, "stints", "auth.laps.json"),
+				filepath.Join(beadsDir, "stints", "search.laps.json"),
+			)
+			for path, beforeData := range before {
+				if after[path] != beforeData {
+					t.Fatalf("%s: out-of-scope op mutated %s\nbefore: %s\nafter:  %s", tc.kind, path, beforeData, after[path])
+				}
+			}
+		})
+	}
+}
+
+// TestOutOfScopeIDErrorInRootScope asserts that when --root is selected and the
+// id lives in a stint, the error names the stint, and when a root lap id is
+// referenced from an active stint scope, the error names root. (task 4.4)
+func TestOutOfScopeIDErrorInRootScope(t *testing.T) {
+	_, authLapID, _, _ := setupTwoStints(t)
+
+	// --root scope: an auth-stint lap id is out of scope and must name its stint.
+	_, errStr, code := runMB("get", "--root", authLapID)
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for root-scoped stint lap, got 0")
+	}
+	if !strings.Contains(errStr, authLapID) {
+		t.Fatalf("error must name the out-of-scope id %q, got: %s", authLapID, errStr)
+	}
+	if !strings.Contains(errStr, "auth") {
+		t.Fatalf("error must name the owning stint auth, got: %s", errStr)
+	}
+
+	// Active (auth) scope: a root lap id must name root as its owner. Add a root
+	// lap at the tail (so the auth stint ref stays the root head and active
+	// descent still enters auth) so it carries the real repo prefix, then
+	// reference it from the active (auth) scope.
+	rootOut, errStr, code := runMB("add", "tail", "--root", "--title", "Root lap")
+	if code != 0 {
+		t.Fatalf("add --root setup failed, code %d, stderr: %s", code, errStr)
+	}
+	rootID := strings.TrimSpace(rootOut)
+
+	_, errStr, code = runMB("get", rootID)
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for root lap under active scope, got 0")
+	}
+	if !strings.Contains(errStr, rootID) || !strings.Contains(errStr, "root") {
+		t.Fatalf("expected error naming root for %q, got: %s", rootID, errStr)
+	}
+}
+
+// TestDeleteRefusesClaimedLap asserts that delete refuses a claimed lap unless
+// --force is supplied, leaving both the lap and the claim intact. (task 4.4)
+func TestDeleteRefusesClaimedLap(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+
+	if _, errStr, code := runMB("claim", authLapID); code != 0 {
+		t.Fatalf("claim setup failed, code %d, stderr: %s", code, errStr)
+	}
+
+	_, errStr, code := runMB("delete", authLapID)
+	if code == 0 {
+		t.Fatalf("expected delete of claimed lap to fail, got exit 0")
+	}
+	if !strings.Contains(errStr, "claimed") || !strings.Contains(errStr, "--force") {
+		t.Fatalf("expected claimed-lap refusal naming --force, got: %s", errStr)
+	}
+
+	// The lap and the claim must both survive the refused delete.
+	stintFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load auth stint file: %v", err)
+	}
+	if !fileContainsID(stintFile, authLapID) {
+		t.Fatalf("claimed lap %s must survive refused delete", authLapID)
+	}
+	claim, err := store.ReadClaim(beadsDir, "stints/auth.laps.json")
+	if err != nil {
+		t.Fatalf("read claim: %v", err)
+	}
+	if claim.Lap != authLapID {
+		t.Fatalf("claim must survive refused delete, got %+v", claim)
+	}
+}
+
+// TestDeleteForceClearsClaim asserts that delete --force removes a claimed lap
+// and clears the matching claim. (task 4.4)
+func TestDeleteForceClearsClaim(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+
+	if _, errStr, code := runMB("claim", authLapID); code != 0 {
+		t.Fatalf("claim setup failed, code %d, stderr: %s", code, errStr)
+	}
+
+	_, errStr, code := runMB("delete", "--force", authLapID)
+	if code != 0 {
+		t.Fatalf("delete --force exit %d, stderr: %s", code, errStr)
+	}
+
+	stintFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load auth stint file: %v", err)
+	}
+	if fileContainsID(stintFile, authLapID) {
+		t.Fatalf("forced delete must remove lap %s", authLapID)
+	}
+	if _, err := os.Stat(filepath.Join(beadsDir, "claim")); !os.IsNotExist(err) {
+		t.Fatalf("forced delete must clear the claim file, got stat err: %v", err)
+	}
+}
+
 func TestAddMissingPosition(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
@@ -1980,6 +2259,16 @@ func idxBefore(s, a, b string) bool {
 	ia := strings.Index(s, a)
 	ib := strings.Index(s, b)
 	return ia >= 0 && ib >= 0 && ia < ib
+}
+
+// fileContainsID reports whether the given file holds a task with id.
+func fileContainsID(f *store.File, id string) bool {
+	for i := range f.Tasks {
+		if f.Tasks[i].ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // taskByID loads the laps store under beadsDir and returns the task with the
