@@ -192,11 +192,11 @@
       "title": "VERIFY Phase D+E: claim scope, enqueue, drain, cross-stint undo",
       "description": "Context: Laps 11-14 complete. Drain partial-failure ordering is HIGH-RISK: mandatory verify here. Use the openspec-verify-change skill against `add-stints`.\n\nOutcome: Verified report. Check off tasks.md boxes for 5.1-5.5, 6.1-6.5, 7.1-7.5 ONLY if thoroughly done.\n\nFiles \u0026 scope: Read-only review. Identify the branch/merge target BEFORE diffing. Diff \u003ctarget\u003e...HEAD for the Phase D+E changes.\n\nDesign: Do not rewrite history. The partial-failure ordering is the highest-priority line: confirm the implementation CANNOT leave a done root ref over a still-present non-archived stint file (check archive-collision + writability BEFORE mutation, os.Rename LAST, ref flip ONLY after rename succeeds). Confirm drain is content-based (find the no-todo-laps check; confirm it does not depend on head position). Confirm bare done uses the claim's RECORDED scope (preemption-safe). Confirm enqueue head preemption is non-destructive (file-per-stint, no pause write). Confirm after resolves root-only and names the stint on failure. Confirm undo scans ALL queue files (root + active stints + archive), not just root or the event log, and that the archived-stint case restores file + reopens ref + reopens lap with the 5-min gate intact. Pre-existing dependency work in the diff is baseline.\n\nAcceptance: Report identifies correct/missing/blockers. Check 5.*, 6.*, 7.* boxes. Open head laps for gaps too big for a one-liner.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 983040,
       "createdAt": "2026-06-29T10:09:28.111369531Z",
-      "updatedAt": "2026-06-29T10:09:28.111369531Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T02:37:58.431094525Z",
+      "completedAt": "2026-07-01T02:37:58.431094525Z"
     },
     {
       "id": "laps-c99a",
