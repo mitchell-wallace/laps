@@ -1,5 +1,32 @@
 ## ADDED Requirements
 
+### Requirement: Nested stint drain is parent-chain aware
+Before gated flow semantics are layered on top of drain/archive, the system SHALL correctly drain
+nested stints. When completing the final todo lap in a nested stint, drain SHALL update the stint
+reference in that stint's immediate parent queue, archive the drained child stint file, and cascade
+upward while ancestor stints have no remaining todo laps. Drain SHALL preserve the existing
+partial-failure safety guarantees at every level: a failure SHALL NOT leave a done parent ref over a
+present active child file, or a todo parent ref pointing at a missing active child file when the
+archived child file exists. `done undo` for an archived nested-stint lap SHALL restore the child
+file, reopen the immediate parent ref, reopen any ancestor refs/files needed to make the lap
+reachable, and then reopen the lap under the existing latest-completion and age-gate rules.
+
+#### Scenario: Nested child drains through parent ref
+- **WHEN** the final todo lap in `root -> auth -> search` is completed
+- **THEN** the `search` ref inside `auth` SHALL be marked done and `search.laps.json` SHALL move to archive
+
+#### Scenario: Nested drain cascades upward
+- **WHEN** draining child stint `search` leaves parent stint `auth` with no remaining todo laps
+- **THEN** `auth` SHALL also drain and archive, and the root `auth` ref SHALL be marked done
+
+#### Scenario: Nested drain failure leaves no dangling parent ref
+- **WHEN** a nested drain encounters an archive collision or forced save failure at any cascade level
+- **THEN** it SHALL fail without leaving a done parent ref over a present active child file, or a todo parent ref pointing at a missing active child file when the archived child exists
+
+#### Scenario: Undo restores archived nested stint
+- **WHEN** `laps done undo` reopens the latest completed lap and that lap is inside an archived nested stint
+- **THEN** the nested stint file, required ancestor refs/files, and the lap SHALL be reopened
+
 ### Requirement: Hold and release a stint
 The system SHALL provide `laps stints hold <name>` and `laps stints release <name>` to mark a
 non-archived stint as held or clear the hold, including stints that are not yet enqueued. The

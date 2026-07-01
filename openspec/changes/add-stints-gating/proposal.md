@@ -21,6 +21,10 @@ whether to stop, wait, or finish.
 - **`status` + `stints ls`** surface the gate: a `held` state, the held stint, and the gate
   message; `status` still exits 0 for valid snapshots.
 - **Log events** `stint.held` / `stint.released`.
+- **Nested drain hardening** — before layering holds on top of drain, fix the `add-stints`
+  nested-drain gap: completing the final lap of a nested stint updates the parent queue's stint
+  ref (not only root), archives the child file, and cascades upward when parent stints become
+  empty.
 
 ## Capabilities
 
@@ -30,9 +34,10 @@ whether to stop, wait, or finish.
 
 ## Impact
 
-- **Code**: a held flag on stints (`internal/store`); resolution short-circuits at a held head
-  with the new exit codes (`get`/`claim`); `done` for the claimed lap is unaffected; `status`
-  and `stints ls` render the held state; `stint.held`/`stint.released` log events.
+- **Code**: nested-drain parent-chain/cascade support in the resolver/drain path; a held flag on
+  stints (`internal/store`); resolution short-circuits at a held head with the new exit codes
+  (`get`/`claim`); `done` for the claimed lap is unaffected; `status` and `stints ls` render the
+  held state; `stint.held`/`stint.released` log events.
 - **Behavior**: `get`/`claim` exit codes change from `3` (empty today) to `10`/`11`/`12` — a
   contract change the Rally relay loop must adopt; version-bump-worthy.
 - **Coordination**: depends on `add-stints` (3a) and on `add-event-log-and-status` (`status`,
