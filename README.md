@@ -64,7 +64,9 @@ not already present). When changes are made, attempts to auto-commit them as
 ### `laps get [head|<id>]`
 Get a task by id, or read the head task if no argument is given.
 
-Output is title, optional assignee, blank line, description.
+Output is title, optional assignee, blank line, description. When a scoped
+operation such as `get --root` targets a stint reference directly, text output
+renders it as `<name>/ (stint)` instead of just the raw ref title.
 
 A head `get` (no explicit id) signals queue state through its **exit code**:
 `0` a lap was returned, `10` the head is held/gated, `11` the queue is empty,
@@ -145,6 +147,11 @@ shows the active stint's laps (not root) when a stint is active. Use
 
 ### `laps status`
 Show a snapshot of the lap queue status. Reports the selected task file path, the queue state, todo/done/total task counts, the head (next todo) lap, the active (claimed) lap, a breakdown of todo tasks by assignee, and — when stints are present — the active stint and per-stint progress.
+
+`status` accepts the same scope flags as queue-targeting commands:
+`--active` (default), `--root`, and `--stint <name>`. Use `status --stint auth`
+to inspect `.laps/stints/auth.laps.json` without spelling the path via
+`--file stints/auth.laps.json`.
 
 Queue state is one of:
 - `active` — a valid todo lap is currently claimed (work in progress).
@@ -228,7 +235,14 @@ Flags:
 - `-n, --limit <int>` — limit the number of events shown (default 20, must be non-negative).
 - `--lap <string>` — filter events to only those matching the specified lap ID.
 - `--session <string>` — filter events to only those matching the specified session ID.
+- `--scope <string>` — filter events to an exact logged scope (`root`, `auth`,
+  `auth/search`, etc.).
 - `--since <string>` — filter events since the specified RFC3339 timestamp (inclusive).
+
+`log` also accepts the scope-selection flags `--active`, `--root`, and
+`--stint <name>` to choose which task file's events are shown. Combine
+`--stint auth --scope auth/search` to filter to nested-scope events recorded in
+that stint file.
 
 #### Behavior
 - **Filter-then-Limit**: The filters (`--lap`, `--session`, `--since`) are applied to the full event log first, and then the limit (`-n`) is applied to the filtered subset.
@@ -317,10 +331,10 @@ Prints the number of tasks removed.
 Manage stints (prepared per-change queues). `st` is an alias for `stints`.
 See [Stints](#stints) for the model behind these commands.
 
-- `stints ls` — list every stint file with its lap count and `queued`/
-  `archived` flags plus a `held` marker for any held stint
+- `stints ls` — list every stint file with its id prefix, lap count, and
+  `queued`/`archived` flags plus a `held` marker for any held stint
   (`held=true`). With `--json-output`, returns `{"stints": [...]}` (each entry
-  carries a `held` boolean).
+  carries `prefix` and a `held` boolean).
 - `stints new <name>` — create an empty stint file at
   `.laps/stints/<name>.laps.json` and allocate its id prefix. Prints the
   allocated 4-character prefix.
@@ -330,7 +344,8 @@ See [Stints](#stints) for the model behind these commands.
   interloper drains. `after <id>` resolves the anchor id **in root only**; if
   the id lives inside a stint, the command fails naming that stint. Prints the
   new stint-ref id.
-- `stints show <name>` — print a stint's queue (active or archived).
+- `stints show <name>` — print a stint's queue (active or archived), including
+  metadata (`prefix`, `queued`, `archived`, `held`) before the lap list.
 - `stints hold <name>` — mark a non-archived stint **held** so the queue stops
   once a reference to that stint reaches the head during flow resolution (see
   [Holding a stint](#holding-a-stint-gating)). Works on any non-archived
@@ -384,8 +399,9 @@ deterministically instead of looping or silently skipping.
 
 ### Scope flags
 Queue-targeting commands (`add`, `get`, `claim`, `done`, `list`, `count`,
-`delete`, `prune`, `move`, `edit`, `assign`) accept three mutually exclusive
-scope flags that select *which* layer a command targets:
+`delete`, `prune`, `move`, `edit`, `assign`, plus `status` and `log`) accept
+three mutually exclusive scope flags that select *which* layer a command
+targets:
 
 - `--active` / `-c` — the deepest active queue. This is the **default** when no
   scope flag is given. Flow ops (`get`/`claim`/`done`/`list`) recursively

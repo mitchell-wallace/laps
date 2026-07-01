@@ -86,6 +86,9 @@ func init() {
 }
 
 func formatTaskDetails(task *store.Task) string {
+	if task.Kind == store.KindStint {
+		return fmt.Sprintf("%s/ (stint)", task.Ref)
+	}
 	if task.Assignee == "" {
 		return fmt.Sprintf("%s\n\n%s", task.Title, task.Description)
 	}

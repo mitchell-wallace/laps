@@ -20,6 +20,7 @@ var (
 	lapFlag     string
 	sessionFlag string
 	sinceFlag   string
+	logScope    string
 )
 
 type logEventLine struct {
@@ -40,10 +41,19 @@ var logCmd = &cobra.Command{
 	Short: "Show recent event log history",
 	Long:  `Show recent event log history, newest last (chronological order).`,
 	Run: func(cmd *cobra.Command, args []string) {
-		path, _, beadsDir := getStorePath()
+		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
-
 		exitCode := 0
+		if activeScopeSelected() {
+			file := loadFile(path, repoRoot, beadsDir)
+			ctx, err := resolveActiveContext(path, repoRoot, beadsDir, file)
+			if err != nil {
+				exitCode = 2
+				exit(2, "%v", err)
+			}
+			path = ctx.Path
+		}
+
 		var output string
 		var task *store.Task
 		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
@@ -96,10 +106,13 @@ var logCmd = &cobra.Command{
 			}
 		}
 
-		resolvedFile := store.ResolveFile(fileFlag)
+		resolvedFile := fileNameForClaim(beadsDir, path)
 		filtered := make([]logEventLine, 0)
 		for _, ev := range events {
 			if ev.File != resolvedFile {
+				continue
+			}
+			if logScope != "" && ev.Scope != logScope {
 				continue
 			}
 			if lapFlag != "" && ev.Lap != lapFlag {
@@ -172,5 +185,7 @@ func init() {
 	logCmd.Flags().StringVar(&lapFlag, "lap", "", "filter events by lap ID")
 	logCmd.Flags().StringVar(&sessionFlag, "session", "", "filter events by session ID")
 	logCmd.Flags().StringVar(&sinceFlag, "since", "", "filter events since timestamp (RFC3339, inclusive)")
+	logCmd.Flags().StringVar(&logScope, "scope", "", "filter events by exact scope")
+	addScopeFlags(logCmd)
 	rootCmd.AddCommand(logCmd)
 }

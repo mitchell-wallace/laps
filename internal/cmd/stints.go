@@ -45,7 +45,7 @@ var stintsLsCmd = &cobra.Command{
 			if stint.Held {
 				heldBadge = "\theld=true"
 			}
-			fmt.Printf("%s\tlaps=%d\tqueued=%t\tarchived=%t%s\n", stint.Name, stint.Laps, stint.Queued, stint.Archived, heldBadge)
+			fmt.Printf("%s\tprefix=%s\tlaps=%d\tqueued=%t\tarchived=%t%s\n", stint.Name, stint.Prefix, stint.Laps, stint.Queued, stint.Archived, heldBadge)
 		}
 	},
 }
@@ -102,8 +102,17 @@ var stintsShowCmd = &cobra.Command{
 			exit(3, "stints show: stint %s not found", name)
 		}
 		file := loadFile(path, repoRoot, beadsDir)
+		queued := false
+		rootFile, err := loadExistingFile(scopedRootPath(beadsDir), repoRoot, beadsDir)
+		if err != nil {
+			if !errors.Is(err, store.ErrEmptyFile) {
+				exit(2, "stints show: %v", err)
+			}
+		} else {
+			queued = queuedStintNames(rootFile)[name]
+		}
 		if jsonOutput {
-			printJSON(map[string]interface{}{"name": name, "archived": archived, "tasks": file.Tasks})
+			printJSON(map[string]interface{}{"name": name, "prefix": file.Prefix, "queued": queued, "archived": archived, "held": file.Held, "tasks": file.Tasks})
 			return
 		}
 		if archived {
@@ -111,6 +120,7 @@ var stintsShowCmd = &cobra.Command{
 		} else {
 			fmt.Printf("%s/\n", name)
 		}
+		fmt.Printf("prefix=%s\tqueued=%t\tarchived=%t\theld=%t\n", file.Prefix, queued, archived, file.Held)
 		for i := range file.Tasks {
 			fmt.Println(formatListEntryWithContext(&file.Tasks[i], i+1, file.Tasks[i].IsDone, "", beadsDir, repoRoot))
 		}
@@ -144,6 +154,7 @@ var stintsRmCmd = &cobra.Command{
 
 type stintSummary struct {
 	Name     string `json:"name"`
+	Prefix   string `json:"prefix"`
 	Laps     int    `json:"laps"`
 	Queued   bool   `json:"queued"`
 	Archived bool   `json:"archived"`
@@ -353,6 +364,7 @@ func collectStintSummaries(beadsDir, repoRoot string) ([]stintSummary, error) {
 		}
 		stints = append(stints, stintSummary{
 			Name:     name,
+			Prefix:   file.Prefix,
 			Laps:     len(file.Tasks),
 			Queued:   queued[name],
 			Archived: archived,

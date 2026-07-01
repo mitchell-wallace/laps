@@ -63,6 +63,7 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	lapFlag = ""
 	sessionFlag = ""
 	sinceFlag = ""
+	logScope = ""
 	scopeActive = false
 	scopeRoot = false
 	scopeStint = ""
@@ -131,6 +132,7 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	lapFlag = ""
 	sessionFlag = ""
 	sinceFlag = ""
+	logScope = ""
 	scopeActive = false
 	scopeRoot = false
 	scopeStint = ""
@@ -498,8 +500,6 @@ func TestScopeFlagsAreOnlyOnQueueTargetingCommands(t *testing.T) {
 		{"off", "--root"},
 		{"update", "--root"},
 		{"version", "--root"},
-		{"log", "--root"},
-		{"status", "--root"},
 		{"stints", "new", "auth", "--root"},
 		{"customcmd", "--root"},
 	}
@@ -729,6 +729,18 @@ func TestClaimHeldHeadExitsTenAndLeavesClaimUnchanged(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(beadsDir, "claim")); !os.IsNotExist(err) {
 		t.Fatalf("held claim must leave claim absent, stat err: %v", err)
+	}
+}
+
+func TestGetRootStintRefRendersAsStint(t *testing.T) {
+	setupActiveStintRepo(t)
+
+	out, errStr, code := runMB("get", "--root")
+	if code != 0 {
+		t.Fatalf("get --root exit %d, stderr: %s", code, errStr)
+	}
+	if strings.TrimSpace(out) != "auth/ (stint)" {
+		t.Fatalf("get --root should render stint ref clearly, got %q", out)
 	}
 }
 
@@ -2208,6 +2220,32 @@ func TestStatusReportsActiveStintProgress(t *testing.T) {
 	}
 }
 
+func TestStatusScopeFlags(t *testing.T) {
+	writeScopeCountFixture(t)
+
+	out, errStr, code := runMB("status", "--root", "--json-output")
+	if code != 0 {
+		t.Fatalf("status --root exit %d, stderr: %s", code, errStr)
+	}
+	m := parseStatusJSON(t, out)
+	if m["file"] != "laps.json" || m["state"] != "ready" {
+		t.Fatalf("status --root snapshot = %#v, want root ready", m)
+	}
+	counts := m["counts"].(map[string]interface{})
+	if counts["total"] != float64(2) || counts["todo"] != float64(2) {
+		t.Fatalf("status --root counts = %#v, want root total/todo 2", counts)
+	}
+
+	out, errStr, code = runMB("status", "--stint", "search", "--json-output")
+	if code != 0 {
+		t.Fatalf("status --stint search exit %d, stderr: %s", code, errStr)
+	}
+	m = parseStatusJSON(t, out)
+	if m["file"] != "stints/search.laps.json" || m["state"] != "complete" {
+		t.Fatalf("status --stint search snapshot = %#v, want selected complete search stint", m)
+	}
+}
+
 func TestStatusValidatesClaimInRecordedScope(t *testing.T) {
 	_, authLapID := setupActiveStintRepo(t)
 
@@ -2279,6 +2317,15 @@ func TestStatusFileUsesSelectedHeldState(t *testing.T) {
 	gate, ok := m["gate"].(map[string]interface{})
 	if !ok || gate["stint"] != "auth" || gate["scope"] != "auth" {
 		t.Fatalf("status selected held file gate = %#v, want auth gate", m["gate"])
+	}
+
+	out, errStr, code = runMB("status", "--stint", "auth", "--json-output")
+	if code != 0 {
+		t.Fatalf("status --stint held file exit %d, stderr: %s", code, errStr)
+	}
+	m = parseStatusJSON(t, out)
+	if m["file"] != "stints/auth.laps.json" || m["state"] != "held" {
+		t.Fatalf("status --stint snapshot = %#v, want selected held auth stint", m)
 	}
 }
 
@@ -2675,7 +2722,7 @@ func TestStintsLifecycleLsShowAliasAndUnqueuedDisplay(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("stints ls exit %d, stderr: %s", code, errStr)
 	}
-	if !strings.Contains(out, "auth") || !strings.Contains(out, "laps=1") || !strings.Contains(out, "queued=false") {
+	if !strings.Contains(out, "auth") || !strings.Contains(out, "prefix=auth") || !strings.Contains(out, "laps=1") || !strings.Contains(out, "queued=false") {
 		t.Fatalf("unqueued stint should be listed as ordinary queued=false file, got: %s", out)
 	}
 
@@ -2691,8 +2738,8 @@ func TestStintsLifecycleLsShowAliasAndUnqueuedDisplay(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("stints show exit %d, stderr: %s", code, errStr)
 	}
-	if !strings.Contains(out, "auth/") || !strings.Contains(out, "Inside auth") {
-		t.Fatalf("stints show output should include name and lap, got: %s", out)
+	if !strings.Contains(out, "auth/") || !strings.Contains(out, "prefix=auth") || !strings.Contains(out, "queued=false") || !strings.Contains(out, "held=false") || !strings.Contains(out, "Inside auth") {
+		t.Fatalf("stints show output should include metadata and lap, got: %s", out)
 	}
 
 	if out, errStr, code := runMB("stints", "enqueue", "auth"); code != 0 {
@@ -2911,8 +2958,8 @@ func TestStintsLsShowsHeldBadge(t *testing.T) {
 	if err := json.Unmarshal([]byte(jsonOut), &parsed); err != nil {
 		t.Fatalf("unmarshal stints ls json: %v\n%s", err, jsonOut)
 	}
-	if len(parsed.Stints) != 1 || parsed.Stints[0].Name != "auth" || !parsed.Stints[0].Held {
-		t.Fatalf("json stints = %+v, want single auth with Held=true", parsed.Stints)
+	if len(parsed.Stints) != 1 || parsed.Stints[0].Name != "auth" || parsed.Stints[0].Prefix != "auth" || !parsed.Stints[0].Held {
+		t.Fatalf("json stints = %+v, want single auth with Prefix=auth Held=true", parsed.Stints)
 	}
 
 	// Enqueue and hold: lifecycle (queued) is orthogonal to the held badge.
@@ -7472,6 +7519,46 @@ func TestLogFileFilter(t *testing.T) {
 	}
 	if strings.Contains(stdout, "laps-1") || !strings.Contains(stdout, "laps-2") {
 		t.Errorf("explicit log output --file filter failed, got: %q", stdout)
+	}
+}
+
+func TestLogStintAndScopeFilters(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "",
+		store.Task{Kind: store.KindStint, ID: "root-auth", Ref: "auth", Title: "Auth stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth")
+
+	lines := []string{
+		`{"ts":"2026-01-01T12:00:00Z","event":"created","cmd":"add","file":"laps.json","lap":"root-1","title":"Root","scope":"root","session":"s1","detail":{}}`,
+		`{"ts":"2026-01-01T12:01:00Z","event":"created","cmd":"add","file":"stints/auth.laps.json","lap":"auth-1","title":"Auth","scope":"auth","session":"s1","detail":{}}`,
+		`{"ts":"2026-01-01T12:02:00Z","event":"created","cmd":"add","file":"stints/auth.laps.json","lap":"srch-1","title":"Search","scope":"auth/search","session":"s1","detail":{}}`,
+	}
+	writeTestLog(t, beadsDir, lines)
+
+	stdout, stderr, code := runMB("log", "--stint", "auth")
+	if code != 0 {
+		t.Fatalf("log --stint exit %d, stderr: %s", code, stderr)
+	}
+	if strings.Contains(stdout, "root-1") || !strings.Contains(stdout, "auth-1") || !strings.Contains(stdout, "srch-1") {
+		t.Fatalf("log --stint should filter by stint file, got: %s", stdout)
+	}
+
+	stdout, stderr, code = runMB("log", "--active")
+	if code != 0 {
+		t.Fatalf("log --active exit %d, stderr: %s", code, stderr)
+	}
+	if strings.Contains(stdout, "root-1") || !strings.Contains(stdout, "auth-1") || !strings.Contains(stdout, "srch-1") {
+		t.Fatalf("log --active should resolve the active stint file, got: %s", stdout)
+	}
+
+	stdout, stderr, code = runMB("log", "--stint", "auth", "--scope", "auth/search")
+	if code != 0 {
+		t.Fatalf("log --scope exit %d, stderr: %s", code, stderr)
+	}
+	if strings.Contains(stdout, "auth-1") || strings.Contains(stdout, "root-1") || !strings.Contains(stdout, "srch-1") {
+		t.Fatalf("log --scope should filter exact scope within selected file, got: %s", stdout)
 	}
 }
 

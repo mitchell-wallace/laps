@@ -367,5 +367,6 @@ func statusStints(beadsDir, repoRoot string, activeCtx *activeContext) ([]status
 }
 
 func init() {
+	addScopeFlags(statusCmd)
 	rootCmd.AddCommand(statusCmd)
 }
