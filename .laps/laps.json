@@ -50,10 +50,32 @@
       "title": "Verify exitState mechanism and resolver",
       "description": "Use the openspec-verify-change skill against `add-stints-gating`, focused on the §2A load-bearing mechanism just landed (tasks 2.1, 2.3, and the single-typed-queue-state clause of 2.6).\n\nFirst identify the branch/merge target (PR metadata, recent history, repo docs) and use it for `git diff \u003ctarget\u003e...HEAD` — do not assume main. Treat any branch work from before this batch as pre-existing unless the operator expands scope.\n\nTrace the core dependency lines, not just 'tests pass': (1) `exitState` sets captured exitCode, prints the queue-state JSON to STDOUT (contrast with `exit()` which writes error-JSON to STDERR), then panics `*exitError{code}` with no stderr error line; (2) routing 10/11/12 through the existing panic(*exitError) -\u003e recover -\u003e os.Exit path (root.go:50, 57-64) keeps `runAfterHooksDeferred` (hooks.go:32-51) firing so the after-hook observes the code — a bare os.Exit/return would skip it; (3) the resolver returns ONE typed queue-state consumed by both get/claim and the (later) status probe; (4) held kind:\"stint\" at a context head returns held and does NOT descend into the child file.\n\nRun `just test` + `just lint`. If you find substantive gaps, `laps add head` a focused lap rather than implementing here (tiny safe one-liners excepted). Check the tasks.md boxes for 2.1, 2.3 (and the typed-state clause of 2.6) ONLY once verified correct and thorough. Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-29T10:05:58.993478977Z",
-      "updatedAt": "2026-06-29T10:05:58.993478977Z",
+      "updatedAt": "2026-07-01T08:45:57.450083055Z",
+      "completedAt": "2026-07-01T08:45:57.450083055Z"
+    },
+    {
+      "id": "work-99ca",
+      "title": "Wire held/empty/complete flow-start state through get, claim, and status gate probing",
+      "description": "Use resolveFlowStart/exitState on head flow-start so held returns 10 with stderr warning, empty returns 11, complete returns 12, JSON state goes to stdout, after-hooks see the exit code, and status consumes the same typed queue-state instead of ad-hoc counts.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-07-01T08:45:55.299361501Z",
+      "updatedAt": "2026-07-01T08:45:55.299361501Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-b3f5",
+      "title": "Verify held flow-state exit routing and shared resolver after fix",
+      "description": "",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-07-01T08:45:50.162438286Z",
+      "updatedAt": "2026-07-01T08:45:50.162438286Z",
       "completedAt": null
     },
     {
