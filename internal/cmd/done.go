@@ -29,9 +29,18 @@ When a claimed task is completed, .laps/claim is cleared.`,
 
 		var task *store.Task
 		selectedFile := store.ResolveFile(fileFlag)
+		claimFile := selectedFile
 
 		if len(args) > 0 {
 			id := args[0]
+			ctx, err := resolveActiveContext(path, repoRoot, beadsDir, file)
+			if err != nil {
+				exit(2, "%v", err)
+			}
+			path = ctx.Path
+			file = ctx.File
+			claimFile = fileNameForClaim(beadsDir, path)
+			selectedFile = claimFile
 			for i := range file.Tasks {
 				if file.Tasks[i].ID == id {
 					task = &file.Tasks[i]
@@ -52,18 +61,20 @@ When a claimed task is completed, .laps/claim is cleared.`,
 			claimedID := claim.Lap
 
 			if claimedID == "" {
-				for i := range file.Tasks {
-					if !file.Tasks[i].IsDone {
-						task = &file.Tasks[i]
-						break
-					}
+				ctx, err := resolveActiveContext(path, repoRoot, beadsDir, file)
+				if err != nil {
+					exit(2, "%v", err)
 				}
+				task = ctx.Head
 				if task == nil {
 					exit(3, "no claimed lap and no head task")
 				}
 				exit(3, "no claimed lap. head task is %s: %s. use 'laps claim' or 'laps done %s'", task.ID, task.Title, task.ID)
 			}
 
+			claimFile = claim.File
+			path = pathForClaimFile(beadsDir, claimFile)
+			file = loadFile(path, repoRoot, beadsDir)
 			for i := range file.Tasks {
 				if file.Tasks[i].ID == claimedID {
 					task = &file.Tasks[i]
@@ -103,7 +114,7 @@ When a claimed task is completed, .laps/claim is cleared.`,
 		// claim is actually removed, emit a SEPARATE unclaimed event tagged
 		// reason "completed", immediately after completed, for log uniformity with
 		// the replaced reason. A failed remove emits no unclaimed event.
-		if claim, err := store.ReadClaim(beadsDir, selectedFile); err == nil && claim.Lap == task.ID && claim.File == selectedFile {
+		if claim, err := store.ReadClaim(beadsDir, selectedFile); err == nil && claim.Lap == task.ID && claim.File == claimFile {
 			if err := store.RemoveClaim(beadsDir); err == nil {
 				logEvent(beadsDir, &eventlog.Entry{
 					Event:    "unclaimed",

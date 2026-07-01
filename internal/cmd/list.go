@@ -28,6 +28,12 @@ Default shows todo tasks only, head first.
 		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
 		file := loadFile(path, repoRoot, beadsDir)
+		ctx, err := resolveActiveContext(path, repoRoot, beadsDir, file)
+		if err != nil {
+			exit(2, "%v", err)
+		}
+		path = ctx.Path
+		file = ctx.File
 
 		exitCode := 0
 		var output string
@@ -35,7 +41,7 @@ Default shows todo tasks only, head first.
 		defer runAfterHooksDeferred(cmd.Name(), beadsDir, path, &task, &output, &exitCode, args)()
 		runBeforeHooks(cmd.Name(), beadsDir, path, nil, args)
 
-		claim, err := store.ReadClaim(beadsDir, store.ResolveFile(fileFlag))
+		claim, err := store.ReadClaim(beadsDir, fileNameForClaim(beadsDir, path))
 		if err != nil {
 			exit(2, "read claim: %v", err)
 		}

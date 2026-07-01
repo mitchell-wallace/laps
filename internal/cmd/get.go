@@ -24,14 +24,16 @@ Output is title, blank line, description — nothing else.`,
 		checkDefault(beadsDir)
 		file := loadFile(path, repoRoot, beadsDir)
 
+		ctx, err := resolveActiveContext(path, repoRoot, beadsDir, file)
+		if err != nil {
+			exit(2, "%v", err)
+		}
+		path = ctx.Path
+		file = ctx.File
+
 		var task *store.Task
 		if target == "head" {
-			for i := range file.Tasks {
-				if !file.Tasks[i].IsDone {
-					task = &file.Tasks[i]
-					break
-				}
-			}
+			task = ctx.Head
 		} else {
 			for i := range file.Tasks {
 				if file.Tasks[i].ID == target {

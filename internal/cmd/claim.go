@@ -25,14 +25,16 @@ task to complete.`,
 		checkDefault(beadsDir)
 		file := loadFile(path, repoRoot, beadsDir)
 
+		ctx, err := resolveActiveContext(path, repoRoot, beadsDir, file)
+		if err != nil {
+			exit(2, "%v", err)
+		}
+		path = ctx.Path
+		file = ctx.File
+
 		var task *store.Task
 		if target == "head" {
-			for i := range file.Tasks {
-				if !file.Tasks[i].IsDone {
-					task = &file.Tasks[i]
-					break
-				}
-			}
+			task = ctx.Head
 		} else {
 			for i := range file.Tasks {
 				if file.Tasks[i].ID == target {
@@ -55,7 +57,7 @@ task to complete.`,
 			exit(3, "task not found")
 		}
 
-		selectedFile := store.ResolveFile(fileFlag)
+		selectedFile := fileNameForClaim(beadsDir, path)
 		// Read the existing claim before overwriting it so we can tell a same-lap
 		// reclaim (a log no-op that preserves claimedAt) from a different-lap
 		// replacement (which retires the prior claim). A read error simply yields
