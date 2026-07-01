@@ -56,6 +56,17 @@ type activeContext struct {
 	Scope string
 	File  *store.File
 	Head  *store.Task
+	Chain []stintDescent
+}
+
+type stintDescent struct {
+	ParentPath string
+	ParentFile *store.File
+	RefIndex   int
+	Ref        *store.Task
+	ChildPath  string
+	ChildName  string
+	Scope      string
 }
 
 func resolveSelectedContext(path, repoRoot, beadsDir string, file *store.File) (*activeContext, error) {
@@ -165,10 +176,134 @@ func resolveActiveContext(rootPath, repoRoot, beadsDir string, rootFile *store.F
 			Scope: appendScope(ctx.Scope, ref),
 			File:  childFile,
 			Head:  firstTodo(childFile),
+			Chain: append(append([]stintDescent(nil), ctx.Chain...), stintDescent{
+				ParentPath: ctx.Path,
+				ParentFile: ctx.File,
+				RefIndex:   taskIndex(ctx.File, ctx.Head),
+				Ref:        ctx.Head,
+				ChildPath:  childPath,
+				ChildName:  ref,
+				Scope:      appendScope(ctx.Scope, ref),
+			}),
 		}
 	}
 
 	return ctx, nil
+}
+
+func resolvePhysicalStintChain(beadsDir, repoRoot, targetName string, includeArchived bool) ([]stintDescent, bool, error) {
+	rootPath := scopedRootPath(beadsDir)
+	rootFile := loadFile(rootPath, repoRoot, beadsDir)
+	visited := make(map[string]struct{})
+	return findPhysicalStintChain(beadsDir, repoRoot, rootPath, rootFile, "root", targetName, includeArchived, visited)
+}
+
+func findPhysicalStintChain(beadsDir, repoRoot, parentPath string, parentFile *store.File, parentScope, targetName string, includeArchived bool, visited map[string]struct{}) ([]stintDescent, bool, error) {
+	for i := range parentFile.Tasks {
+		ref := &parentFile.Tasks[i]
+		if ref.Kind != store.KindStint {
+			continue
+		}
+		childPath, childArchived, err := resolveChainChildPath(beadsDir, ref.Ref, includeArchived)
+		if err != nil {
+			return nil, false, err
+		}
+		if childPath == "" {
+			continue
+		}
+		childScope := appendScope(parentScope, ref.Ref)
+		edge := stintDescent{
+			ParentPath: parentPath,
+			ParentFile: parentFile,
+			RefIndex:   i,
+			Ref:        ref,
+			ChildPath:  childPath,
+			ChildName:  ref.Ref,
+			Scope:      childScope,
+		}
+		if ref.Ref == targetName {
+			return []stintDescent{edge}, true, nil
+		}
+
+		childIdentity, err := filepath.Abs(childPath)
+		if err != nil {
+			childIdentity = filepath.Clean(childPath)
+		}
+		if _, seen := visited[childIdentity]; seen {
+			continue
+		}
+		visited[childIdentity] = struct{}{}
+
+		childFile, err := loadChainChildFile(childPath, repoRoot, beadsDir, childArchived)
+		if err != nil {
+			return nil, false, err
+		}
+		tail, ok, err := findPhysicalStintChain(beadsDir, repoRoot, childPath, childFile, childScope, targetName, includeArchived, visited)
+		if err != nil {
+			return nil, false, err
+		}
+		if ok {
+			return append([]stintDescent{edge}, tail...), true, nil
+		}
+	}
+	return nil, false, nil
+}
+
+func resolveChainChildPath(beadsDir, name string, includeArchived bool) (string, bool, error) {
+	activePath, err := store.ResolveStintFile(beadsDir, name)
+	if err != nil {
+		return "", false, err
+	}
+	if _, err := os.Stat(activePath); err == nil {
+		return activePath, false, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", false, err
+	}
+	if !includeArchived {
+		return "", false, nil
+	}
+	archivedPath, err := store.ResolveArchivedStintFile(beadsDir, name)
+	if err != nil {
+		return "", false, err
+	}
+	if _, err := os.Stat(archivedPath); err == nil {
+		return archivedPath, true, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", false, err
+	}
+	return "", false, nil
+}
+
+func loadChainChildFile(path, repoRoot, beadsDir string, archived bool) (*store.File, error) {
+	if !archived {
+		return loadExistingFile(path, repoRoot, beadsDir)
+	}
+	file, err := store.Load(path)
+	if err != nil {
+		return nil, err
+	}
+	if file.Version > store.CurrentVersion {
+		return nil, fmt.Errorf("file %s was written by a newer version of laps (schema version %d); please update laps", path, file.Version)
+	}
+	if store.Migrate(file) {
+		if err := store.Save(path, file); err != nil {
+			return nil, err
+		}
+	}
+	store.Normalize(file)
+	return file, nil
+}
+
+func taskIndex(file *store.File, task *store.Task) int {
+	if file == nil || task == nil {
+		return -1
+	}
+	for i := range file.Tasks {
+		if &file.Tasks[i] == task {
+			return i
+		}
+	}
+	return -1
 }
 
 func firstTodo(file *store.File) *store.Task {

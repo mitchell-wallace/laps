@@ -1332,6 +1332,177 @@ func TestNestedScopeEncodingForLogAndHooks(t *testing.T) {
 	}
 }
 
+func TestDoneNestedFinalLapMarksImmediateParentAndArchivesChild(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "",
+		store.Task{Kind: store.KindStint, ID: "root-auth", Ref: "auth", Title: "Auth stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth",
+		store.Task{Kind: store.KindStint, ID: "auth-search", Ref: "search", Title: "Search stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+		store.Task{Kind: store.KindLap, ID: "auth-tail", Title: "Auth tail", Order: 2, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch",
+		store.Task{Kind: store.KindLap, ID: "srch-aaaa", Title: "Search lap", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+
+	if _, errStr, code := runMB("done", "srch-aaaa"); code != 0 {
+		t.Fatalf("nested done exit %d, stderr: %s", code, errStr)
+	}
+
+	if _, err := os.Stat(filepath.Join(beadsDir, "stints", "search.laps.json")); !os.IsNotExist(err) {
+		t.Fatalf("search should be archived, stat err: %v", err)
+	}
+	if _, err := store.Load(filepath.Join(beadsDir, "stints", "archive", "search.laps.json")); err != nil {
+		t.Fatalf("Load archived search file: %v", err)
+	}
+	authFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load active auth file: %v", err)
+	}
+	searchRef := taskByIDInFile(t, authFile, "auth-search")
+	if !searchRef.IsDone || searchRef.CompletedAt == nil {
+		t.Fatalf("immediate parent search ref should be done, got %+v", searchRef)
+	}
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	rootRef := taskByIDInFile(t, rootFile, "root-auth")
+	if rootRef.IsDone {
+		t.Fatalf("root auth ref should remain todo while auth has remaining work, got %+v", rootRef)
+	}
+}
+
+func TestDoneNestedDrainCascadesUpward(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "",
+		store.Task{Kind: store.KindStint, ID: "root-auth", Ref: "auth", Title: "Auth stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth",
+		store.Task{Kind: store.KindStint, ID: "auth-search", Ref: "search", Title: "Search stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch",
+		store.Task{Kind: store.KindLap, ID: "srch-aaaa", Title: "Search lap", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+
+	if _, errStr, code := runMB("done", "srch-aaaa"); code != 0 {
+		t.Fatalf("nested done exit %d, stderr: %s", code, errStr)
+	}
+
+	for _, name := range []string{"search", "auth"} {
+		if _, err := os.Stat(filepath.Join(beadsDir, "stints", name+".laps.json")); !os.IsNotExist(err) {
+			t.Fatalf("%s should be archived, stat err: %v", name, err)
+		}
+		if _, err := store.Load(filepath.Join(beadsDir, "stints", "archive", name+".laps.json")); err != nil {
+			t.Fatalf("Load archived %s file: %v", name, err)
+		}
+	}
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	rootRef := taskByIDInFile(t, rootFile, "root-auth")
+	if !rootRef.IsDone || rootRef.CompletedAt == nil {
+		t.Fatalf("root auth ref should be done after cascade, got %+v", rootRef)
+	}
+}
+
+func TestDoneNestedArchiveCollisionLeavesParentReachable(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "",
+		store.Task{Kind: store.KindStint, ID: "root-auth", Ref: "auth", Title: "Auth stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth",
+		store.Task{Kind: store.KindStint, ID: "auth-search", Ref: "search", Title: "Search stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch",
+		store.Task{Kind: store.KindLap, ID: "srch-aaaa", Title: "Search lap", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	archivePath := filepath.Join(beadsDir, "stints", "archive", "search.laps.json")
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(archivePath, []byte(`{"version":3,"prefix":"old","tasks":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, errStr, code := runMB("done", "srch-aaaa"); code == 0 {
+		t.Fatalf("expected nested archive collision to fail")
+	} else if !strings.Contains(errStr, "archived stint file already exists") {
+		t.Fatalf("expected archive collision error, got: %s", errStr)
+	}
+
+	if _, err := os.Stat(filepath.Join(beadsDir, "stints", "search.laps.json")); err != nil {
+		t.Fatalf("active search should remain reachable after collision: %v", err)
+	}
+	authFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load auth file: %v", err)
+	}
+	searchRef := taskByIDInFile(t, authFile, "auth-search")
+	if searchRef.IsDone || searchRef.CompletedAt != nil {
+		t.Fatalf("parent search ref should remain todo after collision, got %+v", searchRef)
+	}
+}
+
+func TestDoneUndoRestoresArchivedNestedStintAndAncestors(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "",
+		store.Task{Kind: store.KindStint, ID: "root-auth", Ref: "auth", Title: "Auth stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth",
+		store.Task{Kind: store.KindStint, ID: "auth-search", Ref: "search", Title: "Search stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch",
+		store.Task{Kind: store.KindLap, ID: "srch-aaaa", Title: "Search lap", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	if _, errStr, code := runMB("done", "srch-aaaa"); code != 0 {
+		t.Fatalf("nested done exit %d, stderr: %s", code, errStr)
+	}
+
+	if _, errStr, code := runMB("done", "undo"); code != 0 {
+		t.Fatalf("nested undo exit %d, stderr: %s", code, errStr)
+	}
+
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	rootRef := taskByIDInFile(t, rootFile, "root-auth")
+	if rootRef.IsDone || rootRef.CompletedAt != nil {
+		t.Fatalf("root auth ref should be reopened, got %+v", rootRef)
+	}
+	authFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+	if err != nil {
+		t.Fatalf("Load restored auth file: %v", err)
+	}
+	searchRef := taskByIDInFile(t, authFile, "auth-search")
+	if searchRef.IsDone || searchRef.CompletedAt != nil {
+		t.Fatalf("auth search ref should be reopened, got %+v", searchRef)
+	}
+	searchFile, err := store.Load(filepath.Join(beadsDir, "stints", "search.laps.json"))
+	if err != nil {
+		t.Fatalf("Load restored search file: %v", err)
+	}
+	searchLap := taskByIDInFile(t, searchFile, "srch-aaaa")
+	if searchLap.IsDone || searchLap.CompletedAt != nil {
+		t.Fatalf("nested lap should be reopened, got %+v", searchLap)
+	}
+	for _, name := range []string{"auth", "search"} {
+		if _, err := os.Stat(filepath.Join(beadsDir, "stints", "archive", name+".laps.json")); !os.IsNotExist(err) {
+			t.Fatalf("%s archive should be restored away, stat err: %v", name, err)
+		}
+	}
+}
+
 // TestDoneNonHeadStintDrainsContentBased asserts a preempted/non-head stint
 // still drains when its final lap is completed explicitly in that stint scope.
 // (task 7.5)
@@ -1731,12 +1902,15 @@ func TestFinishStintDrainPartialFailureKeepsCompletedLapWithoutDoneRef(t *testin
 	}
 	rootRef := taskByIDInFile(t, rootFile, "root-auth")
 	err = finishStintDrain(&pendingStintDrain{
-		RootPath: rootPath,
-		RootFile: rootFile,
-		RootRef:  rootRef,
-		Stint:    "auth",
-		Src:      activePath,
-		Dst:      archivePath,
+		Chain: []stintDescent{{
+			ParentPath: rootPath,
+			ParentFile: rootFile,
+			RefIndex:   0,
+			Ref:        rootRef,
+			ChildPath:  activePath,
+			ChildName:  "auth",
+			Scope:      "auth",
+		}},
 	}, now)
 	if err == nil {
 		t.Fatalf("expected archive collision to fail")

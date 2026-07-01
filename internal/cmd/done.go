@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/mitchell-wallace/laps/internal/eventlog"
@@ -131,27 +132,29 @@ When a claimed task is completed, .laps/claim is cleared.`,
 			Assignee: task.Assignee,
 		})
 		if shouldDrain {
-			logEvent(beadsDir, &eventlog.Entry{
-				Event: "stint.completed",
-				Cmd:   "done",
-				File:  store.ResolveFile(""),
-				Scope: eventScope,
-				Detail: map[string]interface{}{
-					"stint": drain.Stint,
-					"ref":   drain.RootRef.ID,
-				},
-			})
-			logEvent(beadsDir, &eventlog.Entry{
-				Event: "stint.archived",
-				Cmd:   "done",
-				File:  fileNameForClaim(beadsDir, drain.Dst),
-				Scope: eventScope,
-				Detail: map[string]interface{}{
-					"stint": drain.Stint,
-					"from":  fileNameForClaim(beadsDir, drain.Src),
-					"to":    fileNameForClaim(beadsDir, drain.Dst),
-				},
-			})
+			for _, archived := range drain.Archives {
+				logEvent(beadsDir, &eventlog.Entry{
+					Event: "stint.completed",
+					Cmd:   "done",
+					File:  store.ResolveFile(""),
+					Scope: archived.Scope,
+					Detail: map[string]interface{}{
+						"stint": archived.Stint,
+						"ref":   archived.RefID,
+					},
+				})
+				logEvent(beadsDir, &eventlog.Entry{
+					Event: "stint.archived",
+					Cmd:   "done",
+					File:  fileNameForClaim(beadsDir, archived.Dst),
+					Scope: archived.Scope,
+					Detail: map[string]interface{}{
+						"stint": archived.Stint,
+						"from":  fileNameForClaim(beadsDir, archived.Src),
+						"to":    fileNameForClaim(beadsDir, archived.Dst),
+					},
+				})
+			}
 		}
 
 		// Best-effort: clearing the claim must not block a completed done. When the
@@ -243,12 +246,16 @@ var doneUndoCmd = &cobra.Command{
 }
 
 type pendingStintDrain struct {
-	RootPath string
-	RootFile *store.File
-	RootRef  *store.Task
-	Stint    string
-	Src      string
-	Dst      string
+	Chain    []stintDescent
+	Archives []completedStintArchive
+}
+
+type completedStintArchive struct {
+	Stint string
+	RefID string
+	Scope string
+	Src   string
+	Dst   string
 }
 
 func prepareStintDrain(beadsDir, repoRoot, path string, file *store.File) (*pendingStintDrain, bool, error) {
@@ -257,41 +264,70 @@ func prepareStintDrain(beadsDir, repoRoot, path string, file *store.File) (*pend
 		return nil, false, nil
 	}
 
-	rootPath := scopedRootPath(beadsDir)
-	rootFile := loadFile(rootPath, repoRoot, beadsDir)
-	rootRef := findStintRef(rootFile, stint)
-	if rootRef == nil {
-		return nil, false, nil
-	}
-
-	src, dst, err := store.PrepareArchiveStint(beadsDir, stint)
+	chain, ok, err := resolvePhysicalStintChain(beadsDir, repoRoot, stint, false)
 	if err != nil {
 		return nil, false, err
 	}
+	if !ok {
+		return nil, false, nil
+	}
+
+	for i := len(chain) - 1; i >= 0; i-- {
+		src, dst, err := store.PrepareArchiveStint(beadsDir, chain[i].ChildName)
+		if err != nil {
+			return nil, false, err
+		}
+		_ = src
+		_ = dst
+		if i == 0 || hasTodoOtherThan(chain[i].ParentFile, chain[i].RefIndex) {
+			break
+		}
+	}
 	return &pendingStintDrain{
-		RootPath: rootPath,
-		RootFile: rootFile,
-		RootRef:  rootRef,
-		Stint:    stint,
-		Src:      src,
-		Dst:      dst,
+		Chain: chain,
 	}, true, nil
 }
 
-func finishStintDrain(drain *pendingStintDrain, completedAt time.Time) error {
-	if err := store.ArchiveStintFile(drain.Src, drain.Dst); err != nil {
-		return err
-	}
-	drain.RootRef.IsDone = true
-	drain.RootRef.CompletedAt = &completedAt
-	drain.RootRef.UpdatedAt = completedAt
-	if err := store.Save(drain.RootPath, drain.RootFile); err != nil {
-		drain.RootRef.IsDone = false
-		drain.RootRef.CompletedAt = nil
-		if rollbackErr := os.Rename(drain.Dst, drain.Src); rollbackErr != nil {
-			return fmt.Errorf("save root ref after archive: %v; additionally failed to restore archived stint: %v", err, rollbackErr)
+func hasTodoOtherThan(file *store.File, skip int) bool {
+	for i := range file.Tasks {
+		if i != skip && !file.Tasks[i].IsDone {
+			return true
 		}
-		return err
+	}
+	return false
+}
+
+func finishStintDrain(drain *pendingStintDrain, completedAt time.Time) error {
+	for i := len(drain.Chain) - 1; i >= 0; i-- {
+		step := drain.Chain[i]
+		src, dst, err := store.PrepareArchiveStint(filepath.Dir(filepath.Dir(step.ChildPath)), step.ChildName)
+		if err != nil {
+			return err
+		}
+		if err := store.ArchiveStintFile(src, dst); err != nil {
+			return err
+		}
+		step.Ref.IsDone = true
+		step.Ref.CompletedAt = &completedAt
+		step.Ref.UpdatedAt = completedAt
+		if err := store.Save(step.ParentPath, step.ParentFile); err != nil {
+			step.Ref.IsDone = false
+			step.Ref.CompletedAt = nil
+			if rollbackErr := os.Rename(dst, src); rollbackErr != nil {
+				return fmt.Errorf("save parent ref after archive: %v; additionally failed to restore archived stint: %v", err, rollbackErr)
+			}
+			return err
+		}
+		drain.Archives = append(drain.Archives, completedStintArchive{
+			Stint: step.ChildName,
+			RefID: step.Ref.ID,
+			Scope: step.Scope,
+			Src:   src,
+			Dst:   dst,
+		})
+		if i == 0 || firstTodo(step.ParentFile) != nil {
+			break
+		}
 	}
 	return nil
 }
@@ -356,32 +392,77 @@ func loadQueueFileForUndo(path, repoRoot, beadsDir, rootPath string) (*store.Fil
 
 func reopenLatestCompletion(beadsDir string, latest *completedTaskCandidate, now time.Time) error {
 	if latest.ArchivedStint != "" {
-		rootPath := scopedRootPath(beadsDir)
-		rootFile, err := store.Load(rootPath)
-		if err != nil {
+		if err := restoreArchivedCompletionChain(beadsDir, latest, now); err != nil {
 			return err
 		}
-		store.Normalize(rootFile)
-		rootRef := findStintRef(rootFile, latest.ArchivedStint)
-		if rootRef == nil {
-			return fmt.Errorf("archived stint %s has no root reference to reopen", latest.ArchivedStint)
-		}
-		if err := store.RestoreArchivedStint(beadsDir, latest.ArchivedStint); err != nil {
-			return err
-		}
-		rootRef.IsDone = false
-		rootRef.CompletedAt = nil
-		rootRef.UpdatedAt = now
-		if err := store.Save(rootPath, rootFile); err != nil {
-			return err
-		}
-		latest.Path, _ = store.ResolveStintFile(beadsDir, latest.ArchivedStint)
 	}
 
 	latest.Task.IsDone = false
 	latest.Task.CompletedAt = nil
 	latest.Task.UpdatedAt = now
 	return store.Save(latest.Path, latest.File)
+}
+
+func restoreArchivedCompletionChain(beadsDir string, latest *completedTaskCandidate, now time.Time) error {
+	chain, ok, err := resolvePhysicalStintChain(beadsDir, "", latest.ArchivedStint, true)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("archived stint %s has no parent reference to reopen", latest.ArchivedStint)
+	}
+	for i := range chain {
+		step := chain[i]
+		if err := restoreStintIfArchived(beadsDir, step.ChildName); err != nil {
+			return err
+		}
+		step.Ref.IsDone = false
+		step.Ref.CompletedAt = nil
+		step.Ref.UpdatedAt = now
+		parentPath := activePathForRestoredParent(beadsDir, step.ParentPath)
+		if err := store.Save(parentPath, step.ParentFile); err != nil {
+			return err
+		}
+		if step.ChildName == latest.ArchivedStint {
+			latest.Path, _ = store.ResolveStintFile(beadsDir, latest.ArchivedStint)
+		}
+	}
+	if latest.Path == "" {
+		latest.Path, _ = store.ResolveStintFile(beadsDir, latest.ArchivedStint)
+	}
+	return nil
+}
+
+func restoreStintIfArchived(beadsDir, name string) error {
+	activePath, err := store.ResolveStintFile(beadsDir, name)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(activePath); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	archivedPath, err := store.ResolveArchivedStintFile(beadsDir, name)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(archivedPath); err != nil {
+		return err
+	}
+	return store.RestoreArchivedStint(beadsDir, name)
+}
+
+func activePathForRestoredParent(beadsDir, path string) string {
+	if name, ok := store.ArchivedStintNameForPath(beadsDir, path); ok {
+		activePath, err := store.ResolveStintFile(beadsDir, name)
+		if err == nil {
+			if _, statErr := os.Stat(activePath); statErr == nil {
+				return activePath
+			}
+		}
+	}
+	return path
 }
 
 func hookCommandName(cmd *cobra.Command) string {
