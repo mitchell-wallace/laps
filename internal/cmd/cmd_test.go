@@ -732,6 +732,145 @@ func TestClaimHeldHeadExitsTenAndLeavesClaimUnchanged(t *testing.T) {
 	}
 }
 
+func TestGetNestedHeldStintExitsTenAndWarns(t *testing.T) {
+	beadsDir, _ := setupNestedStintRepo(t, true)
+	setStintHeld(t, beadsDir, "search", true)
+
+	out, errStr, code := runMB("get")
+	if code != 10 {
+		t.Fatalf("nested held get exit %d, want 10; stderr: %s", code, errStr)
+	}
+	if out != "" {
+		t.Fatalf("nested held get should not emit a task, got stdout %q", out)
+	}
+	if !strings.Contains(errStr, "auth/search") || !strings.Contains(errStr, "held") {
+		t.Fatalf("nested held get should warn with the nested scope, got: %s", errStr)
+	}
+	if strings.Contains(out, "Inside search") || strings.Contains(errStr, "Inside search") {
+		t.Fatalf("nested held get must not select the child lap; stdout=%q stderr=%q", out, errStr)
+	}
+}
+
+func TestClaimNestedHeldStintExitsTenAndLeavesClaimUnchanged(t *testing.T) {
+	beadsDir, _ := setupNestedStintRepo(t, true)
+	setStintHeld(t, beadsDir, "search", true)
+
+	out, errStr, code := runMB("claim")
+	if code != 10 {
+		t.Fatalf("nested held claim exit %d, want 10; stdout: %s stderr: %s", code, out, errStr)
+	}
+	if out != "" {
+		t.Fatalf("nested held claim should not emit a task, got stdout %q", out)
+	}
+	if !strings.Contains(errStr, "auth/search") || !strings.Contains(errStr, "held") {
+		t.Fatalf("nested held claim should warn with the nested scope, got: %s", errStr)
+	}
+	if _, err := os.Stat(filepath.Join(beadsDir, "claim")); !os.IsNotExist(err) {
+		t.Fatalf("nested held claim must leave claim absent, stat err: %v", err)
+	}
+}
+
+func TestHeldHeadDoesNotGateNonFlowCommands(t *testing.T) {
+	cases := []struct {
+		name   string
+		run    func(t *testing.T, beadsDir, authLapID string) (string, string, int)
+		assert func(t *testing.T, beadsDir, authLapID, out string)
+	}{
+		{
+			name: "list",
+			run: func(t *testing.T, beadsDir, authLapID string) (string, string, int) {
+				t.Helper()
+				return runMB("list")
+			},
+			assert: func(t *testing.T, beadsDir, authLapID, out string) {
+				t.Helper()
+				if !strings.Contains(out, "Inside auth") || !strings.Contains(out, authLapID) {
+					t.Fatalf("list under held head should render auth lap %s, got: %s", authLapID, out)
+				}
+			},
+		},
+		{
+			name: "add",
+			run: func(t *testing.T, beadsDir, authLapID string) (string, string, int) {
+				t.Helper()
+				return runMB("add", "head", "--title", "Added while held")
+			},
+			assert: func(t *testing.T, beadsDir, authLapID, out string) {
+				t.Helper()
+				id := strings.TrimSpace(out)
+				if !strings.HasPrefix(id, "auth-") {
+					t.Fatalf("add under held head should write inside auth stint, got id %q", id)
+				}
+				authFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+				if err != nil {
+					t.Fatalf("Load auth stint file: %v", err)
+				}
+				task := taskByIDInFile(t, authFile, id)
+				if task.Title != "Added while held" {
+					t.Fatalf("added task title = %q, want Added while held", task.Title)
+				}
+			},
+		},
+		{
+			name: "edit",
+			run: func(t *testing.T, beadsDir, authLapID string) (string, string, int) {
+				t.Helper()
+				return runMB("edit", authLapID, "--title", "Edited while held")
+			},
+			assert: func(t *testing.T, beadsDir, authLapID, out string) {
+				t.Helper()
+				if strings.TrimSpace(out) != authLapID {
+					t.Fatalf("edit under held head should echo %s, got %q", authLapID, out)
+				}
+				authFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+				if err != nil {
+					t.Fatalf("Load auth stint file: %v", err)
+				}
+				task := taskByIDInFile(t, authFile, authLapID)
+				if task.Title != "Edited while held" {
+					t.Fatalf("edited title = %q, want Edited while held", task.Title)
+				}
+			},
+		},
+		{
+			name: "delete",
+			run: func(t *testing.T, beadsDir, authLapID string) (string, string, int) {
+				t.Helper()
+				return runMB("delete", authLapID)
+			},
+			assert: func(t *testing.T, beadsDir, authLapID, out string) {
+				t.Helper()
+				if out != "" {
+					t.Fatalf("delete under held head should not emit stdout, got %q", out)
+				}
+				authFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+				if err != nil {
+					t.Fatalf("Load auth stint file: %v", err)
+				}
+				if fileContainsID(authFile, authLapID) {
+					t.Fatalf("delete under held head should remove lap %s", authLapID)
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			beadsDir, authLapID := setupActiveStintRepo(t)
+			setStintHeld(t, beadsDir, "auth", true)
+
+			out, errStr, code := tc.run(t, beadsDir, authLapID)
+			if code != 0 {
+				t.Fatalf("%s under held head exit %d, want 0; stdout: %s stderr: %s", tc.name, code, out, errStr)
+			}
+			if strings.Contains(errStr, "held") {
+				t.Fatalf("%s under held head must not warn about held stint, got: %s", tc.name, errStr)
+			}
+			tc.assert(t, beadsDir, authLapID, out)
+		})
+	}
+}
+
 func TestGetAndClaimCleanQueueStateJSON(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()
