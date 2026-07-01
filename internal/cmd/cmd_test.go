@@ -1080,6 +1080,248 @@ func TestEmptyStintEnqueuesAndResolvesAsNoHead(t *testing.T) {
 	}
 }
 
+// TestDoneLastLapDrainsAndArchives asserts completing the final todo lap in an
+// active stint marks its root ref done and moves the stint file to the archive.
+// (task 7.5)
+func TestDoneLastLapDrainsAndArchives(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+
+	if _, errStr, code := runMB("done", authLapID); code != 0 {
+		t.Fatalf("done final stint lap exit %d, stderr: %s", code, errStr)
+	}
+
+	activePath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	archivePath := filepath.Join(beadsDir, "stints", "archive", "auth.laps.json")
+	if _, err := os.Stat(activePath); !os.IsNotExist(err) {
+		t.Fatalf("active stint file should be archived, stat err: %v", err)
+	}
+	archivedFile, err := store.Load(archivePath)
+	if err != nil {
+		t.Fatalf("Load archived auth stint file: %v", err)
+	}
+	archivedLap := taskByIDInFile(t, archivedFile, authLapID)
+	if !archivedLap.IsDone || archivedLap.CompletedAt == nil {
+		t.Fatalf("archived lap should be completed, got %+v", archivedLap)
+	}
+
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	rootRef := taskByIDInFile(t, rootFile, "root-auth")
+	if !rootRef.IsDone || rootRef.CompletedAt == nil {
+		t.Fatalf("root stint ref should be done after drain, got %+v", rootRef)
+	}
+}
+
+// TestDoneNonHeadStintDrainsContentBased asserts a preempted/non-head stint
+// still drains when its final lap is completed explicitly in that stint scope.
+// (task 7.5)
+func TestDoneNonHeadStintDrainsContentBased(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "",
+		store.Task{Kind: store.KindStint, ID: "root-search", Ref: "search", Title: "Search stint", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+		store.Task{Kind: store.KindStint, ID: "root-auth", Ref: "auth", Title: "Auth stint", Order: 2, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "search.laps.json"), "srch",
+		store.Task{Kind: store.KindLap, ID: "srch-head", Title: "Search head", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	writeResolverQueue(t, filepath.Join(beadsDir, "stints", "auth.laps.json"), "auth",
+		store.Task{Kind: store.KindLap, ID: "auth-tail", Title: "Auth tail", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+
+	if _, errStr, code := runMB("done", "--stint", "auth", "auth-tail"); code != 0 {
+		t.Fatalf("done non-head auth lap exit %d, stderr: %s", code, errStr)
+	}
+
+	if _, err := os.Stat(filepath.Join(beadsDir, "stints", "auth.laps.json")); !os.IsNotExist(err) {
+		t.Fatalf("non-head drained auth file should be archived, stat err: %v", err)
+	}
+	if _, err := store.Load(filepath.Join(beadsDir, "stints", "archive", "auth.laps.json")); err != nil {
+		t.Fatalf("Load archived non-head auth file: %v", err)
+	}
+	if _, err := store.Load(filepath.Join(beadsDir, "stints", "search.laps.json")); err != nil {
+		t.Fatalf("preempting search stint should remain active: %v", err)
+	}
+
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	searchRef := taskByIDInFile(t, rootFile, "root-search")
+	authRef := taskByIDInFile(t, rootFile, "root-auth")
+	if searchRef.IsDone {
+		t.Fatalf("head search ref should remain todo, got %+v", searchRef)
+	}
+	if !authRef.IsDone || authRef.CompletedAt == nil {
+		t.Fatalf("non-head auth ref should be done after drain, got %+v", authRef)
+	}
+}
+
+// TestDoneUndoUnarchivesAndReopensArchivedStint asserts undo honors the age
+// gate before unarchiving, then with --yes restores the stint file, reopens the
+// root ref, and reopens the lap. (task 7.5)
+func TestDoneUndoUnarchivesAndReopensArchivedStint(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+
+	if _, errStr, code := runMB("done", authLapID); code != 0 {
+		t.Fatalf("done final stint lap exit %d, stderr: %s", code, errStr)
+	}
+
+	archivePath := filepath.Join(beadsDir, "stints", "archive", "auth.laps.json")
+	archivedFile, err := store.Load(archivePath)
+	if err != nil {
+		t.Fatalf("Load archived auth stint file: %v", err)
+	}
+	oldCompletion := time.Now().UTC().Add(-UndoAgeLimit - time.Minute)
+	archivedLap := taskByIDInFile(t, archivedFile, authLapID)
+	archivedLap.CompletedAt = &oldCompletion
+	archivedLap.UpdatedAt = oldCompletion
+	if err := store.Save(archivePath, archivedFile); err != nil {
+		t.Fatalf("Save old archived auth stint file: %v", err)
+	}
+
+	if _, errStr, code := runMB("done", "undo"); code != 3 {
+		t.Fatalf("old archived undo exit %d, want 3; stderr: %s", code, errStr)
+	} else if !strings.Contains(errStr, "use 'laps done undo -y' to force") {
+		t.Fatalf("old archived undo should enforce age gate, got: %s", errStr)
+	}
+	if _, err := os.Stat(archivePath); err != nil {
+		t.Fatalf("age-gated undo should leave archived file in place: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(beadsDir, "stints", "auth.laps.json")); !os.IsNotExist(err) {
+		t.Fatalf("age-gated undo should not restore active file, stat err: %v", err)
+	}
+
+	if _, errStr, code := runMB("done", "undo", "-y"); code != 0 {
+		t.Fatalf("forced undo archived stint exit %d, stderr: %s", code, errStr)
+	}
+
+	activePath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	if _, err := os.Stat(archivePath); !os.IsNotExist(err) {
+		t.Fatalf("forced undo should remove archived file, stat err: %v", err)
+	}
+	activeFile, err := store.Load(activePath)
+	if err != nil {
+		t.Fatalf("Load restored auth stint file: %v", err)
+	}
+	reopenedLap := taskByIDInFile(t, activeFile, authLapID)
+	if reopenedLap.IsDone || reopenedLap.CompletedAt != nil {
+		t.Fatalf("forced undo should reopen archived lap, got %+v", reopenedLap)
+	}
+	rootFile, err := store.Load(filepath.Join(beadsDir, "laps.json"))
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	rootRef := taskByIDInFile(t, rootFile, "root-auth")
+	if rootRef.IsDone || rootRef.CompletedAt != nil {
+		t.Fatalf("forced undo should reopen root stint ref, got %+v", rootRef)
+	}
+}
+
+// TestDoneArchiveCollisionIsRefusedWithoutOverwriting asserts a drain blocked
+// by an existing archive target does not overwrite the archived file. (task 7.5)
+func TestDoneArchiveCollisionIsRefusedWithoutOverwriting(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+	archivePath := filepath.Join(beadsDir, "stints", "archive", "auth.laps.json")
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := []byte(`{"version":3,"prefix":"old","tasks":[]}`)
+	if err := os.WriteFile(archivePath, sentinel, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errStr, code := runMB("done", authLapID)
+	if code == 0 {
+		t.Fatalf("expected archive collision to fail, got exit 0")
+	}
+	if !strings.Contains(errStr, "archived stint file already exists") {
+		t.Fatalf("expected archive collision error, got: %s", errStr)
+	}
+	got, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("Read archive collision target: %v", err)
+	}
+	if string(got) != string(sentinel) {
+		t.Fatalf("archive collision target was overwritten: got %s want %s", got, sentinel)
+	}
+}
+
+// TestFinishStintDrainPartialFailureKeepsCompletedLapWithoutDoneRef asserts the
+// fail-safe ordering after the stint lap has been persisted: archive failure
+// leaves the completed stint file in place and does not flip the root ref done.
+// (task 7.5)
+func TestFinishStintDrainPartialFailureKeepsCompletedLapWithoutDoneRef(t *testing.T) {
+	beadsDir, authLapID := setupActiveStintRepo(t)
+	activePath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	archivePath := filepath.Join(beadsDir, "stints", "archive", "auth.laps.json")
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := []byte(`{"version":3,"prefix":"old","tasks":[]}`)
+	if err := os.WriteFile(archivePath, sentinel, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC()
+	activeFile, err := store.Load(activePath)
+	if err != nil {
+		t.Fatalf("Load active auth stint file: %v", err)
+	}
+	completedLap := taskByIDInFile(t, activeFile, authLapID)
+	completedLap.IsDone = true
+	completedLap.CompletedAt = &now
+	completedLap.UpdatedAt = now
+	if err := store.Save(activePath, activeFile); err != nil {
+		t.Fatalf("Save completed active auth stint file: %v", err)
+	}
+
+	rootPath := filepath.Join(beadsDir, "laps.json")
+	rootFile, err := store.Load(rootPath)
+	if err != nil {
+		t.Fatalf("Load root file: %v", err)
+	}
+	rootRef := taskByIDInFile(t, rootFile, "root-auth")
+	err = finishStintDrain(&pendingStintDrain{
+		RootPath: rootPath,
+		RootFile: rootFile,
+		RootRef:  rootRef,
+		Stint:    "auth",
+		Src:      activePath,
+		Dst:      archivePath,
+	}, now)
+	if err == nil {
+		t.Fatalf("expected archive collision to fail")
+	}
+
+	activeAfter, err := store.Load(activePath)
+	if err != nil {
+		t.Fatalf("completed active file should remain loadable: %v", err)
+	}
+	lapAfter := taskByIDInFile(t, activeAfter, authLapID)
+	if !lapAfter.IsDone || lapAfter.CompletedAt == nil {
+		t.Fatalf("partial failure should preserve completed lap, got %+v", lapAfter)
+	}
+	rootAfter, err := store.Load(rootPath)
+	if err != nil {
+		t.Fatalf("Load root after partial failure: %v", err)
+	}
+	refAfter := taskByIDInFile(t, rootAfter, "root-auth")
+	if refAfter.IsDone || refAfter.CompletedAt != nil {
+		t.Fatalf("partial failure must not leave done ref over present file, got %+v", refAfter)
+	}
+	gotArchive, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("Read archive collision target after partial failure: %v", err)
+	}
+	if string(gotArchive) != string(sentinel) {
+		t.Fatalf("partial failure overwrote archive target: got %s want %s", gotArchive, sentinel)
+	}
+}
+
 func TestAddMissingPosition(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()

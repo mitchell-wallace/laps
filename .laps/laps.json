@@ -181,11 +181,11 @@
       "title": "Write drain and cross-stint undo test suite",
       "description": "Context: Lap 13 implemented drain + auto-archive + cross-stint undo, the highest-risk lap in this change. Dedicated test lap. Implements task 7.5.\n\nOutcome: Named tests for: completing the last lap drains and archives (ref flipped to done, file moved to archive); a non-head/preempted stint drains correctly (content-based, position-independent); undo after archive unarchives the stint file, reopens the root ref, and reopens the lap; archive collision is refused without overwriting; partial-failure ordering (simulate a non-writable archive or a pre-existing archive target and assert the lap completion stands but no done-ref-over-present-file state is left).\n\nFiles \u0026 scope: internal/cmd/cmd_test.go and/or internal/store. No production changes.\n\nDesign: The partial-failure test is the subtle one. Make the archive target non-writable or pre-existing and assert: (a) the lap completion in the stint file is preserved, (b) the root ref is NOT flipped to done, (c) no done-ref-over-present-file state remains. This catches the core drain-ordering bug. The non-head drain test catches the drain-is-position-based regression. The undo-unarchive test must assert all three reopens (file restored, ref reopened, lap reopened) and that the 5-min age gate still applies.\n\nAcceptance: `just test` green. Each task-7.5 scenario has a named test, INCLUDING the partial-failure ordering test. `just lint` clean.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 917504,
       "createdAt": "2026-06-29T10:09:28.111367877Z",
-      "updatedAt": "2026-06-29T10:09:28.111367877Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T02:35:36.179965815Z",
+      "completedAt": "2026-07-01T02:35:36.179965815Z"
     },
     {
       "id": "laps-9ba8",
