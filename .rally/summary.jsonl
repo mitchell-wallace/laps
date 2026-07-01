@@ -38,3 +38,4 @@
 {"run_id":"relay-2-run-2","summary":"Implemented read-through resolution through active stint refs for get/claim/done/list with classified resolver failures.","updated_at":"2026-07-01T00:45:47Z","laps_completed":["laps-9427"]}
 {"run_id":"relay-2-run-3","summary":"Added resolver tests for active/nested stints and classified failure cases; go test ./... passes; just and golangci-lint are unavailable in this environment.","updated_at":"2026-07-01T00:59:17Z","laps_completed":["laps-a3c8"]}
 {"run_id":"relay-2-run-4","summary":"Implemented queue scope flag wiring, dedicated stint path resolution, mutex validation with --file, and recursive test flag reset harness.","updated_at":"2026-07-01T01:08:15Z","laps_completed":["laps-d452"]}
+{"run_id":"relay-2-run-5","summary":"Implemented selected-scope resolution for structure/id commands and guarded claimed deletes with --force claim clearing.","updated_at":"2026-07-01T01:16:59Z","laps_completed":["laps-5917"]}
