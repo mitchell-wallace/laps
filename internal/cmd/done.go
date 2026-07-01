@@ -71,7 +71,10 @@ When a claimed task is completed, .laps/claim is cleared.`,
 			}
 
 			claimFile = claim.File
-			path = pathForClaimFile(beadsDir, claimFile)
+			path, err = pathForClaim(beadsDir, claim)
+			if err != nil {
+				exit(2, "read claim: %v", err)
+			}
 			file = loadFile(path, repoRoot, beadsDir)
 			for i := range file.Tasks {
 				if file.Tasks[i].ID == claimedID {

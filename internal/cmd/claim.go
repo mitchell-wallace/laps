@@ -61,10 +61,10 @@ task to complete.`,
 		// replacement (which retires the prior claim). A read error simply yields
 		// the zero claim, treated as "no prior claim".
 		existing, _ := store.ReadClaim(beadsDir, selectedFile)
-		newClaim := store.Claim{Lap: task.ID, File: selectedFile}
+		newClaim := store.Claim{Lap: task.ID, File: selectedFile, Scope: ctx.Scope}
 		// A same-lap reclaim is exactly the case WriteClaim preserves claimedAt
 		// for: same lap and same file. Anything else is a new/replacing claim.
-		sameLapReclaim := existing.Lap == newClaim.Lap && existing.File == newClaim.File
+		sameLapReclaim := existing.Lap == newClaim.Lap && existing.File == newClaim.File && normalizeClaimScope(existing) == normalizeClaimScope(newClaim)
 
 		if err := store.WriteClaim(beadsDir, newClaim); err != nil {
 			exitCode = 2

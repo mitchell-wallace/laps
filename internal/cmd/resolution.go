@@ -224,8 +224,42 @@ func fileNameForClaim(beadsDir, path string) string {
 	return path
 }
 
+func normalizeClaimScope(claim store.Claim) string {
+	if claim.Scope != "" {
+		return claim.Scope
+	}
+	return claimScopeFromFile(claim.File)
+}
+
+func claimScopeFromFile(claimFile string) string {
+	if claimFile == "" || claimFile == store.ResolveFile("") {
+		return "root"
+	}
+	parts := strings.Split(filepath.ToSlash(claimFile), "/")
+	if len(parts) == 2 && parts[0] == "stints" && strings.HasSuffix(parts[1], ".laps.json") {
+		return strings.TrimSuffix(parts[1], ".laps.json")
+	}
+	return claimFile
+}
+
 func isParentRelative(path string) bool {
 	return path == ".." || len(path) > 3 && path[:3] == "../"
+}
+
+func pathForClaim(beadsDir string, claim store.Claim) (string, error) {
+	scope := normalizeClaimScope(claim)
+	switch {
+	case scope == "" || scope == "root":
+		return filepath.Join(beadsDir, store.ResolveFile("")), nil
+	case strings.Contains(scope, "/"):
+		parts := strings.Split(scope, "/")
+		name := parts[len(parts)-1]
+		return store.ResolveStintFile(beadsDir, name)
+	case claim.Scope != "":
+		return store.ResolveStintFile(beadsDir, scope)
+	default:
+		return pathForClaimFile(beadsDir, claim.File), nil
+	}
 }
 
 func pathForClaimFile(beadsDir, claimFile string) string {

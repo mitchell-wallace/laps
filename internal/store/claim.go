@@ -19,6 +19,7 @@ import (
 type Claim struct {
 	Lap       string     `json:"lap"`
 	File      string     `json:"file"`
+	Scope     string     `json:"scope,omitempty"`
 	ClaimedAt *time.Time `json:"claimedAt,omitempty"`
 }
 
