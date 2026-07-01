@@ -28,9 +28,9 @@ Prints the number of tasks removed.`,
 			n = parsed
 		}
 
-		path, _, beadsDir := getStorePath()
+		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
-		file := loadFile(path)
+		file := loadFile(path, repoRoot, beadsDir)
 
 		exitCode := 0
 		var output string

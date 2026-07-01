@@ -14,9 +14,9 @@ var countCmd = &cobra.Command{
 	Short: "Show count and breakdown of laps",
 	Long:  `Show the count of completed and total laps, along with a breakdown of complete and incomplete laps per role (assignee).`,
 	Run: func(cmd *cobra.Command, args []string) {
-		path, _, beadsDir := getStorePath()
+		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
-		file := loadFile(path)
+		file := loadFile(path, repoRoot, beadsDir)
 
 		exitCode := 0
 		var output string

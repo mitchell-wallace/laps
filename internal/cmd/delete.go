@@ -16,9 +16,9 @@ var deleteCmd = &cobra.Command{
 			exit(1, "delete: task id required")
 		}
 		id := args[0]
-		path, _, beadsDir := getStorePath()
+		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
-		file := loadFile(path)
+		file := loadFile(path, repoRoot, beadsDir)
 
 		var task *store.Task
 		for i := range file.Tasks {

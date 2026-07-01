@@ -23,9 +23,9 @@ that task regardless of the claim state.
 When a claimed task is completed, .laps/claim is cleared.`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		path, _, beadsDir := getStorePath()
+		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
-		file := loadFile(path)
+		file := loadFile(path, repoRoot, beadsDir)
 
 		var task *store.Task
 		selectedFile := store.ResolveFile(fileFlag)
@@ -131,9 +131,9 @@ var doneUndoCmd = &cobra.Command{
 	Long: `Re-open the most recently completed lap. If it was completed more than
 5 minutes ago the command fails unless --yes (-y) is passed.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		path, _, beadsDir := getStorePath()
+		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
-		file := loadFile(path)
+		file := loadFile(path, repoRoot, beadsDir)
 
 		var latest *store.Task
 		for i := range file.Tasks {

@@ -133,7 +133,7 @@ Prints each new task id on success.`,
 			}
 		}
 
-		file := loadFile(path)
+		file := loadFile(path, repoRoot, beadsDir)
 		scopePrefix := store.RepoPrefix(repoRoot)
 		if file.Prefix != "" {
 			scopePrefix = file.Prefix

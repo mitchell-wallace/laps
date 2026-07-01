@@ -25,9 +25,9 @@ Default shows todo tasks only, head first.
   --all    Include done tasks after todo items (struck through).
   --done   Show only completed tasks, most recent first.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		path, _, beadsDir := getStorePath()
+		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
-		file := loadFile(path)
+		file := loadFile(path, repoRoot, beadsDir)
 
 		exitCode := 0
 		var output string

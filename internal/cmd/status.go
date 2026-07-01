@@ -72,9 +72,9 @@ Queue state is one of:
 A claim that points at a deleted, completed, or wrong-file lap yields a degraded
 snapshot with claim.valid=false; it is reported, never silently cleared.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		path, _, beadsDir := getStorePath()
+		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
-		file := loadFile(path)
+		file := loadFile(path, repoRoot, beadsDir)
 
 		exitCode := 0
 		var output string

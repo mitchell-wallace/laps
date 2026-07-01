@@ -145,17 +145,37 @@ func checkDefault(beadsDir string) {
 	}
 }
 
-func loadFile(path string) *store.File {
+func loadFile(path, repoRoot, beadsDir string) *store.File {
 	data, err := store.Load(path)
 	if err != nil {
 		if errors.Is(err, store.ErrEmptyFile) {
 			f := &store.File{Version: store.CurrentVersion, Tasks: []store.Task{}}
+			if name, ok := store.ActiveStintNameForPath(beadsDir, path); ok {
+				prefix, err := store.AllocateStintPrefix(beadsDir, repoRoot, name)
+				if err != nil {
+					exit(2, "initialize file: %v", err)
+				}
+				f.Prefix = prefix
+			}
 			if err := store.Save(path, f); err != nil {
 				exit(2, "initialize file: %v", err)
 			}
 			return f
 		}
 		exit(2, "%v", err)
+	}
+	if name, ok := store.ActiveStintNameForPath(beadsDir, path); ok && data.Prefix == "" {
+		if len(data.Tasks) > 0 {
+			exit(2, "file %s is a stint file but is missing prefix metadata; recreate it with `laps stints new %s` or add a 4-character prefix", path, name)
+		}
+		prefix, err := store.AllocateStintPrefix(beadsDir, repoRoot, name)
+		if err != nil {
+			exit(2, "initialize file: %v", err)
+		}
+		data.Prefix = prefix
+		if err := store.Save(path, data); err != nil {
+			exit(2, "initialize file: %v", err)
+		}
 	}
 	if data.Version > store.CurrentVersion {
 		exit(2, "file %s was written by a newer version of laps (schema version %d); please update laps", path, data.Version)

@@ -247,6 +247,79 @@ func TestStintsNewAllocatesPrefixAndStintAddUsesIt(t *testing.T) {
 	}
 }
 
+func TestRawStintFileInitializationAllocatesPrefix(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, errStr, code := runMB("--file", "stints/auth.laps", "add", "head", "--title", "Inside stint")
+	if code != 0 {
+		t.Fatalf("raw stint add exit %d, stderr: %s", code, errStr)
+	}
+
+	stintID := strings.TrimSpace(out)
+	if !strings.HasPrefix(stintID, "auth-") {
+		t.Fatalf("stint id %q does not start with allocated prefix auth", stintID)
+	}
+	stintPath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	stintFile, err := store.Load(stintPath)
+	if err != nil {
+		t.Fatalf("Load stint file: %v", err)
+	}
+	if stintFile.Prefix != "auth" {
+		t.Fatalf("stint prefix metadata = %q, want auth", stintFile.Prefix)
+	}
+}
+
+func TestExistingEmptyRawStintFileGetsPrefixBeforeAdd(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	stintPath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	if err := os.MkdirAll(filepath.Dir(stintPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stintPath, []byte(`{"version":3,"tasks":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errStr, code := runMB("--file", "stints/auth.laps", "add", "head", "--title", "Inside stint")
+	if code != 0 {
+		t.Fatalf("raw stint add exit %d, stderr: %s", code, errStr)
+	}
+	stintID := strings.TrimSpace(out)
+	if !strings.HasPrefix(stintID, "auth-") {
+		t.Fatalf("stint id %q does not start with allocated prefix auth", stintID)
+	}
+	stintFile, err := store.Load(stintPath)
+	if err != nil {
+		t.Fatalf("Load stint file: %v", err)
+	}
+	if stintFile.Prefix != "auth" {
+		t.Fatalf("stint prefix metadata = %q, want auth", stintFile.Prefix)
+	}
+}
+
+func TestExistingPopulatedRawStintFileRequiresPrefix(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	stintPath := filepath.Join(beadsDir, "stints", "auth.laps.json")
+	if err := os.MkdirAll(filepath.Dir(stintPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stintPath, []byte(`{"version":3,"tasks":[{"kind":"lap","id":"repo-1234","title":"Existing","description":"","isDone":false,"order":65536,"createdAt":"2026-04-28T10:15:00Z","updatedAt":"2026-04-28T10:15:00Z","completedAt":null}]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errStr, code := runMB("--file", "stints/auth.laps", "add", "tail", "--title", "Inside stint")
+	if code != 2 {
+		t.Fatalf("raw populated stint add exit %d, want 2; stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "missing prefix metadata") {
+		t.Fatalf("expected missing prefix metadata error, got: %s", errStr)
+	}
+}
+
 func TestAddMissingPosition(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()

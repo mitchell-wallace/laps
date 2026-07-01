@@ -164,6 +164,23 @@ func ResolveArchivedStintFile(beadsDir, name string) (string, error) {
 	return filepath.Join(StintArchiveDir(beadsDir), name+stintFileSuffix), nil
 }
 
+// ActiveStintNameForPath returns the stint name when path identifies an active
+// stint file directly under .laps/stints/.
+func ActiveStintNameForPath(beadsDir, path string) (string, bool) {
+	rel, err := filepath.Rel(StintsDir(beadsDir), path)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+		return "", false
+	}
+	if filepath.Dir(rel) != "." || !strings.HasSuffix(rel, stintFileSuffix) {
+		return "", false
+	}
+	name := strings.TrimSuffix(rel, stintFileSuffix)
+	if err := ValidateStintName(name); err != nil {
+		return "", false
+	}
+	return name, true
+}
+
 // CheckStintNameAvailable rejects a name that already exists as either an
 // active or archived stint file.
 func CheckStintNameAvailable(beadsDir, name string) error {

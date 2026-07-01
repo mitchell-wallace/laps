@@ -68,9 +68,9 @@ type editFields struct {
 // error prefixes.
 func runEdit(cmd *cobra.Command, args []string, fields editFields) {
 	name := cmd.Name()
-	path, _, beadsDir := getStorePath()
+	path, repoRoot, beadsDir := getStorePath()
 	checkDefault(beadsDir)
-	file := loadFile(path)
+	file := loadFile(path, repoRoot, beadsDir)
 
 	if len(args) < 1 {
 		exit(1, "%s: a task id is required", name)

@@ -24,9 +24,9 @@ Positions:
 Prints the moved task id on success.`,
 	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		path, _, beadsDir := getStorePath()
+		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
-		file := loadFile(path)
+		file := loadFile(path, repoRoot, beadsDir)
 
 		if len(args) < 2 {
 			exit(1, "move: usage: move <id> <head|tail|after> [target]")

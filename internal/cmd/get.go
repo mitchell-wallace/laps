@@ -20,9 +20,9 @@ Output is title, blank line, description — nothing else.`,
 			target = args[0]
 		}
 
-		path, _, beadsDir := getStorePath()
+		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
-		file := loadFile(path)
+		file := loadFile(path, repoRoot, beadsDir)
 
 		var task *store.Task
 		if target == "head" {
