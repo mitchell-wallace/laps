@@ -36,9 +36,9 @@
 
 - [x] 5.1 Add `scope` to the claim record (`{lap, file, scope, claimedAt}`); keep back-compat reads
 - [x] 5.2 Bare `done` resolves the claimed lap within its recorded scope, regardless of the current head
-- [ ] 5.3 Rely on the single-actor structural guarantee: a claimed (todo) lap blocks its stint from draining because drain = "no todo laps", so bare `done` always still finds its recorded scope file. Concurrency is a Non-Goal — an explicit `done <id>` (or a second session) completing the claimed lap is allowed and may drain+archive the stint, leaving a stale claim (accepted, no guard). The only guard is `delete` of a claimed lap (task 4.3)
+- [x] 5.3 Rely on the single-actor structural guarantee: a claimed (todo) lap blocks its stint from draining because drain = "no todo laps", so bare `done` always still finds its recorded scope file. Concurrency is a Non-Goal — an explicit `done <id>` (or a second session) completing the claimed lap is allowed and may drain+archive the stint, leaving a stale claim (accepted, no guard). The only guard is `delete` of a claimed lap (task 4.3)
 - [x] 5.4 Ensure claim JSON parsing tolerates future fields added by later changes
-- [ ] 5.5 Tests: claim records scope; `done` completes the claimed lap after an `enqueue head` preemption; future claim fields are ignored
+- [x] 5.5 Tests: claim records scope; `done` completes the claimed lap after an `enqueue head` preemption; future claim fields are ignored
 
 ## 6. Enqueue & preemption
 
@@ -46,7 +46,7 @@
 - [x] 6.2 `head` preempts the active stint non-destructively; the paused stint resumes from its file when the interloper drains
 - [x] 6.3 `after <id>` resolves only in the root queue; if the id exists only inside a stint, fail naming that stint
 - [x] 6.4 Treat empty stints as ordinary stint files: allow enqueue and let normal no-todo drain/resolution behavior handle them without a special empty-stint state
-- [ ] 6.5 Tests: enqueue tail default; enqueue head preempts and later resumes with progress intact; root-only `after` resolution; empty stint can be enqueued and follows normal drain/resolution behavior
+- [x] 6.5 Tests: enqueue tail default; enqueue head preempts and later resumes with progress intact; root-only `after` resolution; empty stint can be enqueued and follows normal drain/resolution behavior
 
 ## 7. Drain & auto-archive
 
