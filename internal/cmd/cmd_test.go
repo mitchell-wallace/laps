@@ -852,6 +852,39 @@ func TestHeldHeadDoesNotGateNonFlowCommands(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "count",
+			run: func(t *testing.T, beadsDir, authLapID string) (string, string, int) {
+				t.Helper()
+				return runMB("count")
+			},
+			assert: func(t *testing.T, beadsDir, authLapID, out string) {
+				t.Helper()
+				if !strings.Contains(out, "Laps done: 0 out of 1") {
+					t.Fatalf("count under held head should reflect the auth stint (0 done / 1 total), got: %s", out)
+				}
+			},
+		},
+		{
+			name: "assign",
+			run: func(t *testing.T, beadsDir, authLapID string) (string, string, int) {
+				t.Helper()
+				return runMB("assign", authLapID, "reviewer")
+			},
+			assert: func(t *testing.T, beadsDir, authLapID, out string) {
+				t.Helper()
+				if strings.TrimSpace(out) != authLapID {
+					t.Fatalf("assign under held head should echo %s, got %q", authLapID, out)
+				}
+				authFile, err := store.Load(filepath.Join(beadsDir, "stints", "auth.laps.json"))
+				if err != nil {
+					t.Fatalf("Load auth stint file: %v", err)
+				}
+				if task := taskByIDInFile(t, authFile, authLapID); task.Assignee != "reviewer" {
+					t.Fatalf("assign under held head should set assignee reviewer, got %q", task.Assignee)
+				}
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -959,6 +992,128 @@ func TestHeldStateAfterHookObservesExitCode(t *testing.T) {
 	if out != "10" {
 		t.Fatalf("after hook should see held exit code, got stdout %q", out)
 	}
+}
+
+// TestGetClaimQueueStateExitCodeMatrix consolidates the §2.5 queue-state
+// exit-code contract for head `get`/`claim` across every queue state, in text
+// mode. It pins the matrix in one place and fills the complete→12 text-mode
+// path (otherwise only covered via --json-output) plus the lap→0 baseline. The
+// deeper held invariants (warning wording, nested descent, claim left
+// unchanged) are covered by the dedicated held tests above.
+func TestGetClaimQueueStateExitCodeMatrix(t *testing.T) {
+	cases := []struct {
+		name       string
+		setup      func(t *testing.T) string
+		wantCode   int
+		wantLap    bool
+		wantStderr string
+	}{
+		{
+			name: "lap",
+			setup: func(t *testing.T) string {
+				bd, _ := setupActiveStintRepo(t)
+				return bd
+			},
+			wantCode: 0,
+			wantLap:  true,
+		},
+		{
+			name: "empty",
+			setup: func(t *testing.T) string {
+				_, cleanup := setupTempRepo(t)
+				t.Cleanup(cleanup)
+				return ""
+			},
+			wantCode: 11,
+		},
+		{
+			name: "complete",
+			setup: func(t *testing.T) string {
+				_, cleanup := setupTempRepo(t)
+				t.Cleanup(cleanup)
+				idOut, errStr, code := runMB("add", "head", "--title", "Only")
+				if code != 0 {
+					t.Fatalf("matrix complete setup add exit %d, stderr: %s", code, errStr)
+				}
+				if _, errStr, code := runMB("done", strings.TrimSpace(idOut)); code != 0 {
+					t.Fatalf("matrix complete setup done exit %d, stderr: %s", code, errStr)
+				}
+				return ""
+			},
+			wantCode: 12,
+		},
+		{
+			name: "held",
+			setup: func(t *testing.T) string {
+				bd, _ := setupActiveStintRepo(t)
+				setStintHeld(t, bd, "auth", true)
+				return bd
+			},
+			wantCode:   10,
+			wantStderr: "held",
+		},
+	}
+
+	for _, tc := range cases {
+		for _, cmd := range []string{"get", "claim"} {
+			cmd := cmd
+			t.Run(tc.name+"_"+cmd, func(t *testing.T) {
+				beadsDir := tc.setup(t)
+
+				out, errStr, code := runMB(cmd)
+				if code != tc.wantCode {
+					t.Fatalf("%s %s exit %d, want %d; stdout: %q stderr: %q", cmd, tc.name, code, tc.wantCode, out, errStr)
+				}
+				if tc.wantLap {
+					if !strings.Contains(out, "Inside auth") {
+						t.Fatalf("%s %s should return the active auth lap, got stdout %q", cmd, tc.name, out)
+					}
+				} else if out != "" {
+					t.Fatalf("%s %s must emit no stdout for a clean state, got %q", cmd, tc.name, out)
+				}
+				if tc.wantStderr == "" {
+					if errStr != "" {
+						t.Fatalf("%s %s must emit no stderr for a clean state, got %q", cmd, tc.name, errStr)
+					}
+				} else if !strings.Contains(errStr, tc.wantStderr) {
+					t.Fatalf("%s %s stderr should mention %q, got %q", cmd, tc.name, tc.wantStderr, errStr)
+				}
+				if tc.name == "held" && cmd == "claim" {
+					if _, err := os.Stat(filepath.Join(beadsDir, "claim")); !os.IsNotExist(err) {
+						t.Fatalf("held %s must not write a claim, stat err: %v", cmd, err)
+					}
+				}
+			})
+		}
+	}
+
+	// Explicit id not found remains exit 3 for both get and claim — it must not
+	// collapse into the 10/11/12 queue-state codes (spec scenario:
+	// "Explicit id not found is still not-found").
+	t.Run("explicit_id_not_found", func(t *testing.T) {
+		for _, cmd := range []string{"get", "claim"} {
+			cmd := cmd
+			t.Run(cmd, func(t *testing.T) {
+				beadsDir, _ := setupActiveStintRepo(t)
+
+				out, errStr, code := runMB(cmd, "missing-zzzz")
+				if code != 3 {
+					t.Fatalf("%s missing id exit %d, want 3; stdout: %q stderr: %q", cmd, code, out, errStr)
+				}
+				if out != "" {
+					t.Fatalf("%s missing id must emit no stdout, got %q", cmd, out)
+				}
+				if !strings.Contains(errStr, "task not found") {
+					t.Fatalf("%s missing id should report task not found, got %q", cmd, errStr)
+				}
+				if cmd == "claim" {
+					if _, err := os.Stat(filepath.Join(beadsDir, "claim")); !os.IsNotExist(err) {
+						t.Fatalf("missing-id claim must not write a claim file, stat err: %v", err)
+					}
+				}
+			})
+		}
+	})
 }
 
 // TestAddHeadDefaultsToActiveStint verifies the default scope (--active) lands

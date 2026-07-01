@@ -105,11 +105,11 @@
       "title": "Add gated exit-code and non-flow-start tests",
       "description": "Context: gating is wired (exitState, typed resolver, exit codes, explicit-id behavior). Write the §2.5 exit-code test matrix and verify non-flow-start commands are unaffected by a held head (§2.4a, DECIDED).\n\nOutcome: tests covering: held head -\u003e no lap + exit 10 + warning; nested held encountered during descent -\u003e exit 10; empty -\u003e 11; complete -\u003e 12; lap present -\u003e 0; explicit id not found remains 3; `get \u003cid\u003e` held inspection warns (and returns the lap); `claim \u003cid\u003e` held target exits 10 and does not claim; the after-hook sees the exit code. Plus tests that `list`/`add`/`edit`/`delete` under a held head operate normally — no exit-code change, no held warning, no mutation block (cover at least those four; `count`/`assign` optional but cheap).\n\nFiles \u0026 scope: `*_test.go` alongside get.go/claim.go and the stints/resolver code, following the existing test patterns in the repo.\n\nAcceptance: `just test` + `just lint` green with the full matrix above. Do not tick tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-29T10:05:58.993481414Z",
-      "updatedAt": "2026-06-29T10:05:58.993481414Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T09:40:15.82321235Z",
+      "completedAt": "2026-07-01T09:40:15.82321235Z"
     },
     {
       "id": "laps-fbdb",
