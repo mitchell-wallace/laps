@@ -83,11 +83,11 @@
       "title": "Write resolver test suite",
       "description": "Context: Lap 5 built the resolver. The cycle-detection keying trap is subtle enough to warrant a dedicated test lap. Implements task 2.4.\n\nOutcome: Named tests for: get descends into the active stint; recursion across a nested stint; each failure class (missing child file, malformed ref, malformed child file, cycle) errors without looping or silently skipping.\n\nFiles \u0026 scope: internal/store or internal/cmd test file (wherever the resolver lives). No production changes unless a tiny one-liner is needed.\n\nDesign: The cycle test MUST construct an actual A-\u003eB-\u003eA ref graph (two stint files whose refs point at each other) and assert the command fails with a cycle error and mutates no file. This is the regression that would catch a path-keyed visited set. The test author should confirm by reasoning that the test catches the bug, not pass by accident. Failure-class tests should assert the error message distinguishes the class (missing child vs malformed ref vs malformed child vs cycle).\n\nAcceptance: `just test` green. Each task-2.4 scenario has a named test. `just lint` clean.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-29T10:09:28.111362088Z",
-      "updatedAt": "2026-06-29T10:09:28.111362088Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T00:59:10.186445469Z",
+      "completedAt": "2026-07-01T00:59:10.186445469Z"
     },
     {
       "id": "laps-d452",
