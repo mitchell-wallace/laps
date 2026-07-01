@@ -159,11 +159,11 @@
       "title": "Write claim scope and enqueue test suite",
       "description": "Context: Lap 11 implemented claim scope + enqueue. Test lap. Implements tasks 5.5 and 6.5.\n\nOutcome: Named tests for: claim records scope; done completes the claimed lap after an enqueue head preemption (the headline preemption-safety scenario); future claim fields are ignored; enqueue tail default; enqueue head preempts and later resumes with progress intact; root-only after resolution; empty stint enqueues and follows normal drain/resolution behavior.\n\nFiles \u0026 scope: internal/cmd/cmd_test.go and/or internal/store/claim_test.go. No production changes.\n\nDesign: The preemption-safety test is the headline: claim a lap in stint A, enqueue stint B at head, bare done; assert A's claimed lap completes (not B's head). The future-field tolerance test feeds claim JSON with an extra unknown field and asserts it parses cleanly. The resume test enqueues B at head, does one lap in B, drains B, then asserts A's remaining progress is intact and resolvable.\n\nAcceptance: `just test` green. Each task-5.5 and task-6.5 scenario has a named test. `just lint` clean.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-06-29T10:09:28.11136642Z",
-      "updatedAt": "2026-06-29T10:09:28.11136642Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T02:13:03.975401853Z",
+      "completedAt": "2026-07-01T02:13:03.975401853Z"
     },
     {
       "id": "laps-81af",
