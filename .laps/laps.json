@@ -225,11 +225,11 @@
       "title": "Document stints, scope flags, and id prefixes in README",
       "description": "Context: All implementation complete. Docs lap. Implements tasks 10.1 (record improve-cli-ergonomics dependency resolution), 11.1 (README), 11.2 (no VERSION bump).\n\nOutcome: README documents stints, the scope flags (--active/-c, --root/-r, --stint/-s), `laps stints`, `list --tree`, the claim `scope` field, and the per-stint id-prefix scheme (lap ids are globally unique and their prefix encodes their owning stint). VERSION is NOT bumped (add-stints-gating owns the final 0.9.0 bump). The improve-cli-ergonomics dependency is recorded as resolved (or routed to follow-up if lap 8 found it still open).\n\nFiles \u0026 scope: README.md only. Do NOT touch VERSION. Do NOT touch openspec/.\n\nDesign: Match existing README tone and structure. The per-stint id-prefix section should explain that a lap id's prefix identifies its owning stint (or root), so scoped explicit-id resolution and the active-lap marker work unambiguously. The scope-flags section should cover --active/-c (default, descends), --root/-r (no descent), --stint \u003cname\u003e/-s (named, no descent) and the mutual-exclusion rules (including raw --file). Note that bare verbs used by agents default to --active and descend; operators use the long forms for explicit structural control. Keep the schema-v3 note factual: on-disk schema reaches v3 while the binary VERSION stays 0.8.1 until add-stints-gating bumps 0.9.0.\n\nAcceptance: README renders cleanly. VERSION unchanged at 0.8.1. `just build` still clean (docs-only).",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1179648,
       "createdAt": "2026-06-29T10:09:28.111373499Z",
-      "updatedAt": "2026-06-29T10:09:28.111373499Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T03:29:52.534138807Z",
+      "completedAt": "2026-07-01T03:29:52.534138807Z"
     },
     {
       "id": "laps-53c0",
