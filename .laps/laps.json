@@ -116,11 +116,11 @@
       "title": "Verify gated flow ops and exit codes",
       "description": "Use the openspec-verify-change skill against `add-stints-gating`, focused on all of §2 (tasks 2.1-2.6, plus 2.4a) now that gating is complete.\n\nIdentify the branch/merge target first and use it for `git diff \u003ctarget\u003e...HEAD`; do not assume main. Treat pre-batch branch work as pre-existing unless the operator says otherwise.\n\nTrace the core dependency lines end-to-end: each of 0/10/11/12 through exitState -\u003e panic(*exitError) -\u003e recover -\u003e os.Exit with `runAfterHooksDeferred` (hooks.go:32-51) firing; the stdout-vs-stderr JSON split (queue-state on stdout vs `exit()`'s error on stderr); held warning on stderr for 10; the empty-vs-complete DECIDED mapping (12 = all resolvable done + nothing enqueueable; 11 = nothing enqueued); 11/12 only for head/flow (not explicit id); explicit `get \u003cid\u003e` warns + returns lap, `claim \u003cid\u003e` exits 10 + no mutation; explicit-id-not-found stays 3; non-flow-start (list/add/edit/delete/assign/count) unaffected; the single typed resolver driving all of it.\n\nRun `just test` + `just lint`. Check the tasks.md boxes for 2.2, 2.4, 2.4a, 2.5, and 2.6 once verified (2.1/2.3 were ticked by the prior VERIFY if correct — confirm). `laps add head` for substantive gaps; tiny safe one-liners excepted. Do not rewrite history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-29T10:05:58.993487213Z",
-      "updatedAt": "2026-06-29T10:05:58.993487213Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T09:42:28.438465806Z",
+      "completedAt": "2026-07-01T09:42:28.438465806Z"
     },
     {
       "id": "laps-ed95",
