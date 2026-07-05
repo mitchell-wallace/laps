@@ -1,1 +1,1 @@
-../../.opencode/skills/laps-release/SKILL.md
+../../../.agents/skills/laps-release/SKILL.md

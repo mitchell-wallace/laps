@@ -7,7 +7,21 @@ description: Release the laps project. Use only in the laps repository when prep
 
 This skill documents the release process for the `laps` project.
 
+## Branch pipeline
+
+Laps ships through **feature → dev → staging → main** (same pipeline as
+rally; promotions are `git merge --ff-only`):
+
+- **feature → dev** — local checks + CI green (CI runs on dev pushes).
+- **dev → staging** — requires a test-driving-rally pass covering the
+  rally+laps pair at the dev SHA being promoted (rally and laps version
+  together — a test drive exercises both).
+- **staging → main** — CI green on the staging SHA; the main push (with a
+  VERSION bump) fires auto-tag and the release workflow below.
+
 ## Workflow
+
+Run the release from `main` after fast-forwarding it to `staging`:
 
 1. **Run local checks:**
    ```

@@ -41,6 +41,11 @@ Recent history uses short, imperative commit subjects, often with Conventional C
 
 ## Releasing
 
+Laps follows the same branch pipeline as rally (see rally's AGENTS.md):
+**feature → dev** (CI green) **→ staging** (cleared by a test-driving-rally
+pass of the rally+laps pair) **→ main** (releases). Promotions are
+fast-forward only; never merge `dev` straight to `main`.
+
 Releases are automated via GitHub Actions. The process is:
 
 1. Update `VERSION` (repo root) to the new semver (e.g. `0.5.0`).
