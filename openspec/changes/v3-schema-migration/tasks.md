@@ -1,14 +1,14 @@
-## 1. Release laps 0.9.0 (the v3 cutover)
+## 1. Release laps 0.9.0 (the v3 cutover — ships as the coordinated v1.0.0; see proposal decision note)
 
-- [ ] 1.1 Confirm the four v3 changes are implemented and `VERSION` is `0.9.0`
+- [x] 1.1 Confirm the four v3 changes are implemented and `VERSION` is `0.9.0`
 - [ ] 1.2 Tag `v0.9.0` and run the release workflow (auto-tag → release.yml → GoReleaser); verify the released binary reports `0.9.0` and schema v3
 - [ ] 1.3 Smoke-test the released binary in a throwaway dir (never against this repo's own `.laps/laps.json` — see AGENTS.md WARNING): `init`, `add`, `list --oneline`, `claim`, `done`, `stints new|enqueue|ls`, `status`, `log`
 
 ## 2. Formalize the consumer contract (laps-owned)
 
-- [ ] 2.1 Add a "Consumer contract" section to `README.md` pinning: `list --oneline` shape, `.laps/claim` JSON shape, `get`/`claim` task-detail stdout format, and `get`/`claim` queue-state exit codes (`0`/`10`/`11`/`12`); state that the default `list`, `status`, and `log` outputs are operator-facing and not stable
-- [ ] 2.2 State the version-gating rule: a change that alters a pinned surface requires a `VERSION` bump, a contract-section update, and a consumer-impact note in its proposal
-- [ ] 2.3 Land the `consumer-contract` delta spec (this change's `specs/consumer-contract/spec.md`)
+- [x] 2.1 Add a "Consumer contract" section to `README.md` pinning: `list --oneline` shape, `.laps/claim` JSON shape, `get`/`claim` task-detail stdout format, and `get`/`claim` queue-state exit codes (`0`/`10`/`11`/`12`); state that the default `list`, `status`, and `log` outputs are operator-facing and not stable
+- [x] 2.2 State the version-gating rule: a change that alters a pinned surface requires a `VERSION` bump, a contract-section update, and a consumer-impact note in its proposal
+- [x] 2.3 Land the `consumer-contract` delta spec (this change's `specs/consumer-contract/spec.md`)
 
 ## 3. Rally phase-1 compatibility (cross-repo — `[rally]` tasks, gated on the 0.9.0 release)
 

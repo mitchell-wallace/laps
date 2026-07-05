@@ -34,4 +34,4 @@
 ## 4. Docs & release
 
 - [x] 4.1 Update `README.md` command reference (list two-line / `--oneline`, `ls`, `move`, `edit`, `assign`) and remove those names from any reserved hook-only command-name guidance
-- [ ] 4.2 Do not bump `VERSION` in this change; `add-stints-gating` owns the final 0.9.0 bump after all four changes land
+- [x] 4.2 Do not bump `VERSION` in this change; `add-stints-gating` owns the final 0.9.0 bump after all four changes land

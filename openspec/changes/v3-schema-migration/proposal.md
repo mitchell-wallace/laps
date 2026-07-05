@@ -18,6 +18,18 @@ formalizes the consumer contract, coordinates rally's adoption, and opens the
 
 ## What Changes
 
+> **Decision (2026-07-05, crew chief):** no 0.9.0 tag will be published. The v3
+> line ships as the **coordinated rally+laps v1.0.0 release** (rally campaign
+> lap rall-94fc); `VERSION` stays `0.9.0` on dev until the release lap bumps it
+> to `1.0.0`. Read "0.9.0" throughout this change (and the README coordination
+> sections) as "the v3 cutover release". Rationale: laps' staging promotion
+> already requires a test-driving-rally pass of the rally+laps *pair*, so a
+> standalone 0.9.0 could not clear the pipeline before rally adoption anyway,
+> and no consumer needs an intermediate tag. Rally's `MinLapsVersion` targets
+> `1.0.0`; during adoption/dogfood, build the dev companion with an
+> ldflags-injected version (a `just build` git-describe binary reports
+> `0.8.1-<n>-g<sha>`, which parses as 0.8.1 and fails the floor).
+
 - **Release laps 0.9.0** — tag + release the four changes as the v3 line. The released
   binary many consumers currently run is still the pre-v3 (schema-v2) line; 0.9.0 is the
   cutover.

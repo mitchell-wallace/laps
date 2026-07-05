@@ -132,7 +132,7 @@ task id, assignee, and status:
 - Default: todo tasks only, head first.
 - `--all` — include done tasks after todo items (struck through).
 - `--done` — show only completed tasks, most recent first.
-- `--oneline` — render each task on a single line (the prior format), e.g. `laps-6b4a — Second task (assignee: JUNIOR)`.
+- `--oneline` — render each task on a single line, e.g. `2. laps-6b4a — Second task (assignee: JUNIOR)`. This is the stable machine form pinned by the [consumer contract](#consumer-contract): exactly one non-blank line per lap, `<n>. <id> — <title>[ (assignee: <a>)]`.
 - `--tree` — render the full recursive overview. Descends into every queued
   stint ref and indents its laps, so root laps, queued stints, and the laps
   inside each are visible in one picture. A stint ref renders as a single
@@ -636,6 +636,38 @@ Each line in `.laps/log.jsonl` is a JSON object with the following fields:
 - `scope` — the canonical logical scope of the event (`root`, a stint name like `auth`, or a slash path for nesting like `auth/search`).
 - `detail` — an object containing additional event-specific details.
 - `session` — the session ID from the `LAPS_SESSION` environment variable (empty string if unset).
+
+## Consumer contract
+
+Consumers (orchestrators such as **Rally**, scripts, other tooling) that read
+laps output or `.laps/` files programmatically may rely on exactly four pinned
+surfaces. Everything else — the default `laps list` rendering, `laps status`,
+and `laps log` output — is **operator-facing and not stable**; it may change
+in any release without a consumer migration.
+
+The pinned surfaces:
+
+1. **`laps list --oneline`** — exactly one non-blank line per lap, in the form
+   `<n>. <id> — <title>`, with ` (assignee: <a>)` appended only when an
+   assignee is set. See [`laps list`](#laps-list---all----done---tree).
+2. **`.laps/claim`** — a JSON object `{"lap","file","scope","claimedAt"}`
+   where `lap` is the claimed lap id; `scope`/`claimedAt` may be omitted. A
+   legacy bare-id claim file is still read back-compatibly. See
+   [Claim File Format](#claim-file-format).
+3. **`get`/`claim` task-detail stdout** — line 0 is the title, an optional
+   `Assignee: <name>` line follows, then a blank line, then the description.
+   Stint resolution is transparent: a lap served from a stint renders
+   identically to a root-queue lap.
+4. **`get`/`claim` queue-state exit codes** — `0` lap returned, `10` head
+   held, `11` queue empty, `12` queue complete; `2` store/io, `3` explicit id
+   not found, and `4` hook failure are unchanged. See
+   [Queue-state exit codes](#queue-state-exit-codes).
+
+**Version-gating rule:** a change that alters any pinned surface must bump
+`VERSION`, update this contract section (and the consumer-contract spec), and
+record the consumer impact in its proposal. Changes to operator-facing output
+carry no such obligation — consumers must use the pinned machine forms, never
+parse the default `list`/`status`/`log` renderings.
 
 ## Orchestrator & Rally coordination
 
