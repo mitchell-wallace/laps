@@ -5263,7 +5263,7 @@ func TestIsKnownCommand(t *testing.T) {
 	known := []string{
 		"add", "count", "get", "list", "ls", "move", "edit", "assign", "done",
 		"delete", "prune", "on", "off", "update", "version", "help", "--version",
-		"claim", "init", "log", "status",
+		"claim", "init", "log", "status", "stints", "st", "tui",
 	}
 	for _, name := range known {
 		if !isKnownCommand(name) {
