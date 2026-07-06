@@ -45,8 +45,8 @@ type actionMsg struct {
 	err  error
 }
 
-func NewModel(runner Runner) Model {
-	return Model{
+func NewModel(runner Runner) *Model {
+	return &Model{
 		runner: runner,
 		vp:     viewport.New(80, 22),
 		width:  80,
@@ -55,11 +55,11 @@ func NewModel(runner Runner) Model {
 	}
 }
 
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return m.fetchCmd()
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = maxInt(1, msg.Width)
@@ -96,7 +96,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) View() string {
+func (m *Model) View() string {
 	if m.height <= 1 {
 		return m.statusBar()
 	}
@@ -114,17 +114,18 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// cursor, and y after a cursor move would delete the wrong lap.
 		switch key {
 		case "y":
-			return *m, m.actionCmd("delete")
+			cmd := m.actionCmd("delete")
+			return m, cmd
 		default:
 			m.confirm = false
 			m.status = "delete cancelled"
 			m.refresh()
-			return *m, nil
+			return m, nil
 		}
 	}
 	switch key {
 	case "ctrl+c", "q":
-		return *m, tea.Quit
+		return m, tea.Quit
 	case "up", "k":
 		m.moveCursor(-1)
 	case "down", "j":
@@ -135,9 +136,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.pageCursor(1)
 	case "r":
 		cmd := m.fetchCmd()
-		return *m, cmd
+		return m, cmd
 	case "d":
-		return *m, m.actionCmd("done")
+		cmd := m.actionCmd("done")
+		return m, cmd
 	case "x":
 		if selected := m.selectedRow(); selected != nil && selected.entry != nil && selected.entry.Kind != kindStint {
 			m.confirm = true
@@ -145,14 +147,17 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.refresh()
 		}
 	case "K":
-		return *m, m.moveAction(-1)
+		cmd := m.moveAction(-1)
+		return m, cmd
 	case "J":
-		return *m, m.moveAction(1)
+		cmd := m.moveAction(1)
+		return m, cmd
 	case "h":
-		return *m, m.holdAction()
+		cmd := m.holdAction()
+		return m, cmd
 	}
 	m.refresh()
-	return *m, nil
+	return m, nil
 }
 
 func (m *Model) fetchCmd() tea.Cmd {
@@ -259,7 +264,7 @@ func (m *Model) refresh() {
 	m.vp.SetYOffset(m.cursor)
 }
 
-func (m Model) buildRows() []row {
+func (m *Model) buildRows() []row {
 	width := maxInt(1, m.width)
 	if m.err != nil {
 		return []row{{text: fitLine("laps unavailable: "+m.err.Error(), width)}}
@@ -276,7 +281,7 @@ func (m Model) buildRows() []row {
 	if len(m.snapshot.Entries) == 0 && m.snapshot.Counts.Total == 0 {
 		return []row{{text: fitLine("queue empty", width)}}
 	}
-	rows := []row{{text: summaryLine(m.snapshot)}}
+	rows := []row{{text: summaryLine(&m.snapshot)}}
 	for i := range m.snapshot.Entries {
 		rows = appendEntryRows(rows, &m.snapshot.Entries[i], m.snapshot.Gate, "")
 	}
@@ -375,14 +380,14 @@ func (m *Model) pageCursor(delta int) {
 	}
 }
 
-func (m Model) selectedRow() *row {
+func (m *Model) selectedRow() *row {
 	if m.cursor < 0 || m.cursor >= len(m.rows) || !m.rows[m.cursor].selectable {
 		return nil
 	}
 	return &m.rows[m.cursor]
 }
 
-func (m Model) todoRowsForFile(fileArg string) []row {
+func (m *Model) todoRowsForFile(fileArg string) []row {
 	var rows []row
 	for _, r := range m.rows {
 		if !r.selectable || r.entry == nil || r.entry.Kind == kindStint || r.entry.IsDone || r.fileArg != fileArg {
@@ -393,11 +398,11 @@ func (m Model) todoRowsForFile(fileArg string) []row {
 	return rows
 }
 
-func (m Model) isHeld(name string) bool {
+func (m *Model) isHeld(name string) bool {
 	return m.snapshot.Gate != nil && m.snapshot.Gate.Stint == name
 }
 
-func summaryLine(snapshot Snapshot) string {
+func summaryLine(snapshot *Snapshot) string {
 	parts := []string{
 		"state " + valueOr(snapshot.State, "unknown"),
 		fmt.Sprintf("todo %d", snapshot.Counts.Todo),
@@ -458,7 +463,7 @@ func formatAge(seconds int64) string {
 	return fmt.Sprintf("%dh%02dm", minutes/60, minutes%60)
 }
 
-func (m Model) statusBar() string {
+func (m *Model) statusBar() string {
 	width := maxInt(1, m.width)
 	left := "laps tui"
 	middle := m.status

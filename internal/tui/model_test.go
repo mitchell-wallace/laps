@@ -100,18 +100,18 @@ func TestRefreshCoalescesWhileFetchInFlight(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("first refresh returned nil cmd")
 	}
-	m = next.(Model)
+	m = next.(*Model)
 	next, cmd = m.Update(runeKey("r"))
 	if cmd != nil {
 		t.Fatalf("second refresh while loading returned cmd")
 	}
-	m = next.(Model)
+	m = next.(*Model)
 	if !m.loading {
 		t.Fatalf("loading = false, want true")
 	}
 }
 
-func modelWithSnapshot(snapshot Snapshot, width, height int) Model {
+func modelWithSnapshot(snapshot Snapshot, width, height int) *Model {
 	m := NewModel(Runner{})
 	m.width = width
 	m.height = height
@@ -121,17 +121,17 @@ func modelWithSnapshot(snapshot Snapshot, width, height int) Model {
 	return m
 }
 
-func updateModel(t *testing.T, m Model, msg tea.Msg) Model {
+func updateModel(t *testing.T, m *Model, msg tea.Msg) *Model {
 	t.Helper()
 	next, _ := m.Update(msg)
-	typed, ok := next.(Model)
+	typed, ok := next.(*Model)
 	if !ok {
 		t.Fatalf("model type = %T, want tui.Model", next)
 	}
 	return typed
 }
 
-func selectedID(m Model) string {
+func selectedID(m *Model) string {
 	row := m.selectedRow()
 	if row == nil || row.entry == nil {
 		return ""
@@ -139,7 +139,7 @@ func selectedID(m Model) string {
 	return row.entry.ID
 }
 
-func selectedStint(m Model) string {
+func selectedStint(m *Model) string {
 	row := m.selectedRow()
 	if row == nil {
 		return ""

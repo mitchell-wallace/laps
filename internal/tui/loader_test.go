@@ -143,7 +143,7 @@ func TestActionDispatchesAndRefreshes(t *testing.T) {
 
 			for i, key := range tt.keys {
 				next, cmd := m.Update(key)
-				typed, ok := next.(Model)
+				typed, ok := next.(*Model)
 				if !ok {
 					t.Fatalf("model type = %T, want tui.Model", next)
 				}
@@ -154,13 +154,13 @@ func TestActionDispatchesAndRefreshes(t *testing.T) {
 					}
 					msg := cmd()
 					next, cmd = m.Update(msg)
-					m = next.(Model)
+					m = next.(*Model)
 					if cmd == nil {
 						t.Fatalf("action did not schedule refresh")
 					}
 					msg = cmd()
 					next, _ = m.Update(msg)
-					m = next.(Model)
+					m = next.(*Model)
 				} else if cmd != nil {
 					t.Fatalf("key %d returned unexpected cmd", i)
 				}
@@ -183,7 +183,7 @@ func TestDeleteRequiresConfirmation(t *testing.T) {
 	if cmd != nil {
 		t.Fatalf("x returned cmd before confirmation")
 	}
-	m = next.(Model)
+	m = next.(*Model)
 	if !m.confirm {
 		t.Fatalf("confirm = false, want true")
 	}
@@ -208,7 +208,7 @@ func TestConfirmSwallowsOtherKeysAndCancels(t *testing.T) {
 	if cmd != nil {
 		t.Fatalf("key during confirm returned cmd")
 	}
-	m = next.(Model)
+	m = next.(*Model)
 	if m.confirm {
 		t.Fatal("confirm still armed after other key, want cancelled")
 	}
@@ -220,7 +220,7 @@ func TestConfirmSwallowsOtherKeysAndCancels(t *testing.T) {
 	if cmd != nil {
 		t.Fatalf("y after cancelled confirm returned cmd")
 	}
-	m = next.(Model)
+	m = next.(*Model)
 	if got := readLog(t, logPath); len(got) != 0 {
 		t.Fatalf("log after cancelled confirm = %#v, want empty", got)
 	}

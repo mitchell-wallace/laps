@@ -28,7 +28,8 @@ func (r Runner) Load(ctx context.Context) (Snapshot, error) {
 	}
 
 	stints := make(map[string]*Stint)
-	for _, s := range status.Stints {
+	for i := range status.Stints {
+		s := &status.Stints[i]
 		stint := s.toStint()
 		stints[s.Name] = stint
 		if !s.Queued || s.Archived {
@@ -136,7 +137,8 @@ func (c command) CombinedOutput() ([]byte, error) {
 
 func entriesFromTasks(tasks []task, stints map[string]*Stint) []Entry {
 	entries := make([]Entry, 0, len(tasks))
-	for _, t := range tasks {
+	for i := range tasks {
+		t := &tasks[i]
 		kind := t.Kind
 		if kind == "" {
 			kind = kindLap
@@ -167,7 +169,7 @@ func entriesFromTasks(tasks []task, stints map[string]*Stint) []Entry {
 	return entries
 }
 
-func (s statusStint) toStint() *Stint {
+func (s *statusStint) toStint() *Stint {
 	return &Stint{
 		Name:     s.Name,
 		Scope:    s.Scope,
