@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mitchell-wallace/laps/internal/hooks"
 	"github.com/mitchell-wallace/laps/internal/store"
@@ -237,10 +238,32 @@ func checkDefault(beadsDir string) {
 	}
 }
 
+func isEmptyOrMissingFile(err error) bool {
+	return errors.Is(err, store.ErrEmptyFile) || errors.Is(err, store.ErrFileNotFound)
+}
+
 func loadFile(path, repoRoot, beadsDir string) *store.File {
+	return loadFileWithPolicy(path, repoRoot, beadsDir, false)
+}
+
+func loadFileCreating(path, repoRoot, beadsDir string) *store.File {
+	return loadFileWithPolicy(path, repoRoot, beadsDir, true)
+}
+
+func loadFileWithPolicy(path, repoRoot, beadsDir string, createMissing bool) *store.File {
 	data, err := store.Load(path)
 	if err != nil {
-		if errors.Is(err, store.ErrEmptyFile) {
+		missing := errors.Is(err, store.ErrFileNotFound)
+		defaultPath := filepath.Join(beadsDir, store.ResolveFile(""))
+		if missing && !createMissing && filepath.Clean(path) != filepath.Clean(defaultPath) {
+			name, relErr := filepath.Rel(beadsDir, path)
+			if relErr != nil {
+				name = path
+			}
+			hint := suggestTarget(beadsDir, fileFlag)
+			exit(3, "task file %s not found%s", filepath.ToSlash(name), hint)
+		}
+		if missing || errors.Is(err, store.ErrEmptyFile) {
 			f := &store.File{Version: store.CurrentVersion, Tasks: []store.Task{}}
 			if name, ok := store.ActiveStintNameForPath(beadsDir, path); ok {
 				prefix, err := store.AllocateStintPrefix(beadsDir, repoRoot, name)
@@ -282,6 +305,31 @@ func loadFile(path, repoRoot, beadsDir string) *store.File {
 	// out (e.g. after a hand edit or merge).
 	store.Normalize(data)
 	return data
+}
+
+func suggestTarget(beadsDir, target string) string {
+	cleaned := filepath.ToSlash(filepath.Clean(target))
+	if cleaned == "." || cleaned == "" {
+		return ""
+	}
+	if strings.HasPrefix(cleaned, "stints/") {
+		name := strings.TrimSuffix(filepath.Base(cleaned), ".json")
+		name = strings.TrimSuffix(name, ".laps")
+		if name != "" {
+			return fmt.Sprintf(" (did you mean --stint %s?)", name)
+		}
+	}
+	if !strings.Contains(cleaned, "/") {
+		name := strings.TrimSuffix(cleaned, ".json")
+		name = strings.TrimSuffix(name, ".laps")
+		path, err := store.ResolveStintFile(beadsDir, name)
+		if err == nil {
+			if _, statErr := os.Stat(path); statErr == nil {
+				return fmt.Sprintf(" (did you mean --stint %s?)", name)
+			}
+		}
+	}
+	return ""
 }
 
 func printJSON(v interface{}) {

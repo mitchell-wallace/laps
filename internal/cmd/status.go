@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -165,7 +164,7 @@ separately in the snapshot.`,
 							break
 						}
 					}
-				} else if !errors.Is(err, store.ErrEmptyFile) {
+				} else if !isEmptyOrMissingFile(err) {
 					exitCode = 2
 					exit(2, "status: %v", err)
 				}
@@ -300,7 +299,7 @@ func statusGateForFlow(beadsDir string, flow *flowResolution) *statusGate {
 func statusStints(beadsDir, repoRoot string, activeCtx *activeContext) ([]statusStint, *statusStint, error) {
 	rootFile, err := loadExistingFile(scopedRootPath(beadsDir), repoRoot, beadsDir)
 	if err != nil {
-		if !errors.Is(err, store.ErrEmptyFile) {
+		if !isEmptyOrMissingFile(err) {
 			return nil, nil, err
 		}
 		rootFile = &store.File{Version: store.CurrentVersion, Tasks: []store.Task{}}

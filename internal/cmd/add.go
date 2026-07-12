@@ -135,7 +135,7 @@ Prints each new task id on success.`,
 			}
 		}
 
-		file := loadFile(path, repoRoot, beadsDir)
+		file := loadFileCreating(path, repoRoot, beadsDir)
 		ctx, err := resolveSelectedContext(path, repoRoot, beadsDir, file)
 		if err != nil {
 			exitCode = 2

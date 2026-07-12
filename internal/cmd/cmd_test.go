@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -364,6 +365,111 @@ func TestRawStintFileInitializationAllocatesPrefix(t *testing.T) {
 	}
 	if stintFile.Prefix != "auth" {
 		t.Fatalf("stint prefix metadata = %q, want auth", stintFile.Prefix)
+	}
+}
+
+func TestListMissingFileFailsClosed(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("list", "-f", "missing")
+	if code != 3 {
+		t.Fatalf("list missing file exit %d, want 3; stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "task file missing.json not found") {
+		t.Fatalf("missing file error not surfaced, got: %s", errStr)
+	}
+	if _, err := os.Stat(filepath.Join(beadsDir, "missing.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("list created missing target; stat error = %v", err)
+	}
+}
+
+func TestListMisspelledStintTargetSuggestsScopeFlag(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	if _, errStr, code := runMB("stints", "new", "auth"); code != 0 {
+		t.Fatalf("stints new exit %d, stderr: %s", code, errStr)
+	}
+	_, errStr, code := runMB("list", "-f", "stints/auth")
+	if code != 3 {
+		t.Fatalf("list misspelled stint exit %d, want 3; stderr: %s", code, errStr)
+	}
+	if !strings.Contains(errStr, "task file stints/auth.json not found") || !strings.Contains(errStr, "--stint auth") {
+		t.Fatalf("expected stint correction hint, got: %s", errStr)
+	}
+	if _, err := os.Stat(filepath.Join(beadsDir, "stints", "auth.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("list created misspelled stint target; stat error = %v", err)
+	}
+	if hint := suggestTarget(beadsDir, "auth"); hint != " (did you mean --stint auth?)" {
+		t.Fatalf("bare active stint hint = %q", hint)
+	}
+	if hint := suggestTarget(beadsDir, "unrelated"); hint != "" {
+		t.Fatalf("unexpected unrelated target hint = %q", hint)
+	}
+}
+
+func TestAddMissingFileStillCreates(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	out, errStr, code := runMB("add", "tail", "-f", "newfile", "--title", "t")
+	if code != 0 {
+		t.Fatalf("add missing file exit %d, stderr: %s", code, errStr)
+	}
+	if strings.TrimSpace(out) == "" {
+		t.Fatal("add missing file returned no lap id")
+	}
+	if _, err := store.Load(filepath.Join(beadsDir, "newfile.json")); err != nil {
+		t.Fatalf("add did not create a valid target: %v", err)
+	}
+}
+
+func TestListMissingFileJSONError(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, code := runMB("list", "-f", "missing", "--json-output")
+	if code != 3 {
+		t.Fatalf("list missing file JSON exit %d, want 3; stderr: %s", code, errStr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(errStr)), &result); err != nil {
+		t.Fatalf("invalid JSON error %q: %v", errStr, err)
+	}
+	if result["exitCode"] != float64(3) || !strings.Contains(result["error"].(string), "task file missing.json not found") {
+		t.Fatalf("unexpected JSON error: %#v", result)
+	}
+}
+
+func TestCommandsFailClosedForMissingFileTarget(t *testing.T) {
+	tests := [][]string{
+		{"get", "-f", "missing"},
+		{"claim", "-f", "missing"},
+		{"list", "-f", "missing"},
+		{"count", "-f", "missing"},
+		{"status", "-f", "missing"},
+		{"log", "-f", "missing"},
+		{"done", "-f", "missing"},
+		{"move", "missing-id", "head", "-f", "missing"},
+		{"edit", "missing-id", "--title", "t", "-f", "missing"},
+		{"assign", "missing-id", "agent", "-f", "missing"},
+		{"delete", "missing-id", "-f", "missing"},
+		{"prune", "-f", "missing"},
+	}
+	for _, args := range tests {
+		t.Run(args[0], func(t *testing.T) {
+			beadsDir, cleanup := setupTempRepo(t)
+			defer cleanup()
+
+			_, errStr, code := runMB(args...)
+			if code != 3 {
+				t.Fatalf("%v exit %d, want 3; stderr: %s", args, code, errStr)
+			}
+			if _, err := os.Stat(filepath.Join(beadsDir, "missing.json")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("%v created missing target; stat error = %v", args, err)
+			}
+		})
 	}
 }
 
@@ -7557,6 +7663,7 @@ func TestLogMissingLog(t *testing.T) {
 func TestLogFileFilter(t *testing.T) {
 	beadsDir, cleanup := setupTempRepo(t)
 	defer cleanup()
+	writeResolverQueue(t, filepath.Join(beadsDir, "auth.json"), "")
 
 	lines := []string{
 		`{"ts":"2026-01-01T12:00:00Z","event":"created","cmd":"add","file":"laps.json","lap":"laps-1","title":"T1","assignee":"JUNIOR","scope":"root","session":"s1","detail":{}}`,

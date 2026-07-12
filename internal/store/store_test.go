@@ -439,6 +439,22 @@ func TestLoad_EmptyBraces(t *testing.T) {
 	}
 }
 
+func TestLoad_DistinguishesMissingFromEmpty(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.json")
+	if _, err := Load(missing); !errors.Is(err, ErrFileNotFound) {
+		t.Fatalf("missing file error = %v, want ErrFileNotFound", err)
+	}
+
+	empty := filepath.Join(dir, "empty.json")
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(empty); !errors.Is(err, ErrEmptyFile) {
+		t.Fatalf("empty file error = %v, want ErrEmptyFile", err)
+	}
+}
+
 func TestLoad_RejectExtraTopLevelField(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "laps.json")

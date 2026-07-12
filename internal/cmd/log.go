@@ -44,7 +44,9 @@ var logCmd = &cobra.Command{
 		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
 		exitCode := 0
-		if activeScopeSelected() {
+		if fileFlag != "" {
+			loadFile(path, repoRoot, beadsDir)
+		} else if activeScopeSelected() {
 			file := loadFile(path, repoRoot, beadsDir)
 			ctx, err := resolveActiveContext(path, repoRoot, beadsDir, file)
 			if err != nil {

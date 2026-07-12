@@ -21,7 +21,10 @@ var ErrStore = errors.New("store error")
 // candidate task files exist.
 var ErrEmptyState = errors.New("empty state")
 
-// ErrEmptyFile indicates the file does not exist or is empty.
+// ErrFileNotFound indicates the requested task file does not exist.
+var ErrFileNotFound = errors.New("file not found")
+
+// ErrEmptyFile indicates the file exists but is empty.
 var ErrEmptyFile = errors.New("empty file")
 
 // ErrTaskNotFound indicates a referenced task id does not exist.
@@ -354,7 +357,7 @@ func Load(path string) (*File, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, ErrEmptyFile
+			return nil, ErrFileNotFound
 		}
 		return nil, fmt.Errorf("%w: read file %s: %w", ErrStore, path, err)
 	}
@@ -687,7 +690,7 @@ func findTask(f *File, id string) *Task {
 func CheckDefaultStore(beadsDir string) error {
 	path := filepath.Join(beadsDir, defaultFileName)
 	_, err := Load(path)
-	if err == nil || errors.Is(err, ErrEmptyFile) {
+	if err == nil || errors.Is(err, ErrEmptyFile) || errors.Is(err, ErrFileNotFound) {
 		return nil
 	}
 	return err

@@ -417,6 +417,13 @@ to `.laps/stints/auth.laps.json`, a different path than `-f auth` →
 `.laps/auth.json`). Combining two scope flags, or `--file` with a scope flag,
 errors out.
 
+Raw file targets are fail-closed: read and flow commands exit `3` when the
+selected file does not exist and do not create it. `add` may create a missing
+file because creation is explicit in that verb; `init` continues to create the
+default store. When a raw target resembles an existing stint, the error
+suggests the safer `--stint <name>` form. Prefer scope flags over `--file` for
+normal queue and stint work.
+
 Bare verbs used by agents default to `--active` and descend; operators reach
 for the long forms (`--root`, `--stint`) for explicit structural control.
 

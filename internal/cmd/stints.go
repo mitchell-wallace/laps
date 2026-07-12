@@ -105,7 +105,7 @@ var stintsShowCmd = &cobra.Command{
 		queued := false
 		rootFile, err := loadExistingFile(scopedRootPath(beadsDir), repoRoot, beadsDir)
 		if err != nil {
-			if !errors.Is(err, store.ErrEmptyFile) {
+			if !isEmptyOrMissingFile(err) {
 				exit(2, "stints show: %v", err)
 			}
 		} else {
@@ -349,7 +349,7 @@ func scopedRootPath(beadsDir string) string {
 func collectStintSummaries(beadsDir, repoRoot string) ([]stintSummary, error) {
 	rootFile, err := loadExistingFile(scopedRootPath(beadsDir), repoRoot, beadsDir)
 	if err != nil {
-		if !errors.Is(err, store.ErrEmptyFile) {
+		if !isEmptyOrMissingFile(err) {
 			return nil, err
 		}
 		rootFile = &store.File{Version: store.CurrentVersion, Tasks: []store.Task{}}
