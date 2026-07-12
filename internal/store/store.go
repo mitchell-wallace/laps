@@ -410,30 +410,132 @@ func Save(path string, data *File) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("%w: create directory for %s: %v", ErrStore, path, err)
 	}
-	// Normalise nil slices so we write [] instead of null.
-	if data.Tasks == nil {
-		data.Tasks = []Task{}
-	}
-	if err := validatePrefix(data.Prefix); err != nil {
-		return fmt.Errorf("%w: invalid task file: %v", ErrStore, err)
-	}
-	if err := normalizeTaskKinds(data.Tasks); err != nil {
-		return fmt.Errorf("%w: invalid task file: %v", ErrStore, err)
-	}
-	// Apply the canonical ordering invariant on every write: done laps above
-	// todo laps, done by completedAt (oldest first), todos by their order key.
-	Normalize(data)
-	b, err := json.MarshalIndent(data, "", "  ")
+	b, err := marshalFile(data)
 	if err != nil {
-		return fmt.Errorf("%w: marshal JSON: %v", ErrStore, err)
+		return err
 	}
-	b = append(b, '\n')
 
 	if err := SafeWriteFile(path, b, 0o644); err != nil {
 		return fmt.Errorf("%w: %v", ErrStore, err)
 	}
 	return nil
 }
+
+func marshalFile(data *File) ([]byte, error) {
+	// Normalise nil slices so we write [] instead of null.
+	if data.Tasks == nil {
+		data.Tasks = []Task{}
+	}
+	if err := validatePrefix(data.Prefix); err != nil {
+		return nil, fmt.Errorf("%w: invalid task file: %v", ErrStore, err)
+	}
+	if err := normalizeTaskKinds(data.Tasks); err != nil {
+		return nil, fmt.Errorf("%w: invalid task file: %v", ErrStore, err)
+	}
+	// Apply the canonical ordering invariant on every write: done laps above
+	// todo laps, done by completedAt (oldest first), todos by their order key.
+	Normalize(data)
+	b, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("%w: marshal JSON: %v", ErrStore, err)
+	}
+	return append(b, '\n'), nil
+}
+
+// SaveFilesAtomically persists a group of existing task files as one logical
+// update. Every payload is marshalled and staged before any destination is
+// changed. If a rename fails during the commit, already-replaced files are
+// restored from backups before the error is returned.
+//
+// This provides all-or-nothing behavior for command failures. As with any
+// transaction implemented over multiple filesystem paths, it does not claim
+// crash atomicity across the individual final renames.
+func SaveFilesAtomically(files map[string]*File) error {
+	if len(files) == 0 {
+		return fmt.Errorf("%w: no task files to save", ErrStore)
+	}
+
+	paths := make([]string, 0, len(files))
+	staged := make(map[string]string, len(files))
+	backups := make(map[string]string, len(files))
+	token := fmt.Sprintf("%d.%d", os.Getpid(), time.Now().UnixNano())
+	for path := range files {
+		paths = append(paths, path)
+		staged[path] = path + "." + token + ".stage"
+		backups[path] = path + "." + token + ".backup"
+	}
+	sort.Strings(paths)
+
+	cleanupStages := func() {
+		for _, path := range paths {
+			_ = os.Remove(staged[path])
+		}
+	}
+	defer cleanupStages()
+
+	for _, path := range paths {
+		if _, err := os.Stat(path); err != nil {
+			return fmt.Errorf("%w: transaction requires existing file %s: %v", ErrStore, path, err)
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return fmt.Errorf("%w: create directory for %s: %v", ErrStore, path, err)
+		}
+		b, err := marshalFile(files[path])
+		if err != nil {
+			return err
+		}
+		if err := SafeWriteFile(staged[path], b, 0o644); err != nil {
+			return fmt.Errorf("%w: stage %s: %v", ErrStore, path, err)
+		}
+	}
+
+	committed := make([]string, 0, len(paths))
+	rollback := func(current string) error {
+		var rollbackErr error
+		if current != "" {
+			if err := os.Rename(backups[current], current); err != nil {
+				rollbackErr = fmt.Errorf("restore %s: %v", current, err)
+			}
+		}
+		for i := len(committed) - 1; i >= 0; i-- {
+			path := committed[i]
+			if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) && rollbackErr == nil {
+				rollbackErr = fmt.Errorf("remove replacement %s: %v", path, err)
+			}
+			if err := os.Rename(backups[path], path); err != nil && rollbackErr == nil {
+				rollbackErr = fmt.Errorf("restore %s: %v", path, err)
+			}
+		}
+		return rollbackErr
+	}
+
+	for _, path := range paths {
+		if err := atomicRename(path, backups[path]); err != nil {
+			if rollbackErr := rollback(""); rollbackErr != nil {
+				return fmt.Errorf("%w: commit %s: %v; rollback failed: %v", ErrStore, path, err, rollbackErr)
+			}
+			return fmt.Errorf("%w: commit %s: %v", ErrStore, path, err)
+		}
+		if err := atomicRename(staged[path], path); err != nil {
+			if rollbackErr := rollback(path); rollbackErr != nil {
+				return fmt.Errorf("%w: commit %s: %v; rollback failed: %v", ErrStore, path, err, rollbackErr)
+			}
+			return fmt.Errorf("%w: commit %s: %v", ErrStore, path, err)
+		}
+		committed = append(committed, path)
+	}
+
+	for _, path := range committed {
+		_ = os.Remove(backups[path])
+		if df, err := os.Open(filepath.Dir(path)); err == nil {
+			_ = df.Sync()
+			_ = df.Close()
+		}
+	}
+	return nil
+}
+
+var atomicRename = os.Rename
 
 // SafeWriteFile writes data to a temporary file, calls Sync to ensure it is committed to disk,
 // closes the file, and then renames it atomically to path. It also attempts to sync the parent

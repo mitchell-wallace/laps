@@ -278,6 +278,18 @@ Reorder an existing todo task, preserving its id.
 
 Prints the moved task id on success.
 
+### `laps transfer <root|stint> <task-id>...`
+Move one or more tasks from the selected queue to the root queue or an existing
+active stint. The source uses `--root`, `--stint <name>`, or `--active` (the
+default); the first positional argument names the destination (`root` is the
+root queue, otherwise it is a stint name).
+
+The entire batch is validated and committed together: either every named task
+moves or neither queue changes. IDs and all task fields are preserved. A task
+that is currently claimed cannot be transferred; clear its claim first.
+Archived stints cannot be a source or destination, and destination stints are
+never created implicitly.
+
 ### `laps edit <id> [--title] [--description] [--assignee]`
 Edit fields of an existing task in place, preserving its id and order. At
 least one of the flags must be provided. Each field is updated only when its
@@ -403,7 +415,7 @@ deterministically instead of looping or silently skipping.
 
 ### Scope flags
 Queue-targeting commands (`add`, `get`, `claim`, `done`, `list`, `count`,
-`delete`, `prune`, `move`, `edit`, `assign`, plus `status` and `log`) accept
+`delete`, `prune`, `move`, `transfer`, `edit`, `assign`, plus `status` and `log`) accept
 three mutually exclusive scope flags that select *which* layer a command
 targets:
 
@@ -433,7 +445,7 @@ for the long forms (`--root`, `--stint`) for explicit structural control.
 
 ### Scoped explicit-id resolution
 Every id-taking operation (`get <id>`, `claim <id>`, `done <id>`,
-`add after <id>`, `move`, `edit`, `assign`, `delete`) resolves the id **within
+`add after <id>`, `move`, `transfer`, `edit`, `assign`, `delete`) resolves the id **within
 the selected scope first**. If the id lives in another stint, the command fails
 naming that stint (e.g. `a7 is in stint search - re-run with -s search`) and
 mutates no file. `stints enqueue after <id>` resolves the anchor in root only.
@@ -446,11 +458,11 @@ created inside that stint carry the stint's prefix. Allocation happens once at
 `stints new` and is made unique against the repo prefix and every existing
 stint prefix.
 
-Consequence: **a lap id's prefix identifies its owning stint (or root)**, so
-ids are globally unique across all files. This is what lets scoped explicit-id
-resolution and the active-lap marker in `list` work unambiguously even though
-`list` descends — the marker and scope are read straight from the id, with no
-separate file/scope comparison.
+Prefixes make newly generated ids globally unique across all files. A lap
+retains that original prefix when `transfer` moves it, so the prefix identifies
+where the lap was created, not necessarily its current queue. Scoped
+explicit-id resolution searches the queue files for the lap's current owner
+before printing an out-of-scope hint.
 
 ### Enqueue, drain, and auto-archive
 `stints enqueue` adds a ref to the root queue (default `tail`). A `head`

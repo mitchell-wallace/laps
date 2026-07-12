@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -196,6 +197,60 @@ func TestLoadSave(t *testing.T) {
 	}
 	if !loaded.Tasks[0].CreatedAt.Equal(created) {
 		t.Errorf("CreatedAt = %v, want %v", loaded.Tasks[0].CreatedAt, created)
+	}
+}
+
+func TestSaveFilesAtomicallyRollsBackMidCommitFailure(t *testing.T) {
+	dir := t.TempDir()
+	firstPath := filepath.Join(dir, "a.json")
+	secondPath := filepath.Join(dir, "b.json")
+	first := &File{Version: CurrentVersion, Tasks: []Task{{ID: "a-old", Title: "A old"}}}
+	second := &File{Version: CurrentVersion, Tasks: []Task{{ID: "b-old", Title: "B old"}}}
+	if err := Save(firstPath, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(secondPath, second); err != nil {
+		t.Fatal(err)
+	}
+	firstBefore, err := os.ReadFile(firstPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondBefore, err := os.ReadFile(secondPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	originalRename := atomicRename
+	t.Cleanup(func() { atomicRename = originalRename })
+	renames := 0
+	atomicRename = func(oldPath, newPath string) error {
+		renames++
+		// Sorted path order performs two commit renames per file. Fail while
+		// installing the second replacement, after the first was committed.
+		if renames == 4 {
+			return errors.New("injected second-file failure")
+		}
+		return os.Rename(oldPath, newPath)
+	}
+
+	err = SaveFilesAtomically(map[string]*File{
+		firstPath:  {Version: CurrentVersion, Tasks: []Task{{ID: "a-new", Title: "A new"}}},
+		secondPath: {Version: CurrentVersion, Tasks: []Task{{ID: "b-new", Title: "B new"}}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "injected second-file failure") {
+		t.Fatalf("SaveFilesAtomically error = %v, want injected failure", err)
+	}
+	firstAfter, err := os.ReadFile(firstPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondAfter, err := os.ReadFile(secondPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(firstAfter, firstBefore) || !bytes.Equal(secondAfter, secondBefore) {
+		t.Fatalf("transaction was partially applied\nfirst before: %s\nfirst after: %s\nsecond before: %s\nsecond after: %s", firstBefore, firstAfter, secondBefore, secondAfter)
 	}
 }
 

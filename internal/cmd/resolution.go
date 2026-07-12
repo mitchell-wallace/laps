@@ -124,36 +124,29 @@ func findScopedTask(ctx *activeContext, id string) *store.Task {
 	return nil
 }
 
-func exitIfOutOfScope(beadsDir, repoRoot string, ctx *activeContext, id string) {
-	prefix, ok := idPrefix(id)
-	if !ok {
-		return
-	}
-	selectedPrefix := store.RepoPrefix(repoRoot)
-	if ctx.File.Prefix != "" {
-		selectedPrefix = ctx.File.Prefix
-	}
-	if prefix == selectedPrefix {
-		return
-	}
-	if prefix == store.RepoPrefix(repoRoot) {
-		exit(3, "%s is in root - re-run with --root", id)
-	}
-	owners, err := store.StintPrefixMap(beadsDir)
+func exitIfOutOfScope(beadsDir, _ string, ctx *activeContext, id string) {
+	paths, err := store.QueueFilePaths(beadsDir)
 	if err != nil {
 		exit(2, "%v", err)
 	}
-	if stint, ok := owners[prefix]; ok {
-		exit(3, "%s is in stint %s - re-run with -s %s", id, stint, stint)
+	for _, path := range paths {
+		if filepath.Clean(path) == filepath.Clean(ctx.Path) {
+			continue
+		}
+		file, err := store.Load(path)
+		if err != nil || store.FindTask(file, id) == nil {
+			continue
+		}
+		if filepath.Clean(path) == filepath.Clean(scopedRootPath(beadsDir)) {
+			exit(3, "%s is in root - re-run with --root", id)
+		}
+		if stint, ok := store.ActiveStintNameForPath(beadsDir, path); ok {
+			exit(3, "%s is in stint %s - re-run with -s %s", id, stint, stint)
+		}
+		if stint, ok := store.ArchivedStintNameForPath(beadsDir, path); ok {
+			exit(3, "%s is in archived stint %s", id, stint)
+		}
 	}
-}
-
-func idPrefix(id string) (string, bool) {
-	prefix, _, ok := strings.Cut(id, "-")
-	if !ok || prefix == "" {
-		return "", false
-	}
-	return prefix, true
 }
 
 func resolveActiveContext(rootPath, repoRoot, beadsDir string, rootFile *store.File) (*activeContext, error) {
