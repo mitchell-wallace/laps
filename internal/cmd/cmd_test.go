@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -5259,29 +5260,89 @@ func TestJSONOutputOnOff(t *testing.T) {
 	}
 }
 
-func TestIsKnownCommand(t *testing.T) {
-	known := []string{
-		"add", "count", "get", "list", "ls", "move", "edit", "assign", "done",
-		"delete", "prune", "on", "off", "update", "version", "help", "--version",
-		"claim", "init", "log", "status", "stints", "st", "tui",
-	}
-	for _, name := range known {
-		if !isKnownCommand(name) {
-			t.Fatalf("expected isKnownCommand(%q) = true", name)
+func TestBuiltinNamesMatchesCobraRegistry(t *testing.T) {
+	names := builtinNames()
+	for _, command := range rootCmd.Commands() {
+		if !names[command.Name()] {
+			t.Errorf("registered command %q missing from built-in names", command.Name())
+		}
+		for _, alias := range command.Aliases {
+			if !names[alias] {
+				t.Errorf("alias %q for %q missing from built-in names", alias, command.Name())
+			}
 		}
 	}
-	// log and status are the newly-registered built-ins; assert them explicitly
-	// since they back the new reader/status commands and must not fall through to
-	// the hook-only intercept path.
-	if !isKnownCommand("log") {
-		t.Fatal("expected isKnownCommand(\"log\") = true")
+	for _, pseudo := range []string{"help", "completion"} {
+		if !names[pseudo] {
+			t.Errorf("pseudo command %q missing from built-in names", pseudo)
+		}
 	}
-	if !isKnownCommand("status") {
-		t.Fatal("expected isKnownCommand(\"status\") = true")
+	if names["not-a-real-command"] {
+		t.Fatal("unexpected unknown command in built-in names")
 	}
-	if isKnownCommand("not-a-real-command") {
-		t.Fatal("expected unknown command to return false")
+}
+
+func TestUnknownCommandFailsWithSuggestion(t *testing.T) {
+	_, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	_, errStr, err := runMBExecute("stinst", "ls")
+	if err == nil {
+		t.Fatal("expected typo to fail")
 	}
+	if !strings.Contains(errStr, "unknown command") || !strings.Contains(errStr, "stints") {
+		t.Fatalf("expected unknown-command suggestion, got: %s", errStr)
+	}
+}
+
+func TestUndeclaredHookOnlyCommandFails(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	hooks := `{"version":1,"hooks":[{"title":"worktree","command":"worktree","when":"before","run":"true"}]}`
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, errStr, err := runMBExecute("deploy")
+	if err == nil {
+		t.Fatal("expected undeclared hook-only command to fail")
+	}
+	if !strings.Contains(errStr, "unknown command") {
+		t.Fatalf("expected unknown-command error, got: %s", errStr)
+	}
+}
+
+func TestUnknownCommandJSONOutput(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".laps"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(os.Args[0], "-test.run=TestUnknownCommandJSONOutputHelper")
+	command.Dir = root
+	command.Env = append(os.Environ(), "LAPS_TEST_JSON_UNKNOWN=1")
+	output, err := command.CombinedOutput()
+	if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
+		t.Fatalf("expected exit 1, got %v; output: %s", err, output)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(output))), &result); err != nil {
+		t.Fatalf("expected one JSON error object, got %q: %v", output, err)
+	}
+	errorMessage, _ := result["error"].(string)
+	if result["exitCode"] != float64(1) || !strings.Contains(errorMessage, "unknown command") {
+		t.Fatalf("unexpected JSON error: %#v", result)
+	}
+}
+
+func TestUnknownCommandJSONOutputHelper(t *testing.T) {
+	if os.Getenv("LAPS_TEST_JSON_UNKNOWN") != "1" {
+		return
+	}
+	os.Args = []string{"laps", "stinst", "--json-output"}
+	_ = Execute("test")
 }
 
 func TestIsJSONOutput(t *testing.T) {
@@ -6524,7 +6585,7 @@ func TestMoveDispatchThroughExecute(t *testing.T) {
 	out, _, _ := runMB("add", "tail", "--title", "Mover")
 	id := strings.TrimSpace(out)
 
-	// move is a registered built-in (isKnownCommand), so Execute must dispatch
+	// move is a registered built-in, so Execute must dispatch
 	// to moveCmd rather than the hook-only intercept path.
 	execOut, errStr, err := runMBExecute("move", id, "head")
 	if err != nil {
@@ -7128,7 +7189,7 @@ func TestEditAndAssignDispatchThroughExecute(t *testing.T) {
 	out, _, _ := runMB("add", "head", "--title", "T")
 	id := strings.TrimSpace(out)
 
-	// edit and assign are registered built-ins (isKnownCommand), so Execute
+	// edit and assign are registered built-ins, so Execute
 	// must dispatch to their cobra commands rather than the hook-only path.
 	editOut, errStr, err := runMBExecute("edit", id, "--title", "ViaExec")
 	if err != nil {

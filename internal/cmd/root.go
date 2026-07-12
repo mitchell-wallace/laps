@@ -36,7 +36,8 @@ var rootCmd = &cobra.Command{
 	Long: `Laps (laps) is a minimal, single-binary task tracker for AI coding agents.
 Tasks are a flat ordered queue with two states (todo / done). The agent's contract
 is simple: read the head, do the work, mark it done.`,
-	SilenceUsage: true,
+	SilenceUsage:               true,
+	SuggestionsMinimumDistance: 2,
 }
 
 type exitError struct {
@@ -126,19 +127,27 @@ func Execute(v string) error {
 		}
 	}
 
-	// Hook-only command handling
+	// Hook-only command handling. Cobra's registered command tree is the
+	// authoritative built-in registry; custom commands must be declared by a
+	// hook before they bypass Cobra's unknown-command handling.
 	cmdName, hookArgs, hookFileValue := splitArgs(os.Args[1:])
-	if cmdName != "" && !isKnownCommand(cmdName) {
-		if scopeFlagName, ok := scopeFlagInArgs(os.Args[1:]); ok {
-			return fmt.Errorf("unknown flag: %s", scopeFlagName)
-		}
+	if cmdName != "" && !builtinNames()[cmdName] {
 		repoRoot, beadsDir, err := store.DiscoverRepoRoot()
 		if err != nil {
 			exit(2, "%v", err)
 		}
-		hf, err := hooks.Load(beadsDir)
+		hf, declared, err := hooksDeclare(beadsDir, cmdName)
 		if err != nil {
 			exit(2, "%v", err)
+		}
+		if !declared {
+			if jsonOutput {
+				exit(1, "%s", unknownCommandMessage(cmdName))
+			}
+			return rootCmd.Execute()
+		}
+		if scopeFlagName, ok := scopeFlagInArgs(os.Args[1:]); ok {
+			return fmt.Errorf("unknown flag: %s", scopeFlagName)
 		}
 		path := filepath.Join(beadsDir, store.ResolveFile(hookFileValue))
 		vars := map[string]string{
@@ -170,6 +179,41 @@ func Execute(v string) error {
 	}
 
 	return rootCmd.Execute()
+}
+
+func builtinNames() map[string]bool {
+	names := map[string]bool{
+		"help":       true,
+		"completion": true,
+	}
+	for _, command := range rootCmd.Commands() {
+		names[command.Name()] = true
+		for _, alias := range command.Aliases {
+			names[alias] = true
+		}
+	}
+	return names
+}
+
+func hooksDeclare(beadsDir, name string) (*hooks.File, bool, error) {
+	hf, err := hooks.Load(beadsDir)
+	if err != nil {
+		return nil, false, err
+	}
+	for _, hook := range hf.Hooks {
+		if hook.Command == name {
+			return hf, true, nil
+		}
+	}
+	return hf, false, nil
+}
+
+func unknownCommandMessage(name string) string {
+	message := fmt.Sprintf("unknown command %q for %q", name, rootCmd.CommandPath())
+	if suggestions := rootCmd.SuggestionsFor(name); len(suggestions) > 0 {
+		message += "\n\nDid you mean this?\n\t" + suggestions[0]
+	}
+	return message
 }
 
 func getStorePath() (path, repoRoot, beadsDir string) {

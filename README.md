@@ -570,17 +570,21 @@ empty single-task variables (`$id`, `$title`, `$description`, and `$assignee`).
 
 ### Hook-only commands
 
-If `command` does not match a built-in laps command (e.g. `worktree`), you can invoke it directly:
+If a hook declares a `command` that does not match a built-in laps command
+(e.g. `worktree`), you can invoke it directly:
 
 ```bash
 laps worktree
 ```
 
-laps will fire every matching `before` and `after` hook and nothing else.
+laps will fire every matching `before` and `after` hook and nothing else. The
+custom name must be declared by at least one entry in `.laps/hooks.json`;
+undeclared names fail with a non-zero `unknown command` error.
 
-### Reserved command names
+### Command-name compatibility guidance
 
-The following names are reserved for potential future built-in commands and should be avoided for hook-only commands:
+The following names may become built-in commands in the future and should be
+avoided for hook-only commands:
 
 `init`, `tui`, `view`, `sync`, `project`, `graph`, `tree`, `ready`, `blocked`
 
