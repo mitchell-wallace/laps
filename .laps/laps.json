@@ -1,7 +1,8 @@
 {
-  "version": 2,
+  "version": 3,
   "tasks": [
     {
+      "kind": "lap",
       "id": "laps-7d3a",
       "title": "Implement nested stint drain parent-chain handling",
       "description": "Context: Follow-up from add-stints review, now planned as prerequisite section 0 of openspec/changes/add-stints-gating. Current drain identifies the completed stint by file but only searches root for the matching ref, so a nested graph like root -\u003e auth -\u003e search cannot mark auth's search ref done or archive search when search drains. This must be fixed before gating relies on final-lap drain/archive behavior under hold. Implements add-stints-gating tasks 0.1-0.4.\n\nOutcome: Active resolution or drain preparation returns the physical parent chain for every descended stint ref: parent path, parent file, ref index/pointer, child path, child name, and canonical scope. Completing the final lap in a nested stint updates the immediate parent ref, archives the child file, and cascades upward while parent stints have no todo laps. Root-level drain behavior remains unchanged. Cross-stint done undo restores archived nested stint files and reopens the immediate parent ref plus any ancestor refs/files needed to make the reopened lap reachable.\n\nFiles \u0026 scope: internal/cmd/resolution.go and internal/cmd/done.go primarily; store archive helpers only if a small helper is needed. Do not implement hold/release or exit-code gating in this lap.\n\nDesign: Preserve the add-stints invariants. Cycle detection stays keyed on physical child identity, not slash scope. Drain remains content-based and position-independent. Partial-failure ordering applies at each cascade level: preflight archive/save targets before mutation; if archive rename succeeds but saving the parent/root ref fails, restore the archived file back to active before returning. Never leave a done parent ref over a present active child file, or a todo parent ref pointing at a missing active child file when the archived file exists.\n\nAcceptance: just build and just test green. Manual reasoning confirms root-level drain and undo behavior are not regressed.",
@@ -13,6 +14,7 @@
       "completedAt": "2026-07-01T07:43:15.673397296Z"
     },
     {
+      "kind": "lap",
       "id": "laps-c4e1",
       "title": "Write nested stint drain and undo regression tests",
       "description": "Context: Test lap for the nested-drain prerequisite added to add-stints-gating section 0. The implementation lap should have made drain parent-chain aware and cascade-safe. This lap pins down the reviewed gap so future gating work cannot regress it. Implements add-stints-gating task 0.5.\n\nOutcome: Focused tests cover nested drain and undo behavior: completing the final lap in root -\u003e auth -\u003e search marks the search ref inside auth done and archives search; draining search cascades to archive auth when auth has no remaining todo laps; archive collision or simulated save failure at a nested level leaves no dangling parent ref; done undo for an archived nested lap restores child file, ancestor refs/files, and the lap.\n\nFiles \u0026 scope: internal/cmd/cmd_test.go and/or focused helper tests near the drain code. No production code changes unless a tiny testability fix is required.\n\nDesign: Tests must inspect both files and refs, not only command output. The partial-failure regression must assert both forbidden states are absent: no done parent ref over a present active child file, and no todo parent ref pointing at a missing active child file when the archived child exists. The undo test must confirm the reopened lap is reachable through active resolution after restore.\n\nAcceptance: just test green. just lint clean if golangci-lint is available.",
@@ -24,6 +26,7 @@
       "completedAt": "2026-07-01T07:56:06.75880727Z"
     },
     {
+      "kind": "lap",
       "id": "laps-5f31",
       "title": "Add hold/release with held metadata and ls badge",
       "description": "Context: Change #4 of 4 (FINAL) in the laps repo. Assumes add-stints (stint files, schema v3, the flow-start resolver) and add-event-log-and-status (event log, status taxonomy) are merged and working — plan from that post-merge tree. Read openspec/changes/add-stints-gating/{design.md Decisions + Resolved Product Calls, specs/stint-gating/spec.md, tasks.md §1} before starting.\n\nOutcome: A held flag on non-archived stint file metadata (defaults false when absent, folded into schema v3) plus `laps stints hold \u003cname\u003e` / `laps stints release \u003cname\u003e` that target any non-archived stint (including not-yet-enqueued) and refuse archived stints. Operations are idempotent and append `stint.held` / `stint.released` events ONLY when state changes. `laps stints ls` renders held as a SEPARATE badge alongside the queued/active/done lifecycle state (DECIDED: hold is orthogonal to lifecycle — the lifecycle column keeps its value and an additional held marker flags held metadata regardless of whether the hold has taken effect at the head).\n\nFiles \u0026 scope: stint metadata + schema v3 fold in internal/store; the hold/release subcommands in internal/cmd/stints.go following the existing stints subcommand pattern; event-log append for stint.held/stint.released; stints ls rendering. Do NOT touch get/claim/status (later laps).\n\nAcceptance: `just test` + `just lint` green. Unit tests covering tasks 1.6: hold sets / release clears before and after enqueue; default missing held is false; archived target refused; idempotent ops do not double-log; held shown in stints ls. Do NOT tick tasks.md boxes.",
@@ -35,6 +38,7 @@
       "completedAt": "2026-07-01T08:26:49.017610345Z"
     },
     {
+      "kind": "lap",
       "id": "laps-cdc8",
       "title": "Implement exitState and typed held-aware resolver",
       "description": "Context: This is the LOAD-BEARING, high-risk lap of the whole change. Read design.md Implementation Contracts in full before coding. Today `exit()` (internal/cmd/root.go:39-51) ALWAYS writes a `laps:` stderr line (or an `{error,exitCode}` JSON object to STDERR), and the ONLY way a nonzero OS code is produced is `panic(*exitError)` -\u003e recover -\u003e `os.Exit` (root.go:50, 57-64); the deferred after-hook `runAfterHooksDeferred` (internal/cmd/hooks.go:32-51, registered at get.go:46 / claim.go:46) reads `*exitCode` ONLY during that panic unwind. So a naive `os.Exit(11)` or `return`-with-error SKIPS the after-hook and violates 'hook sees the code'.\n\nOutcome: (a) a dedicated `exitState(code int)` helper; (b) a single TYPED queue-state (`lap | held | empty | complete`) returned by the flow-start resolver; (c) held detection — at each context head, a held `kind:\"stint\"` ref returns `held` and SHALL NOT descend into the child file. Do NOT wire exit codes into the get/claim nil-site yet (that is the next impl lap); do NOT touch status yet.\n\nFiles \u0026 scope: internal/cmd/root.go for exitState; the add-stints flow-start resolver (locate it in the merged tree) for the typed queue-state return and held-no-descent. Keep the resolver signature change additive so get/claim and the status probe can both consume one resolution pass.\n\nDesign (load-bearing — implement exactly): `exitState(code)` (1) sets the captured `exitCode = code`, (2) in JSON mode prints the small queue-state object to STDOUT via `printJSON` (note: `exit()` puts JSON on STDERR — this stdout-vs-stderr split IS the contract), (3) panics `*exitError{code}` with NO stderr error line. Held cases additionally warn on STDERR. Routing 10/11/12 through the existing panic/recover path is precisely what keeps `runAfterHooksDeferred` firing — do not bypass it. The resolver returns ONE typed outcome shared by get/claim and the later status gate probe (one resolution pass, not two); a held kind:\"stint\" ref at a context head returns held and does not descend.\n\nAcceptance: `just build` + `just test` + `just lint` green. Include focused regression tests now (not deferred): the after-hook observes exit code 11 (the critical assertion proving the mechanism), and held-no-descent returns the held state without selecting a lap. The broader exit-code matrix is a later lap; do not tick tasks.md boxes.",
@@ -46,6 +50,7 @@
       "completedAt": "2026-07-01T08:31:31.721804458Z"
     },
     {
+      "kind": "lap",
       "id": "laps-d068",
       "title": "Verify exitState mechanism and resolver",
       "description": "Use the openspec-verify-change skill against `add-stints-gating`, focused on the §2A load-bearing mechanism just landed (tasks 2.1, 2.3, and the single-typed-queue-state clause of 2.6).\n\nFirst identify the branch/merge target (PR metadata, recent history, repo docs) and use it for `git diff \u003ctarget\u003e...HEAD` — do not assume main. Treat any branch work from before this batch as pre-existing unless the operator expands scope.\n\nTrace the core dependency lines, not just 'tests pass': (1) `exitState` sets captured exitCode, prints the queue-state JSON to STDOUT (contrast with `exit()` which writes error-JSON to STDERR), then panics `*exitError{code}` with no stderr error line; (2) routing 10/11/12 through the existing panic(*exitError) -\u003e recover -\u003e os.Exit path (root.go:50, 57-64) keeps `runAfterHooksDeferred` (hooks.go:32-51) firing so the after-hook observes the code — a bare os.Exit/return would skip it; (3) the resolver returns ONE typed queue-state consumed by both get/claim and the (later) status probe; (4) held kind:\"stint\" at a context head returns held and does NOT descend into the child file.\n\nRun `just test` + `just lint`. If you find substantive gaps, `laps add head` a focused lap rather than implementing here (tiny safe one-liners excepted). Check the tasks.md boxes for 2.1, 2.3 (and the typed-state clause of 2.6) ONLY once verified correct and thorough. Do not rewrite git history.",
@@ -57,6 +62,7 @@
       "completedAt": "2026-07-01T08:45:57.450083055Z"
     },
     {
+      "kind": "lap",
       "id": "work-99ca",
       "title": "Wire held/empty/complete flow-start state through get, claim, and status gate probing",
       "description": "Use resolveFlowStart/exitState on head flow-start so held returns 10 with stderr warning, empty returns 11, complete returns 12, JSON state goes to stdout, after-hooks see the exit code, and status consumes the same typed queue-state instead of ad-hoc counts.",
@@ -68,6 +74,7 @@
       "completedAt": "2026-07-01T08:53:23.090501451Z"
     },
     {
+      "kind": "lap",
       "id": "work-b3f5",
       "title": "Verify held flow-state exit routing and shared resolver after fix",
       "description": "",
@@ -79,6 +86,7 @@
       "completedAt": "2026-07-01T09:04:21.229510216Z"
     },
     {
+      "kind": "lap",
       "id": "work-71b8",
       "title": "Add held-head non-flow command regressions",
       "description": "Context: VERIFY confirmed the shared held-aware resolver and exit-state routing are implemented, but section 2 remains under-tested in two places. internal/cmd/cmd_test.go covers resolver-level nested-held no-descent and the core get/claim/status exits, but it does not yet prove the CLI commands themselves exit 10 when a held stint is encountered during multi-step descent, and it does not cover the DECIDED 2.4a contract that non-flow-start commands remain unaffected under a held head.\n\nOutcome: add command-level regressions for laps get and laps claim through root -\u003e auth -\u003e search(held) proving nested held descent stops with exit 10 and warning, plus tests that at least list, add, edit, and delete operate normally under a held head with no held warning, no exit-code change, and expected mutations. Update openspec/changes/add-stints-gating/tasks.md to tick 2.4a and 2.5 only once those tests are in place.\n\nAcceptance: go test ./... and golangci-lint run ./... green.",
@@ -90,6 +98,7 @@
       "completedAt": "2026-07-01T09:10:08.099750417Z"
     },
     {
+      "kind": "lap",
       "id": "laps-e063",
       "title": "Wire get/claim exit codes and explicit-id held behavior",
       "description": "Context: exitState + the typed resolver exist (prior lap, verified). Now wire the exit codes at the existing post-defer `task == nil` site. That site (get.go:49-52 / claim.go:49-55) is ALREADY after the after-hook defer (get.go:46 / claim.go:46), so NO reordering is needed — the hook already observes the code. Read design.md Implementation Contracts (Empty/complete split, Existing failures keep existing codes) and Resolved Product Calls (empty-vs-complete DECIDED) before coding.\n\nOutcome: head/flow `get`/`claim` exit `0` (lap), `10` (held), `11` (empty), `12` (complete). The empty-vs-complete DECIDED mapping: `12` = everything resolvable from the root head is done AND nothing enqueueable remains; `11` = root resolves to zero todo because nothing was enqueued (incl. only-unqueued stint files / empty active stint file). Explicit `get \u003cid\u003e` into a held stint returns the lap AND warns on stderr; explicit `claim \u003cid\u003e` into a held stint exits `10`, leaves the claim unchanged, and warns.\n\nFiles \u0026 scope: get.go and claim.go — replace the single `exit(3,\"no head task\")` at the post-defer nil-site with `exitState(11)` vs `exitState(12)` per the typed resolver's outcome, and add the explicit-id-held behavior (warn for get; exit 10 + no mutation for claim). Leave `checkDefault`'s `exit(2)`-on-corrupt and explicit-id-not-found `exit(3)` unchanged; `checkDefault`'s `ErrEmptyState-\u003eexit(3)` branch is DEAD (nothing returns ErrEmptyState) — leave it.\n\nDesign: 11/12 apply ONLY to head/flow ops NOT targeting an explicit id; 10 ALSO applies to explicit `claim \u003cid\u003e` into a held stint. Explicit-id-not-found stays exit 3; store/io stays 2; hook stays 4. Drive the 11-vs-12 and held-vs-lap decisions from the single typed resolver outcome — do not re-derive state ad-hoc in each command.\n\nAcceptance: `just build` + `just lint` green. Smoke-check each of 0/10/11/12 by hand against fixture files (the full matrix is the next lap). Do not tick tasks.md boxes.",
@@ -101,6 +110,7 @@
       "completedAt": "2026-07-01T09:14:08.52855016Z"
     },
     {
+      "kind": "lap",
       "id": "laps-d47b",
       "title": "Add gated exit-code and non-flow-start tests",
       "description": "Context: gating is wired (exitState, typed resolver, exit codes, explicit-id behavior). Write the §2.5 exit-code test matrix and verify non-flow-start commands are unaffected by a held head (§2.4a, DECIDED).\n\nOutcome: tests covering: held head -\u003e no lap + exit 10 + warning; nested held encountered during descent -\u003e exit 10; empty -\u003e 11; complete -\u003e 12; lap present -\u003e 0; explicit id not found remains 3; `get \u003cid\u003e` held inspection warns (and returns the lap); `claim \u003cid\u003e` held target exits 10 and does not claim; the after-hook sees the exit code. Plus tests that `list`/`add`/`edit`/`delete` under a held head operate normally — no exit-code change, no held warning, no mutation block (cover at least those four; `count`/`assign` optional but cheap).\n\nFiles \u0026 scope: `*_test.go` alongside get.go/claim.go and the stints/resolver code, following the existing test patterns in the repo.\n\nAcceptance: `just test` + `just lint` green with the full matrix above. Do not tick tasks.md boxes.",
@@ -112,6 +122,7 @@
       "completedAt": "2026-07-01T09:40:15.82321235Z"
     },
     {
+      "kind": "lap",
       "id": "laps-fbdb",
       "title": "Verify gated flow ops and exit codes",
       "description": "Use the openspec-verify-change skill against `add-stints-gating`, focused on all of §2 (tasks 2.1-2.6, plus 2.4a) now that gating is complete.\n\nIdentify the branch/merge target first and use it for `git diff \u003ctarget\u003e...HEAD`; do not assume main. Treat pre-batch branch work as pre-existing unless the operator says otherwise.\n\nTrace the core dependency lines end-to-end: each of 0/10/11/12 through exitState -\u003e panic(*exitError) -\u003e recover -\u003e os.Exit with `runAfterHooksDeferred` (hooks.go:32-51) firing; the stdout-vs-stderr JSON split (queue-state on stdout vs `exit()`'s error on stderr); held warning on stderr for 10; the empty-vs-complete DECIDED mapping (12 = all resolvable done + nothing enqueueable; 11 = nothing enqueued); 11/12 only for head/flow (not explicit id); explicit `get \u003cid\u003e` warns + returns lap, `claim \u003cid\u003e` exits 10 + no mutation; explicit-id-not-found stays 3; non-flow-start (list/add/edit/delete/assign/count) unaffected; the single typed resolver driving all of it.\n\nRun `just test` + `just lint`. Check the tasks.md boxes for 2.2, 2.4, 2.4a, 2.5, and 2.6 once verified (2.1/2.3 were ticked by the prior VERIFY if correct — confirm). `laps add head` for substantive gaps; tiny safe one-liners excepted. Do not rewrite history.",
@@ -123,6 +134,7 @@
       "completedAt": "2026-07-01T09:42:28.438465806Z"
     },
     {
+      "kind": "lap",
       "id": "laps-ed95",
       "title": "Make done work under hold with drain still winning",
       "description": "Context: gating (§2) is verified. `done` for the already-claimed lap must succeed while a stint is held, and final-lap completion must still drain/archive so a held drained stint does not get stuck as the next gate. Read design.md 'Final-lap drain still wins' and the spec 'Hold blocks starting, not finishing'.\n\nOutcome: `done` for the claimed lap succeeds while its stint (or the head stint) is held (3.1). Final-lap completion under hold runs the normal add-stints drain/archive behavior; the next flow state after a final-lap `done` under hold is next-lap / empty / complete — NOT held-by-the-drained-stint (3.2). Tests for 3.3.\n\nFiles \u0026 scope: done.go and the drain/archive path added by add-stints. The gating resolver from §2 must let a completed-and-drained stint fall out of the head even if its metadata is still held.\n\nDesign: hold blocks STARTING (get/claim), never FINISHING (done). The subtlety is the final-lap case: draining/archiving a held stint on its last lap MUST advance the head past it, otherwise the held drained stint stays the next gate forever. Confirm the resolver's held check only fires for stints that still have a head ref pointing into them — a drained/archived stint no longer does.\n\nAcceptance: `just test` + `just lint` green. Tests (3.3): non-final claimed lap completes under hold and next `get`/`claim` exits 10; final claimed lap completes under hold and next flow state is next-lap/empty/complete rather than held. Do not tick tasks.md boxes.",
@@ -134,6 +146,7 @@
       "completedAt": "2026-07-01T10:18:10.425092007Z"
     },
     {
+      "kind": "lap",
       "id": "laps-d41e",
       "title": "Add held state to status with active-claim precedence",
       "description": "Context: the typed resolver from §2 is shared by the status gate probe — status derives its state from ONE resolution pass, not a second ad-hoc detection. Read the spec 'Held state in status' and design.md 'Status precedence'. This EXTENDS the status taxonomy added by add-event-log-and-status; the merged set of status.state values is active/ready/empty/complete/held.\n\nOutcome: a valid active claim keeps `status.state=active` with held gate metadata included SEPARATELY when the next head is held (4.1). When there is no valid active claim and the next flow-start would gate, status reports primary `held` state, the held stint, and the gate message; exits 0 for valid snapshots (4.2). `--json-output` reflects held with the resolved clean-state shape (4.3). Tests for 4.4.\n\nFiles \u0026 scope: the status command (internal/cmd, from add-event-log-and-status) and the resolver's typed queue-state. Reuse the same resolver outcome as get/claim.\n\nDesign: status precedence — a valid active claim ALWAYS wins (state=active; held gate metadata is a separate field). `held` is primary only when no valid active claim exists AND the next flow-start operation would gate. The empty-vs-complete DECIDED mapping (12 = all resolvable done + nothing enqueueable; 11 = nothing enqueued) also governs status empty/complete. Consumers MUST NOT treat the original four states as a closed list — surface held as a first-class state in both text and JSON. Status stays exit 0 for valid snapshots.\n\nAcceptance: `just test` + `just lint` green. Tests (4.4): held state in text and JSON; active-claim precedence over the held gate (state=active + separate gate metadata). Do not tick tasks.md boxes.",
@@ -145,6 +158,7 @@
       "completedAt": "2026-07-01T10:33:24.715217844Z"
     },
     {
+      "kind": "lap",
       "id": "laps-eef5",
       "title": "Document gating, coordinate Rally, bump VERSION to 0.9.0",
       "description": "Context: all implementation is done; this is the FINAL change (#4 of 4), so the 0.9.0 VERSION bump lands here. Read AGENTS.md 'Releasing'. Read design.md 'Rally contract change'.\n\nOutcome: README documents hold/release, the 10/11/12 gate exit codes (vs the old 3), and the held status state (5.1). Surface the get/claim exit-code CONTRACT CHANGE for the Rally relay loop and the coordination need (5.2) — a README section plus a clear operator note (the actual Rally-side relay-loop update is external to this repo; flag it for the operator, do not block on it here). Bump VERSION to 0.9.0 per the release process (5.3).\n\nFiles \u0026 scope: README.md; the Rally coordination note (place per repo convention — check for an existing relay-loop/agent doc; otherwise README + an operator-visible note); VERSION (repo root).\n\nDesign: the VERSION bump triggers the auto-tag workflow (`^[0-9]+\\.[0-9]+\\.[0-9]+$` validation) which creates `v0.9.0`, pushes it, and dispatches release.yml (GoReleaser, idempotent). Do NOT push to main or commit unless the operator explicitly asks — stage the VERSION + README changes and hand off.\n\nAcceptance: `just build` green; `cat VERSION` shows `0.9.0`; README contains the new exit codes and held-status docs. Do not tick tasks.md boxes.",
@@ -156,6 +170,7 @@
       "completedAt": "2026-07-01T10:38:27.589390155Z"
     },
     {
+      "kind": "lap",
       "id": "laps-60da",
       "title": "Verify full add-stints-gating outcome",
       "description": "Use the openspec-verify-change skill against `add-stints-gating` for the FULL outcome — all five sections (Hold \u0026 release; Gated flow ops \u0026 exit codes; Finish-under-hold; Status; Docs/release/Rally).\n\nIdentify the branch/merge target first and use it for `git diff \u003ctarget\u003e...HEAD`; do not assume main. Treat pre-batch branch work as pre-existing unless the operator says otherwise. Do not rewrite git history.\n\nTrace every core dependency line: the exit codes 0/10/11/12 and the load-bearing exitState -\u003e panic(*exitError) -\u003e recover -\u003e os.Exit path (root.go:50, 57-64) with `runAfterHooksDeferred` (hooks.go:32-51) firing for 10/11/12; the stdout-vs-stderr JSON split; held stops descent at a context head (no child-file descent); the single typed queue-state resolver shared by get/claim AND status; the empty-vs-complete DECIDED mapping across get/claim and status; explicit `get \u003cid\u003e` warns + returns, `claim \u003cid\u003e` exits 10 + no mutation; non-flow-start commands unaffected; finish-under-hold (done succeeds; final-lap drain still advances the head past a held drained stint); status precedence (active claim wins; held primary only without a valid active claim) and the taxonomy extension to active/ready/empty/complete/held; stints ls held as a separate badge; hold/release idempotency and stint.held/stint.released events; the VERSION=0.9.0 bump and README/Rally-coordination docs.\n\nRun the full `just test` + `just lint`. Confirm the post-merge assumptions (add-stints, add-event-log-and-status) actually hold in the tree — if not, `laps add head` a blocker. Check ALL remaining tasks.md boxes (§1, §3, §4, §5, and any §2 boxes not already ticked) only once verified correct and thorough. `laps add head` for substantive gaps; tiny safe one-liners excepted.",
