@@ -49,7 +49,7 @@ Default shows todo tasks only, head first.
 		defer runAfterHooksDeferredScoped(cmd.Name(), beadsDir, path, hookScope, &task, &output, &exitCode, args)()
 		runBeforeHooksScoped(cmd.Name(), beadsDir, path, hookScope, nil, args)
 
-		claim, err := store.ReadClaim(beadsDir, fileNameForClaim(beadsDir, path))
+		claim, err := readClaim(beadsDir, fileNameForClaim(beadsDir, path))
 		if err != nil {
 			exit(2, "read claim: %v", err)
 		}

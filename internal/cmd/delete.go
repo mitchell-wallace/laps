@@ -45,7 +45,7 @@ var deleteCmd = &cobra.Command{
 		}
 
 		claimFile := fileNameForClaim(beadsDir, path)
-		claim, err := store.ReadClaim(beadsDir, claimFile)
+		claim, err := readClaim(beadsDir, claimFile)
 		if err != nil {
 			exitCode = 2
 			exit(2, "read claim: %v", err)

@@ -55,7 +55,7 @@ Claimed tasks cannot be transferred.`,
 			movedByID[id] = *task
 		}
 
-		claim, err := store.ReadClaim(beadsDir, fileNameForClaim(beadsDir, sourceCtx.Path))
+		claim, err := readClaim(beadsDir, fileNameForClaim(beadsDir, sourceCtx.Path))
 		if err != nil {
 			exit(2, "transfer: read claim: %v", err)
 		}

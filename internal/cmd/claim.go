@@ -5,6 +5,7 @@ import (
 
 	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
+	"github.com/mitchell-wallace/laps/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 
@@ -66,6 +67,13 @@ Exit codes for a head claim (no explicit id):
 
 		if task == nil {
 			if target == "head" {
+				if telemetrySink != nil {
+					telemetrySink.RecordClaim(telemetry.ClaimEvent{
+						Outcome:    string(flow.State),
+						Scope:      ctx.Scope,
+						QueueDepth: queueDepth(ctx.File),
+					})
+				}
 				if flow.State == queueStateHeld {
 					warnHeldGate(flow.Held)
 				}
@@ -76,6 +84,15 @@ Exit codes for a head claim (no explicit id):
 		}
 		if target != "head" {
 			if gate := heldGateForContext(ctx); gate != nil {
+				if telemetrySink != nil {
+					telemetrySink.RecordClaim(telemetry.ClaimEvent{
+						Outcome:    string(queueStateHeld),
+						LapID:      task.ID,
+						Scope:      ctx.Scope,
+						QueueDepth: queueDepth(ctx.File),
+						Explicit:   true,
+					})
+				}
 				warnHeldGate(gate)
 				exitState(10)
 			}
@@ -86,7 +103,7 @@ Exit codes for a head claim (no explicit id):
 		// reclaim (a log no-op that preserves claimedAt) from a different-lap
 		// replacement (which retires the prior claim). A read error simply yields
 		// the zero claim, treated as "no prior claim".
-		existing, _ := store.ReadClaim(beadsDir, selectedFile)
+		existing, _ := readClaim(beadsDir, selectedFile)
 		newClaim := store.Claim{Lap: task.ID, File: selectedFile, Scope: ctx.Scope}
 		// A same-lap reclaim is exactly the case WriteClaim preserves claimedAt
 		// for: same lap and same file. Anything else is a new/replacing claim.
@@ -95,6 +112,16 @@ Exit codes for a head claim (no explicit id):
 		if err := store.WriteClaim(beadsDir, newClaim); err != nil {
 			exitCode = 2
 			exit(2, "claim: %v", err)
+		}
+		if telemetrySink != nil {
+			telemetrySink.RecordClaim(telemetry.ClaimEvent{
+				Outcome:    "success",
+				LapID:      task.ID,
+				Scope:      ctx.Scope,
+				QueueDepth: queueDepth(ctx.File),
+				Explicit:   target != "head",
+				Reclaim:    sameLapReclaim,
+			})
 		}
 
 		// Events are appended ONLY after WriteClaim succeeds. A same-lap reclaim
@@ -144,7 +171,7 @@ var claimUndoCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		path, _, beadsDir := getStorePath()
 
-		claim, err := store.ReadClaim(beadsDir, store.ResolveFile(fileFlag))
+		claim, err := readClaim(beadsDir, store.ResolveFile(fileFlag))
 		if err != nil {
 			exit(2, "read claim: %v", err)
 		}

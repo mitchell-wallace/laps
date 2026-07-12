@@ -124,7 +124,7 @@ Exit codes for related head get/claim operations:
 		// A malformed claim is a real error, not a hidden-healthy snapshot: surface
 		// it on the normal (non-zero) error path. A missing/empty claim reads back
 		// as the zero Claim with a nil error.
-		claim, err := store.ReadClaim(beadsDir, selectedFile)
+		claim, err := readClaim(beadsDir, selectedFile)
 		if err != nil {
 			exitCode = 2
 			exit(2, "read claim: %v", err)

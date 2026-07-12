@@ -61,3 +61,12 @@ Important notes:
 
 ## Configuration & Safety Notes
 Laps writes task data under `.laps/` in the repository root. Use `examples/hooks.json` as the reference when adding hooks, and avoid destructive hook commands unless they are clearly documented and tested.
+
+## Observability (New Relic)
+
+Laps reports opt-in telemetry through the New Relic Go APM agent when
+`LAPS_NEW_RELIC_LICENSE_KEY` is present. `LAPS_NEW_RELIC_APP_NAME` overrides the
+default `Laps CLI` application name. Custom events are `LapsClaim`,
+`LapsComplete`, and `LapsDiagnostic`; telemetry is best-effort and must never
+change command output, exit codes, queue data, or core behavior when disabled or
+when agent initialization fails.

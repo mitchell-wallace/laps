@@ -546,7 +546,7 @@ func removeStintRefs(tasks []store.Task, name string) []store.Task {
 }
 
 func claimMatchesStint(beadsDir, name, activePath string) (bool, error) {
-	claim, err := store.ReadClaim(beadsDir, store.ResolveFile(""))
+	claim, err := readClaim(beadsDir, store.ResolveFile(""))
 	if err != nil {
 		return false, err
 	}

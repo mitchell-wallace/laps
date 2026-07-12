@@ -11,6 +11,7 @@ import (
 	"github.com/mitchell-wallace/laps/internal/hooks"
 	"github.com/mitchell-wallace/laps/internal/queuecontract"
 	"github.com/mitchell-wallace/laps/internal/store"
+	"github.com/mitchell-wallace/laps/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 
@@ -19,6 +20,10 @@ var fileFlag string
 var jsonOutput bool
 var skipHooks bool
 var rootFlagsInitialized bool
+
+var telemetryInitializer = func() (telemetry.Sink, func()) {
+	return telemetry.Init(telemetry.Config{})
+}
 
 func init() {
 	ensureRootFlags()
@@ -43,6 +48,9 @@ is simple: claim the head, do the work, mark the claim done.
 See 'laps get --help', 'laps claim --help', or 'laps status --help' for queue-state exit codes.`,
 	SilenceUsage:               true,
 	SuggestionsMinimumDistance: 2,
+	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+		telemetryCommandName = cmd.Name()
+	},
 }
 
 type exitError struct {
@@ -113,6 +121,12 @@ func Execute(v string) error {
 			panic(r)
 		}
 	}()
+
+	previousSink := telemetrySink
+	sink, cleanup := telemetryInitializer()
+	telemetrySink = sink
+	defer func() { telemetrySink = previousSink }()
+	defer cleanup()
 
 	// Detect persistent flags early for hook-only commands.
 	if isJSONOutput(os.Args[1:]) {
@@ -236,6 +250,7 @@ func checkDefault(beadsDir string) {
 		return
 	}
 	if err := store.CheckDefaultStore(beadsDir); err != nil {
+		recordQueueDiagnostic(err)
 		if errors.Is(err, store.ErrEmptyState) {
 			exit(3, "%v", err)
 		}
@@ -282,6 +297,7 @@ func loadFileWithPolicy(path, repoRoot, beadsDir string, createMissing bool) *st
 			}
 			return f
 		}
+		recordQueueDiagnostic(err)
 		exit(2, "%v", err)
 	}
 	if name, ok := store.ActiveStintNameForPath(beadsDir, path); ok && data.Prefix == "" {

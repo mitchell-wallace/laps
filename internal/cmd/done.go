@@ -8,6 +8,7 @@ import (
 
 	"github.com/mitchell-wallace/laps/internal/eventlog"
 	"github.com/mitchell-wallace/laps/internal/store"
+	"github.com/mitchell-wallace/laps/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 
@@ -34,6 +35,7 @@ When a claimed task is completed, .laps/claim is cleared.`,
 		var claimFile string
 		var hookScope string
 		var eventScope string
+		var completionClaim store.Claim
 
 		if len(args) > 0 {
 			id := args[0]
@@ -47,6 +49,7 @@ When a claimed task is completed, .laps/claim is cleared.`,
 			selectedFile = claimFile
 			hookScope = ctx.Scope
 			eventScope = ctx.Scope
+			completionClaim, _ = readClaim(beadsDir, selectedFile)
 			task = findScopedTask(ctx, id)
 			if task == nil {
 				exitIfOutOfScope(beadsDir, repoRoot, ctx, id)
@@ -58,11 +61,12 @@ When a claimed task is completed, .laps/claim is cleared.`,
 				exit(3, "task %s (%s) is already done", task.ID, task.Title)
 			}
 		} else {
-			claim, err := store.ReadClaim(beadsDir, selectedFile)
+			claim, err := readClaim(beadsDir, selectedFile)
 			if err != nil {
 				exit(2, "read claim: %v", err)
 			}
 			claimedID := claim.Lap
+			completionClaim = claim
 
 			if claimedID == "" {
 				ctx, err := resolveActiveContext(path, repoRoot, beadsDir, file)
@@ -161,7 +165,7 @@ When a claimed task is completed, .laps/claim is cleared.`,
 		// claim is actually removed, emit a SEPARATE unclaimed event tagged
 		// reason "completed", immediately after completed, for log uniformity with
 		// the replaced reason. A failed remove emits no unclaimed event.
-		if claim, err := store.ReadClaim(beadsDir, selectedFile); err == nil && claim.Lap == task.ID && claim.File == claimFile {
+		if claim, err := readClaim(beadsDir, selectedFile); err == nil && claim.Lap == task.ID && claim.File == claimFile {
 			if err := store.RemoveClaim(beadsDir); err == nil {
 				logEvent(beadsDir, &eventlog.Entry{
 					Event:    "unclaimed",
@@ -174,6 +178,22 @@ When a claimed task is completed, .laps/claim is cleared.`,
 					Detail:   map[string]interface{}{"reason": "completed"},
 				})
 			}
+		}
+
+		claimed := completionClaim.Lap == task.ID && completionClaim.File == claimFile
+		completeEvent := telemetry.CompleteEvent{
+			Operation:  "done",
+			LapID:      task.ID,
+			Scope:      eventScope,
+			QueueDepth: queueDepth(file),
+			Claimed:    claimed,
+		}
+		if claimed && completionClaim.ClaimedAt != nil && !completionClaim.ClaimedAt.After(now) {
+			completeEvent.Duration = now.Sub(*completionClaim.ClaimedAt)
+			completeEvent.DurationKnown = true
+		}
+		if telemetrySink != nil {
+			telemetrySink.RecordComplete(completeEvent)
 		}
 
 		output = task.ID
