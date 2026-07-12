@@ -655,7 +655,7 @@ Each line in `.laps/log.jsonl` is a JSON object with the following fields:
 ## Consumer contract
 
 Consumers (orchestrators such as **Rally**, scripts, other tooling) that read
-laps output or `.laps/` files programmatically may rely on exactly four pinned
+laps output or `.laps/` files programmatically may rely on exactly five pinned
 surfaces. Everything else — the default `laps list` rendering, `laps status`,
 and `laps log` output — is **operator-facing and not stable**; it may change
 in any release without a consumer migration.
@@ -677,6 +677,10 @@ The pinned surfaces:
    held, `11` queue empty, `12` queue complete; `2` store/io, `3` explicit id
    not found, and `4` hook failure are unchanged. See
    [Queue-state exit codes](#queue-state-exit-codes).
+5. **`--skip-hooks`** — a persistent root flag available to every command.
+   When set, laps does not read `.laps/hooks.json` or run any before/after
+   hook. Hook-only custom commands are therefore treated as unknown commands.
+   Programmatic consumers should use this flag for guaranteed hook-free reads.
 
 **Version-gating rule:** a change that alters any pinned surface must bump
 `VERSION`, update this contract section (and the consumer-contract spec), and

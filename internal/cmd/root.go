@@ -17,6 +17,7 @@ import (
 var version string
 var fileFlag string
 var jsonOutput bool
+var skipHooks bool
 var rootFlagsInitialized bool
 
 func init() {
@@ -29,6 +30,7 @@ func ensureRootFlags() {
 	}
 	rootCmd.PersistentFlags().StringVarP(&fileFlag, "file", "f", "", "task file name (without .laps/ path)")
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json-output", false, "emit structured JSON output")
+	rootCmd.PersistentFlags().BoolVar(&skipHooks, "skip-hooks", false, "disable all hook loading and execution")
 	rootFlagsInitialized = true
 }
 
@@ -112,10 +114,11 @@ func Execute(v string) error {
 		}
 	}()
 
-	// Detect --json-output early for hook-only commands
+	// Detect persistent flags early for hook-only commands.
 	if isJSONOutput(os.Args[1:]) {
 		jsonOutput = true
 	}
+	skipHooks = isSkipHooks(os.Args[1:])
 
 	// Intercept --version before Cobra so we can respect jsonOutput.
 	// Cobra's built-in --version handler prints plain text unconditionally.
@@ -134,7 +137,7 @@ func Execute(v string) error {
 	// authoritative built-in registry; custom commands must be declared by a
 	// hook before they bypass Cobra's unknown-command handling.
 	cmdName, hookArgs, hookFileValue := splitArgs(os.Args[1:])
-	if cmdName != "" && !builtinNames()[cmdName] {
+	if !skipHooks && cmdName != "" && !builtinNames()[cmdName] {
 		repoRoot, beadsDir, err := store.DiscoverRepoRoot()
 		if err != nil {
 			exit(2, "%v", err)

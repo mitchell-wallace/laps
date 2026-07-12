@@ -16,6 +16,9 @@ func runBeforeHooks(cmdName, beadsDir, path string, task *store.Task, args []str
 }
 
 func runBeforeHooksScoped(cmdName, beadsDir, path, scope string, task *store.Task, args []string) {
+	if skipHooks {
+		return
+	}
 	hf, err := hooks.Load(beadsDir)
 	if err != nil {
 		exit(2, "hooks: %v", err)
@@ -39,6 +42,9 @@ func runAfterHooksDeferred(cmdName, beadsDir, path string, task **store.Task, ou
 
 func runAfterHooksDeferredScoped(cmdName, beadsDir, path, scope string, task **store.Task, output *string, exitCode *int, args []string) func() {
 	return func() {
+		if skipHooks {
+			return
+		}
 		hf, err := hooks.Load(beadsDir)
 		if err != nil || hf == nil {
 			return
@@ -144,6 +150,15 @@ func splitArgs(args []string) (cmd string, posArgs []string, fileValue string) {
 func isJSONOutput(args []string) bool {
 	for _, a := range args {
 		if a == "--json-output" || a == "--json-output=true" {
+			return true
+		}
+	}
+	return false
+}
+
+func isSkipHooks(args []string) bool {
+	for _, a := range args {
+		if a == "--skip-hooks" || a == "--skip-hooks=true" {
 			return true
 		}
 	}

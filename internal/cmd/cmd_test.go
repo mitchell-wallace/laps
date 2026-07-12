@@ -45,6 +45,7 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	rootCmd.SetArgs(args)
 	fileFlag = ""
 	jsonOutput = false
+	skipHooks = false
 	listAll = false
 	listDone = false
 	listOneline = false
@@ -114,6 +115,7 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	rootCmd.SetArgs(args)
 	fileFlag = ""
 	jsonOutput = false
+	skipHooks = false
 	listAll = false
 	listDone = false
 	listOneline = false
@@ -2496,6 +2498,73 @@ func TestHookOnlyCommandGetsRootScope(t *testing.T) {
 	}
 	if strings.TrimSpace(out) != "root" {
 		t.Fatalf("hook-only scope = %q, want root", strings.TrimSpace(out))
+	}
+}
+
+func TestSkipHooksDisablesBuiltinHooks(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	writeResolverQueue(t, filepath.Join(beadsDir, "laps.json"), "laps",
+		store.Task{Kind: store.KindLap, ID: "laps-next", Title: "Next", Order: 1, CreatedAt: resolverTestTime, UpdatedAt: resolverTestTime},
+	)
+	marker := filepath.Join(beadsDir, "list-hook-ran")
+	hooks := `{"version":1,"hooks":[{"title":"list-side-effect","command":"list","when":"before","run":"touch .laps/list-hook-ran"}]}`
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errStr, code := runMB("list")
+	if code != 0 {
+		t.Fatalf("list exit %d, stderr: %s", code, errStr)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("expected list hook to create marker: %v", err)
+	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	// A malformed hook file would fail the command if the skip path read it.
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(`{`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errStr, code = runMB("--skip-hooks", "list")
+	if code != 0 {
+		t.Fatalf("list --skip-hooks exit %d, stderr: %s", code, errStr)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("list hook ran with --skip-hooks: %v", err)
+	}
+}
+
+func TestSkipHooksBypassesHookOnlyCommands(t *testing.T) {
+	beadsDir, cleanup := setupTempRepo(t)
+	defer cleanup()
+
+	marker := filepath.Join(beadsDir, "custom-hook-ran")
+	hooks := `{"version":1,"hooks":[{"title":"custom-side-effect","command":"customcmd","when":"before","run":"touch .laps/custom-hook-ran"}]}`
+	if err := os.WriteFile(filepath.Join(beadsDir, "hooks.json"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errStr, err := runMBExecute("customcmd")
+	if err != nil {
+		t.Fatalf("custom command failed: %v, stderr: %s", err, errStr)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("expected custom hook to create marker: %v", err)
+	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errStr, err = runMBExecute("--skip-hooks", "customcmd")
+	if err == nil || !strings.Contains(errStr, "unknown command") {
+		t.Fatalf("expected normal unknown-command error, got err %v, stderr: %s", err, errStr)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("custom hook ran with --skip-hooks: %v", err)
 	}
 }
 
@@ -5466,6 +5535,21 @@ func TestIsJSONOutput(t *testing.T) {
 	}
 	if !isJSONOutput([]string{"worktree", "--json-output=true", "feature"}) {
 		t.Fatal("expected true for --json-output=true after command")
+	}
+}
+
+func TestIsSkipHooks(t *testing.T) {
+	if !isSkipHooks([]string{"list", "--skip-hooks"}) {
+		t.Fatal("expected true for --skip-hooks")
+	}
+	if !isSkipHooks([]string{"--skip-hooks=true", "list"}) {
+		t.Fatal("expected true for --skip-hooks=true")
+	}
+	if isSkipHooks([]string{"list"}) {
+		t.Fatal("expected false without --skip-hooks")
+	}
+	if isSkipHooks([]string{"--skip-hooks=false", "list"}) {
+		t.Fatal("expected false for --skip-hooks=false")
 	}
 }
 
