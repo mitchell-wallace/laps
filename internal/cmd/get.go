@@ -12,7 +12,13 @@ var getCmd = &cobra.Command{
 	Short: "Get a task by id or head",
 	Long: `Get a task by id, or read the head task if no argument is given.
 
-Output is title, blank line, description — nothing else.`,
+Output is title, blank line, description — nothing else.
+
+Exit codes for a head get (no explicit id):
+  0   run: a lap was returned
+  10  stop-held: the next stint is held; start nothing new
+  11  idle: the queue is empty
+  12  finished: every lap is complete`,
 	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		target := "head"

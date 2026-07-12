@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mitchell-wallace/laps/internal/queuecontract"
 	"github.com/mitchell-wallace/laps/internal/store"
 )
 
@@ -317,13 +318,13 @@ func warnHeldGate(gate *heldGate) {
 func exitForQueueState(state queueState) int {
 	switch state {
 	case queueStateHeld:
-		return 10
+		return queuecontract.ExitHeld
 	case queueStateEmpty:
-		return 11
+		return queuecontract.ExitEmpty
 	case queueStateComplete:
-		return 12
+		return queuecontract.ExitComplete
 	default:
-		return 0
+		return queuecontract.ExitRun
 	}
 }
 

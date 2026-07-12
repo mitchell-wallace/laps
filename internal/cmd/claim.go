@@ -13,7 +13,13 @@ var claimCmd = &cobra.Command{
 	Short: "Claim a task for the current session",
 	Long: `Claim a task by id, or claim the head task if no argument is given.
 Writes the claimed task id to .laps/claim so that 'laps done' knows which
-task to complete.`,
+task to complete.
+
+Exit codes for a head claim (no explicit id):
+  0   run: a lap was claimed
+  10  stop-held: the next stint is held; start nothing new
+  11  idle: the queue is empty
+  12  finished: every lap is complete`,
 	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		target := "head"

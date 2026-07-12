@@ -363,11 +363,15 @@ See [Stints](#stints) for the model behind these commands.
   and clears a matching claim.
 
 ### `laps on`
-Add the `<laps-instructions>` block to `AGENTS.md` (creating it if absent).
-Also updates `CLAUDE.md` and `GEMINI.md` if they already exist. Idempotent.
+Add the versioned `<laps-instructions v="2">` queue contract to `AGENTS.md`
+(creating it if absent). Also updates `CLAUDE.md` and `GEMINI.md` if they
+already exist. Idempotent; legacy and older versioned blocks are refreshed in
+place. The injected contract and `get`/`claim`/`status` help document the
+queue-state exit-code actions.
 
 ### `laps off`
-Remove the `<laps-instructions>` block from `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md`.
+Remove either legacy or versioned `<laps-instructions>` blocks from `AGENTS.md`,
+`CLAUDE.md`, and `GEMINI.md`.
 
 ### `laps update`
 Check the Laps GitHub repository for a newer version.

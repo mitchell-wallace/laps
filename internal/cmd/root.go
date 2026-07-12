@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mitchell-wallace/laps/internal/hooks"
+	"github.com/mitchell-wallace/laps/internal/queuecontract"
 	"github.com/mitchell-wallace/laps/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -36,7 +37,8 @@ var rootCmd = &cobra.Command{
 	Short: "Laps — a minimal task tracker for AI coding agents",
 	Long: `Laps (laps) is a minimal, single-binary task tracker for AI coding agents.
 Tasks are a flat ordered queue with two states (todo / done). The agent's contract
-is simple: read the head, do the work, mark it done.`,
+is simple: claim the head, do the work, mark the claim done.
+See 'laps get --help', 'laps claim --help', or 'laps status --help' for queue-state exit codes.`,
 	SilenceUsage:               true,
 	SuggestionsMinimumDistance: 2,
 }
@@ -86,11 +88,11 @@ func exitState(code int) {
 
 func queueStateForExitCode(code int) string {
 	switch code {
-	case 10:
+	case queuecontract.ExitHeld:
 		return string(queueStateHeld)
-	case 11:
+	case queuecontract.ExitEmpty:
 		return string(queueStateEmpty)
-	case 12:
+	case queuecontract.ExitComplete:
 		return string(queueStateComplete)
 	default:
 		return "unknown"

@@ -9,17 +9,22 @@ import (
 	"github.com/mitchell-wallace/laps/internal/store"
 )
 
-const blockStart = "<laps-instructions>"
+const blockStartPrefix = "<laps-instructions"
 const blockEnd = "</laps-instructions>"
 
-const blockContent = `<laps-instructions>
-This project uses laps (` + "`laps`" + `), a minimal task tracker.
-- ` + "`laps get head`" + ` — read the next task. Title and description only.
-- ` + "`laps list`" + ` — see the queue.
-- ` + "`laps done`" + ` — when you finish the head task. You MUST run this; do not skip.
-- ` + "`laps add head|tail|after <id> --title ...`" + ` — add a task. Use ` + "`head`" + ` if it must be done before the current head; otherwise ` + "`tail`" + `.
-- If you hit a blocker that prevents finishing the head task this session, add the unblock work to ` + "`head`" + ` and stop.
-- Commit after each ` + "`laps done`" + ` unless the user said otherwise.
+const blockContent = `<laps-instructions v="2">
+This project uses ` + "`laps`" + ` for its agent work queue.
+1. ` + "`laps claim`" + ` — claim the next lap before starting work.
+2. Work only the claimed lap.
+3. ` + "`laps done`" + ` — complete the claimed lap. A bare ` + "`done`" + ` uses the claim, not the current head. You MUST run it when finished.
+
+Head ` + "`get`" + `/` + "`claim`" + ` exit codes:
+- ` + "`0`" + ` — run: a lap was returned/claimed.
+- ` + "`10`" + ` — stop-held: finish an existing claimed lap, but start nothing new; then stop.
+- ` + "`11`" + ` — idle: no laps are ready; stop.
+- ` + "`12`" + ` — finished: all laps are complete; stop.
+
+Stint resolution is transparent. Prefer ` + "`--active`" + `, ` + "`--root`" + `, or ` + "`--stint <name>`" + ` over raw ` + "`-f/--file`" + ` targeting. Use ` + "`laps status`" + ` or ` + "`laps list`" + ` to inspect the queue.
 </laps-instructions>`
 
 var targetFiles = []string{"AGENTS.md", "CLAUDE.md", "GEMINI.md"}
@@ -81,7 +86,7 @@ func removeBlock(path string) error {
 }
 
 func replaceBlock(content, block string) string {
-	startIdx := strings.Index(content, blockStart)
+	startIdx := findBlockStart(content)
 	if startIdx == -1 {
 		if block == "" {
 			return content
@@ -110,4 +115,20 @@ func replaceBlock(content, block string) string {
 	}
 
 	return before + block + "\n" + strings.TrimLeft(after, "\n")
+}
+
+func findBlockStart(content string) int {
+	searchFrom := 0
+	for {
+		rel := strings.Index(content[searchFrom:], blockStartPrefix)
+		if rel == -1 {
+			return -1
+		}
+		idx := searchFrom + rel
+		next := idx + len(blockStartPrefix)
+		if next < len(content) && (content[next] == '>' || content[next] == ' ' || content[next] == '\t') {
+			return idx
+		}
+		searchFrom = next
+	}
 }

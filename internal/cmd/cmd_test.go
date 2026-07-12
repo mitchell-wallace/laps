@@ -5469,6 +5469,44 @@ func TestIsJSONOutput(t *testing.T) {
 	}
 }
 
+func TestQueueContractIsSurfacedInHelp(t *testing.T) {
+	defer resetHelpFlagValues(rootCmd)
+	for _, command := range []string{"get", "claim", "status"} {
+		t.Run(command, func(t *testing.T) {
+			out, errStr, code := runMB(command, "--help")
+			if code != 0 {
+				t.Fatalf("%s --help exit %d, stderr: %s", command, code, errStr)
+			}
+			if !strings.Contains(out, "Exit codes") {
+				t.Fatalf("%s --help missing Exit codes section:\n%s", command, out)
+			}
+			for _, exitCode := range []string{"0", "10", "11", "12"} {
+				if !strings.Contains(out, exitCode) {
+					t.Errorf("%s --help missing exit code %s", command, exitCode)
+				}
+			}
+		})
+	}
+
+	out, errStr, code := runMB("--help")
+	if code != 0 {
+		t.Fatalf("root --help exit %d, stderr: %s", code, errStr)
+	}
+	if !strings.Contains(out, "get --help") || !strings.Contains(out, "claim --help") || !strings.Contains(out, "status --help") {
+		t.Fatalf("root help missing queue-state help pointer:\n%s", out)
+	}
+}
+
+func resetHelpFlagValues(command *cobra.Command) {
+	if flag := command.Flags().Lookup("help"); flag != nil {
+		_ = flag.Value.Set(flag.DefValue)
+		flag.Changed = false
+	}
+	for _, child := range command.Commands() {
+		resetHelpFlagValues(child)
+	}
+}
+
 func TestJSONOutputGetByID(t *testing.T) {
 	_, cleanup := setupTempRepo(t)
 	defer cleanup()

@@ -96,7 +96,13 @@ Queue state is one of:
 A claim that points at a deleted, completed, or wrong-file lap yields a degraded
 snapshot with claim.valid=false; it is reported, never silently cleared. A valid
 claim takes precedence over a held gate; held gate details are surfaced
-separately in the snapshot.`,
+separately in the snapshot.
+
+Exit codes for related head get/claim operations:
+  0   run: a lap was returned or claimed
+  10  stop-held: the next stint is held; start nothing new
+  11  idle: the queue is empty
+  12  finished: every lap is complete`,
 	Run: func(cmd *cobra.Command, args []string) {
 		path, repoRoot, beadsDir := getStorePath()
 		checkDefault(beadsDir)
