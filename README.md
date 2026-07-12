@@ -24,6 +24,15 @@ laps done
 laps list
 ```
 
+## Data directory
+
+Laps resolves repository data by walking up from the current directory. At
+each ancestor, an existing `.circuit/laps/` directory is preferred; otherwise
+an existing `.laps/` directory is used. If the walk reaches a `.git` marker
+with neither directory present, laps creates and uses `.laps/` there. Thus
+`.circuit/laps/` is opt-in, while `laps init` continues to default new
+repositories to `.laps/`.
+
 ## Command Reference
 
 ### `laps add <head|tail|after> [id]`
@@ -667,19 +676,23 @@ Each line in `.laps/log.jsonl` is a JSON object with the following fields:
 ## Consumer contract
 
 Consumers (orchestrators such as **Rally**, scripts, other tooling) that read
-laps output or `.laps/` files programmatically may rely on exactly five pinned
-surfaces. Everything else — the default `laps list` rendering, `laps status`,
-and `laps log` output — is **operator-facing and not stable**; it may change
-in any release without a consumer migration.
+laps output or its data files programmatically may rely on exactly five pinned
+surfaces. To locate those files, consumers must walk ancestors and, at each
+level, prefer an existing `.circuit/laps/` directory over `.laps/`; a `.git`
+marker with neither directory selects `.laps/`. Everything else — the default
+`laps list` rendering, `laps status`, and `laps log` output — is
+**operator-facing and not stable**; it may change in any release without a
+consumer migration.
 
 The pinned surfaces:
 
 1. **`laps list --oneline`** — exactly one non-blank line per lap, in the form
    `<n>. <id> — <title>`, with ` (assignee: <a>)` appended only when an
    assignee is set. See [`laps list`](#laps-list---all----done---tree).
-2. **`.laps/claim`** — a JSON object `{"lap","file","scope","claimedAt"}`
-   where `lap` is the claimed lap id; `scope`/`claimedAt` may be omitted. A
-   legacy bare-id claim file is still read back-compatibly. See
+2. **`claim` in the resolved data directory** — a JSON object
+   `{"lap","file","scope","claimedAt"}` where `lap` is the claimed lap id;
+   `scope`/`claimedAt` may be omitted. A legacy bare-id claim file is still
+   read back-compatibly. See
    [Claim File Format](#claim-file-format).
 3. **`get`/`claim` task-detail stdout** — line 0 is the title, an optional
    `Assignee: <name>` line follows, then a blank line, then the description.
@@ -690,9 +703,10 @@ The pinned surfaces:
    not found, and `4` hook failure are unchanged. See
    [Queue-state exit codes](#queue-state-exit-codes).
 5. **`--skip-hooks`** — a persistent root flag available to every command.
-   When set, laps does not read `.laps/hooks.json` or run any before/after
-   hook. Hook-only custom commands are therefore treated as unknown commands.
-   Programmatic consumers should use this flag for guaranteed hook-free reads.
+   When set, laps does not read `hooks.json` from the resolved data directory
+   or run any before/after hook. Hook-only custom commands are therefore
+   treated as unknown commands. Programmatic consumers should use this flag
+   for guaranteed hook-free reads.
 
 **Version-gating rule:** a change that alters any pinned surface must bump
 `VERSION`, update this contract section (and the consumer-contract spec), and

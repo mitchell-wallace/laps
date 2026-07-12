@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestDiscoverRepoRoot_BeadsExists(t *testing.T) {
+func TestDiscoverRepoRoot_FallsBackToLegacyLaps(t *testing.T) {
 	root := t.TempDir()
 	beadsDir := filepath.Join(root, ".laps")
 	if err := os.MkdirAll(beadsDir, 0755); err != nil {
@@ -31,6 +31,33 @@ func TestDiscoverRepoRoot_BeadsExists(t *testing.T) {
 	}
 	if gotBeads != beadsDir {
 		t.Errorf("beadsDir = %q, want %q", gotBeads, beadsDir)
+	}
+}
+
+func TestDiscoverRepoRoot_PrefersCircuitLaps(t *testing.T) {
+	root := t.TempDir()
+	circuitDir := filepath.Join(root, ".circuit", "laps")
+	if err := os.MkdirAll(circuitDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".laps"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(root, "sub")
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(sub)
+
+	gotRoot, gotBeads, err := DiscoverRepoRoot()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotRoot != root {
+		t.Errorf("repoRoot = %q, want %q", gotRoot, root)
+	}
+	if gotBeads != circuitDir {
+		t.Errorf("beadsDir = %q, want %q", gotBeads, circuitDir)
 	}
 }
 
@@ -72,8 +99,8 @@ func TestDiscoverRepoRoot_CreateBeadsNextToGit(t *testing.T) {
 
 func TestDiscoverRepoRoot_NoGitNoBeads(t *testing.T) {
 	root := t.TempDir()
-	if hasAncestorMarker(root, ".git") || hasAncestorMarker(root, ".laps") {
-		t.Skip("temp dir ancestors contain .git or .laps; cannot assert no-repo discovery case")
+	if hasAncestorMarker(root, ".git") || hasAncestorMarker(root, ".circuit/laps") || hasAncestorMarker(root, ".laps") {
+		t.Skip("temp dir ancestors contain .git, .circuit/laps, or .laps; cannot assert no-repo discovery case")
 	}
 	sub := filepath.Join(root, "a", "b")
 	if err := os.MkdirAll(sub, 0755); err != nil {

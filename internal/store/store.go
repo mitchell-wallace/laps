@@ -78,10 +78,11 @@ type File struct {
 	Tasks []Task `json:"tasks"`
 }
 
-// DiscoverRepoRoot walks up from the current working directory looking for a
-// .laps/ directory. If a .git directory is encountered first, the walk stops
-// and .laps/ is created next to .git. If neither is found up to the
-// filesystem root, an error is returned.
+// DiscoverRepoRoot walks up from the current working directory looking first
+// for a .circuit/laps/ directory, then for a .laps/ directory at each level.
+// If a .git marker is encountered with neither data directory present, the
+// walk stops and .laps/ is created next to .git. If no data directory or .git
+// marker is found up to the filesystem root, an error is returned.
 func DiscoverRepoRoot() (repoRoot, beadsDir string, err error) {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -89,6 +90,15 @@ func DiscoverRepoRoot() (repoRoot, beadsDir string, err error) {
 	}
 
 	for {
+		circuitPath := filepath.Join(dir, ".circuit", "laps")
+		if info, err := os.Stat(circuitPath); err == nil {
+			if info.IsDir() {
+				return dir, circuitPath, nil
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", "", fmt.Errorf("%w: stat %s: %v", ErrStore, circuitPath, err)
+		}
+
 		beadsPath := filepath.Join(dir, ".laps")
 		if info, err := os.Stat(beadsPath); err == nil {
 			if info.IsDir() {
@@ -113,7 +123,7 @@ func DiscoverRepoRoot() (repoRoot, beadsDir string, err error) {
 		dir = parent
 	}
 
-	return "", "", fmt.Errorf("%w: no .git or .laps directory found in any ancestor", ErrStore)
+	return "", "", fmt.Errorf("%w: no .git, .circuit/laps, or .laps directory found in any ancestor", ErrStore)
 }
 
 // ResolveFile normalises a user-provided task file name.
