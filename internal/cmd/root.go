@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/mitchell-wallace/laps/internal/dispatchguard"
 	"github.com/mitchell-wallace/laps/internal/hooks"
 	"github.com/mitchell-wallace/laps/internal/queuecontract"
 	"github.com/mitchell-wallace/laps/internal/store"
@@ -19,6 +21,7 @@ var version string
 var fileFlag string
 var jsonOutput bool
 var skipHooks bool
+var resetStale bool
 var rootFlagsInitialized bool
 
 var telemetryInitializer = func() (telemetry.Sink, func()) {
@@ -36,6 +39,7 @@ func ensureRootFlags() {
 	rootCmd.PersistentFlags().StringVarP(&fileFlag, "file", "f", "", "task file name (without .laps/ path)")
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json-output", false, "emit structured JSON output")
 	rootCmd.PersistentFlags().BoolVar(&skipHooks, "skip-hooks", false, "disable all hook loading and execution")
+	rootCmd.PersistentFlags().BoolVar(&resetStale, "reset", false, "archive stale linked-worktree state and start a fresh dispatch")
 	rootFlagsInitialized = true
 }
 
@@ -50,6 +54,9 @@ See 'laps get --help', 'laps claim --help', or 'laps status --help' for queue-st
 	SuggestionsMinimumDistance: 2,
 	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 		telemetryCommandName = cmd.Name()
+		if commandUsesDispatchState(cmd.Name()) {
+			enforceDispatchBinding(resetStale)
+		}
 	},
 }
 
@@ -133,6 +140,7 @@ func Execute(v string) error {
 		jsonOutput = true
 	}
 	skipHooks = isSkipHooks(os.Args[1:])
+	resetStale = isResetStale(os.Args[1:])
 
 	// Intercept --version before Cobra so we can respect jsonOutput.
 	// Cobra's built-in --version handler prints plain text unconditionally.
@@ -156,6 +164,7 @@ func Execute(v string) error {
 		if err != nil {
 			exit(2, "%v", err)
 		}
+		enforceDispatchBindingAt(repoRoot, beadsDir, resetStale)
 		hf, declared, err := hooksDeclare(beadsDir, cmdName)
 		if err != nil {
 			exit(2, "%v", err)
@@ -199,6 +208,28 @@ func Execute(v string) error {
 	}
 
 	return rootCmd.Execute()
+}
+
+func enforceDispatchBinding(reset bool) {
+	repoRoot, beadsDir, err := store.DiscoverRepoRoot()
+	if err != nil {
+		exit(2, "%v", err)
+	}
+	enforceDispatchBindingAt(repoRoot, beadsDir, reset)
+}
+
+func commandUsesDispatchState(name string) bool {
+	return name != "version" && name != "update"
+}
+
+func enforceDispatchBindingAt(repoRoot, beadsDir string, reset bool) {
+	result, err := dispatchguard.Ensure(repoRoot, beadsDir, reset, time.Now())
+	if err != nil {
+		exit(2, "%v", err)
+	}
+	if result.Archived != "" {
+		fmt.Fprintf(os.Stderr, "laps: archived stale .laps state to %s\n", result.Archived)
+	}
 }
 
 func builtinNames() map[string]bool {

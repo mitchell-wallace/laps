@@ -164,3 +164,12 @@ func isSkipHooks(args []string) bool {
 	}
 	return false
 }
+
+func isResetStale(args []string) bool {
+	for _, a := range args {
+		if a == "--reset" || a == "--reset=true" {
+			return true
+		}
+	}
+	return false
+}

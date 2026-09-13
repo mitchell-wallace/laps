@@ -46,6 +46,7 @@ func runMB(args ...string) (stdout string, stderr string, code int) {
 	fileFlag = ""
 	jsonOutput = false
 	skipHooks = false
+	resetStale = false
 	listAll = false
 	listDone = false
 	listOneline = false
@@ -116,6 +117,7 @@ func runMBExecute(args ...string) (stdout string, stderr string, err error) {
 	fileFlag = ""
 	jsonOutput = false
 	skipHooks = false
+	resetStale = false
 	listAll = false
 	listDone = false
 	listOneline = false
